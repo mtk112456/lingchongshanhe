@@ -1,0 +1,22 @@
+【OpenCode / 技术主心骨】
+
+仓库最新 main 已推送：https://github.com/mtk112456/lingchongshanhe
+
+请先做：
+1. 看当前 git status / 拉取最新 main；
+2. 读 AGENTS.md、GOVERNANCE.md、DECISIONS.md、TASKS_ANTIGRAVITY.md；
+3. 不要覆盖 OpenCode 刚做的登录策略修复。
+
+当前产品策略已变：
+- App 不再提供教师登录，教师入口从客户端移除；教师接口只保留给后续 Web 后台；
+- 学生登录只填姓名 + 密码，不要学号、不要身份证号；
+- 登录数据必须和现有班级系统一致：
+  姓名对应 students.name / students.show_name；
+  密码对应 students.password；
+- 密码不得写入 user://slice.cfg，只保存服务器地址和姓名。
+
+你的前端任务：
+- 核对 client/Slice.gd 当前改动，继续战局回放 UI、平板可读性、加载/断线/空状态；
+- 不要改 server/、schema、migrations、deploy/、HANDOVER.md；
+- 完成后跑 ClientSmoke / ReplaySmoke，按 PR 模板提交并附截图；
+- 如果发现和 OpenCode 的未提交改动冲突，先报告，不要直接覆盖。

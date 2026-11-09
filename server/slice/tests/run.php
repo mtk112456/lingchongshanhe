@@ -41,6 +41,10 @@ testCase('auth + existing students/admin/pets integration', function (TestHarnes
     $h->assertSame('小青竹·一', (string)$player['pet_nickname'], 'pet from student_pets');
     $h->assertSame(1000, (int)$player['pet_base_hp'], 'pet base hp from pet_templates');
 
+    // 与现有系统一致：students.name 也能登录，不依赖学号/身份证号。
+    $byRealName = $h->service->loginStudent('试验青竹一', 'slice2026');
+    $h->assertSame(1, (int)$byRealName['player']['student']['id'], 'login by students.name');
+
     $wallet = $h->points->getWallet(1);
     $h->assertSame(40, $wallet['available_points'], 'available points from students.score');
     $h->assertSame(0, $wallet['jade_balance'], 'initial jade');
