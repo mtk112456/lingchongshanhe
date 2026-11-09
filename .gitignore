@@ -1,5 +1,6 @@
 # 本机配置 / 凭据
 server/slice/config.local.php
+server/slice/config.trial.php
 .env
 .env.*
 !.env.example
@@ -50,6 +51,9 @@ client/assets/art/*.import
 
 # 自动验收运行产物（脚本与报告生成器在 tools/ 下）
 tools/watch/
+
+# 试跑数据（78 班测试数据只留本地，不进仓库）
+trial_data/
 
 # 系统文件
 Thumbs.db
