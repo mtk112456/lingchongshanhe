@@ -2,7 +2,7 @@
 
 > 适用：OpenCode、Google Antigravity、GPT/Codex，以及未来加入的编码 Agent。  
 > 目标：同一份代码、明确边界、可验收，不互相覆盖。  
-> 治理与裁决：`GOVERNANCE.md`；已定决策：`DECISIONS.md`。
+> 治理与裁决：`GOVERNANCE.md`；已定决策：`DECISIONS.md`；最终验收：`ACCEPTANCE_STANDARD.md`。
 
 ---
 
