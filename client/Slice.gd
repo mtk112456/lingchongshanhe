@@ -7,17 +7,52 @@ const FONT_PATH := "res://fonts/NotoSerifCJKsc-Regular.otf"
 const SliceMapScript = preload("res://SliceMap.gd")
 const ReplayMapScript = preload("res://ReplayMap.gd")
 
-const INK_DARK := Color("#1a1410")
-const INK := Color("#201a15")
+# ---------------------------------------------------------------------------
+# Style C 水彩纸雕国风色板（严格对齐 ART_BRIEF_GPT.md）
+# ---------------------------------------------------------------------------
+const C_XUANZHI := Color("#f6efe2")     # 宣纸米黄（面板底色、纸卡底衬）
+const C_MOLAN := Color("#1e3a5f")       # 墨蓝（次级按钮、文墨深蓝）
+const C_ZHUQING := Color("#276f57")     # 竹青（青竹书院主色、防守与确认按钮）
+const C_ZHUSHA := Color("#b83b32")      # 朱砂（主行动按钮、红营主色、警示印章）
+const C_TENGHUANG := Color("#cf8325")   # 藤黄（烫金线条、高亮标识、重点点缀）
+const C_TIANQING := Color("#a9d6e5")    # 天青（水域微光、信息标签、清雅蓝）
+const C_WOOD_DESK := Color("#2f2721")   # 深墨木桌（案台底色、深木色面板封边）
+const C_SHADOW_WARM := Color(0.24, 0.20, 0.17, 0.35) # 暖灰纸片投影（杜绝死黑）
+
+# 兼容与别名常量映射
+const INK_DARK := C_WOOD_DESK
+const INK := Color("#231c17")
 const INK_LIGHT := Color("#4a3e35")
-const CREAM := Color("#fffaf0")
-const PAPER := Color("#f3ead8")
-const CORAL := Color("#b83b32")
-const BAMBOO := Color("#276f57")
-const GOLD := Color("#d4af37")
+const CREAM := C_XUANZHI
+const PAPER := Color("#ede5d5")
+const CORAL := C_ZHUSHA
+const BAMBOO := C_ZHUQING
+const GOLD := C_TENGHUANG
 const GOLD_LIGHT := Color("#fae19c")
-const MUTED := Color("#7e7263")
-const DARK := Color("#16120e")
+const MUTED := Color("#8a7c6c")
+const DARK := Color("#1c1612")
+
+# ---------------------------------------------------------------------------
+# GPT Style C UI Kit Asset 插槽注册表
+# ---------------------------------------------------------------------------
+const UI_ASSET_PATHS := {
+	"panel_card": "res://assets/art/ui_panel_card.png",
+	"btn_primary": "res://assets/art/ui_button_primary.png",
+	"btn_secondary": "res://assets/art/ui_button_secondary.png",
+	"btn_confirm": "res://assets/art/ui_button_confirm.png",
+	"report_banner": "res://assets/art/ui_report_banner.png",
+	"replay_frame": "res://assets/art/ui_replay_frame.png",
+	"seal_victory": "res://assets/art/ui_seal_victory.png",
+	"seal_defeat": "res://assets/art/ui_seal_defeat.png",
+	"order_advance": "res://assets/art/icon_order_advance.png",
+	"order_defend": "res://assets/art/icon_order_defend.png",
+	"order_scout": "res://assets/art/icon_order_scout.png",
+	"order_supply": "res://assets/art/icon_order_supply.png",
+	"mascot_bamboo": "res://assets/art/mascot_bamboo_normal.png",
+	"mascot_ink": "res://assets/art/mascot_ink_normal.png",
+}
+
+var ui_kit_textures: Dictionary = {}
 
 # ---------------------------------------------------------------------------
 # 基础核心与通信
@@ -25,6 +60,7 @@ const DARK := Color("#16120e")
 var api: Node
 var login_layer: Control
 var game_layer: Control
+var login_gear_btn: Button
 
 # 页面路由与容器
 var current_page := "S01_MAP"
@@ -82,6 +118,7 @@ var city_garrison_label: Label
 var city_routes_label: Label
 var city_tactical_label: Label
 var city_order_hint: Label
+var city_lore_label: Label
 var city_action_advance_btn: Button
 var city_action_defend_btn: Button
 var city_action_scout_btn: Button
@@ -202,11 +239,21 @@ func _ready() -> void:
 		api = ApiScript.new()
 		add_child(api)
 	_setup_theme()
+	_init_ui_asset_slots()
 	_build_login()
 	_build_game()
 	_build_toast_banner()
 	_load_config()
 	_layout_responsive()
+
+func _init_ui_asset_slots() -> void:
+	ui_kit_textures.clear()
+	for key in UI_ASSET_PATHS.keys():
+		var path: String = UI_ASSET_PATHS[key]
+		if ResourceLoader.exists(path):
+			var tex: Texture2D = load(path)
+			if tex != null:
+				ui_kit_textures[key] = tex
 
 func _process(delta: float) -> void:
 	_on_countdown_tick()
@@ -242,7 +289,27 @@ func _style(bg: Color, border: Color = Color.TRANSPARENT, width: int = 0, radius
 		s.content_margin_right = pad
 		s.content_margin_top = pad
 		s.content_margin_bottom = pad
+	if bg.a > 0.05:
+		s.shadow_color = C_SHADOW_WARM
+		s.shadow_size = 3
+		s.shadow_offset = Vector2(0, 2)
 	return s
+
+func _panel_style(bg: Color = C_XUANZHI, border: Color = C_TENGHUANG, width: int = 1, radius: int = 10, pad: int = 12) -> StyleBox:
+	if ui_kit_textures.has("panel_card"):
+		var tex: Texture2D = ui_kit_textures["panel_card"]
+		var s := StyleBoxTexture.new()
+		s.texture = tex
+		s.texture_margin_left = 16
+		s.texture_margin_top = 16
+		s.texture_margin_right = 16
+		s.texture_margin_bottom = 16
+		s.content_margin_left = pad
+		s.content_margin_top = pad
+		s.content_margin_right = pad
+		s.content_margin_bottom = pad
+		return s
+	return _style(bg, border, width, radius, pad)
 
 func _label(text: String, size_px: int, color: Color) -> Label:
 	var l := Label.new()
@@ -258,10 +325,29 @@ func _button(text: String, color: Color, height: int = 42) -> Button:
 	b.add_theme_font_size_override("font_size", 15)
 	b.add_theme_color_override("font_color", Color("#ffffff"))
 	b.add_theme_color_override("font_disabled_color", Color("#9e9282"))
-	b.add_theme_stylebox_override("normal", _style(color, color.darkened(0.2), 1, 8, 8))
-	b.add_theme_stylebox_override("hover", _style(color.lightened(0.12), color.darkened(0.2), 1, 8, 8))
-	b.add_theme_stylebox_override("pressed", _style(color.darkened(0.15), color.darkened(0.3), 1, 8, 8))
-	b.add_theme_stylebox_override("disabled", _style(Color("#8a8074"), Color("#6d6458"), 1, 8, 8))
+
+	var tex_key := ""
+	if color == C_ZHUSHA or color == CORAL:
+		tex_key = "btn_primary"
+	elif color == C_MOLAN:
+		tex_key = "btn_secondary"
+	elif color == C_ZHUQING or color == BAMBOO:
+		tex_key = "btn_confirm"
+
+	if tex_key != "" and ui_kit_textures.has(tex_key):
+		var tex: Texture2D = ui_kit_textures[tex_key]
+		var s := StyleBoxTexture.new()
+		s.texture = tex
+		s.texture_margin_left = 12
+		s.texture_margin_top = 12
+		s.texture_margin_right = 12
+		s.texture_margin_bottom = 12
+		b.add_theme_stylebox_override("normal", s)
+	else:
+		b.add_theme_stylebox_override("normal", _style(color, color.darkened(0.2), 1, 8, 8))
+		b.add_theme_stylebox_override("hover", _style(color.lightened(0.12), color.darkened(0.2), 1, 8, 8))
+		b.add_theme_stylebox_override("pressed", _style(color.darkened(0.15), color.darkened(0.3), 1, 8, 8))
+		b.add_theme_stylebox_override("disabled", _style(Color("#8a8074"), Color("#6d6458"), 1, 8, 8))
 	return b
 
 func _pill_btn(text: String, color: Color = Color("#2a2018"), border: Color = GOLD, height: int = 36) -> Button:
@@ -411,6 +497,8 @@ func _layout_responsive() -> void:
 		var lp_h := minf(h - 40.0, 600.0)
 		login_panel.size = Vector2(lp_w, lp_h)
 		login_panel.position = Vector2((w - lp_w) / 2.0, maxf((h - lp_h) / 2.0, 10.0))
+	if login_gear_btn != null:
+		login_gear_btn.position = Vector2(w - 124.0, 14.0)
 		
 	# 2. 地图全屏与沙盘视口自适应
 	if map_view != null:
@@ -499,7 +587,7 @@ func _layout_responsive() -> void:
 	# 6. S02 城池底部抽屉
 	if city_drawer != null:
 		var drawer_w := w if is_portrait else minf(w - 20.0, 720.0)
-		var drawer_h := 220.0 if is_compact_h else (320.0 if is_portrait else 290.0)
+		var drawer_h := 220.0 if is_compact_h else (300.0 if is_portrait else 290.0)
 		city_drawer.size = Vector2(drawer_w, drawer_h)
 		city_drawer.position = Vector2((w - drawer_w) / 2.0, h - drawer_h - (0.0 if is_phone else 10.0))
 		if city_drawer_margin != null:
@@ -677,28 +765,43 @@ func _build_login() -> void:
 	login_layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(login_layer)
 
-	var bg := ColorRect.new()
-	bg.color = DARK
-	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	login_layer.add_child(bg)
+	# C 主视觉水彩纸雕背景（大厂质感，高雅宣纸山水）
+	if ResourceLoader.exists("res://assets/art/keyart_c.png"):
+		var keyart_tex: Texture2D = load("res://assets/art/keyart_c.png")
+		var keyart_rect := TextureRect.new()
+		keyart_rect.texture = keyart_tex
+		keyart_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		keyart_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		keyart_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		login_layer.add_child(keyart_rect)
+
+		var scrim := ColorRect.new()
+		scrim.color = Color(0.12, 0.09, 0.07, 0.42)
+		scrim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		login_layer.add_child(scrim)
+	else:
+		var bg := ColorRect.new()
+		bg.color = C_WOOD_DESK
+		bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		login_layer.add_child(bg)
 
 	var stripe := ColorRect.new()
-	stripe.color = GOLD
+	stripe.color = C_TENGHUANG
 	stripe.position = Vector2(0, 0)
-	stripe.size = Vector2(2560, 5)
+	stripe.size = Vector2(2560, 4)
 	login_layer.add_child(stripe)
 
 	login_panel = Panel.new()
 	login_panel.position = Vector2((size.x - 520) / 2.0, (size.y - 620) / 2.0)
 	login_panel.size = Vector2(520, 620)
-	login_panel.add_theme_stylebox_override("panel", _style(CREAM, Color("#a8864b"), 3, 16))
+	login_panel.add_theme_stylebox_override("panel", _panel_style(C_XUANZHI, C_TENGHUANG, 2, 16, 20))
 	login_layer.add_child(login_panel)
 	var panel := login_panel
 
 	var inner_box := Panel.new()
-	inner_box.position = Vector2(12, 12)
-	inner_box.size = Vector2(496, 596)
-	inner_box.add_theme_stylebox_override("panel", _style(Color.TRANSPARENT, Color("#cfb995"), 1, 10))
+	inner_box.position = Vector2(10, 10)
+	inner_box.size = Vector2(500, 600)
+	inner_box.add_theme_stylebox_override("panel", _style(Color.TRANSPARENT, Color("#dfcaa7"), 1, 12))
 	panel.add_child(inner_box)
 
 	var margin := MarginContainer.new()
@@ -713,18 +816,18 @@ func _build_login() -> void:
 	var seal_box := HBoxContainer.new()
 	seal_box.alignment = BoxContainer.ALIGNMENT_CENTER
 	seal_box.add_theme_constant_override("separation", 8)
-	var seal_lbl := _label("青竹文房", 14, CREAM)
+	var seal_lbl := _label("青竹文房", 14, C_XUANZHI)
 	var seal_p := PanelContainer.new()
-	seal_p.add_theme_stylebox_override("panel", _style(CORAL, Color("#80241d"), 1, 4, 4))
+	seal_p.add_theme_stylebox_override("panel", _style(C_ZHUSHA, Color("#80241d"), 1, 4, 4))
 	seal_p.add_child(seal_lbl)
 	seal_box.add_child(seal_p)
 	v.add_child(seal_box)
 
-	var title := _label("灵宠山河", 38, INK)
+	var title := _label("灵宠山河", 38, C_WOOD_DESK)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(title)
 
-	var sub := _label("纸雕国风 · 班宠为将 · 九州沙盘推演", 15, MUTED)
+	var sub := _label("纸雕国风 · 班宠为将 · 九州沙盘推演", 15, Color("#6d5e4f"))
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(sub)
 
@@ -741,30 +844,30 @@ func _build_login() -> void:
 	pass_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	v.add_child(pass_edit)
 
-	login_student_btn = _button("踏 入 山 河", CORAL, 48)
+	login_student_btn = _button("踏 入 山 河", C_ZHUSHA, 48)
 	login_student_btn.add_theme_font_size_override("font_size", 18)
 	login_student_btn.pressed.connect(_on_login.bind(false))
 	v.add_child(login_student_btn)
 
-	login_status = _label("", 13, CORAL)
+	login_status = _label("", 13, C_ZHUSHA)
 	login_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	login_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	login_status.custom_minimum_size = Vector2(0, 36)
 	v.add_child(login_status)
 
-	var foot := _label("班级量化考核系统联动 · 每日 21:00 全班推演结算", 12, Color("#9e8d76"))
+	var foot := _label("班级量化考核系统联动 · 每日 21:00 全班推演结算", 12, Color("#7e6e5a"))
 	foot.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(foot)
 
-	var gear_btn := Button.new()
-	gear_btn.text = "⚙️ 网络设置"
-	gear_btn.position = Vector2(1270, 18)
-	gear_btn.size = Vector2(110, 34)
-	gear_btn.add_theme_font_size_override("font_size", 12)
-	gear_btn.add_theme_stylebox_override("normal", _style(Color("#2b221a"), Color("#4d3a2a"), 1, 6, 6))
-	gear_btn.add_theme_color_override("font_color", Color("#c4b295"))
-	gear_btn.pressed.connect(_open_dev_settings)
-	login_layer.add_child(gear_btn)
+	login_gear_btn = Button.new()
+	login_gear_btn.text = "⚙️ 网络设置"
+	login_gear_btn.position = Vector2(size.x - 124, 18)
+	login_gear_btn.size = Vector2(110, 34)
+	login_gear_btn.add_theme_font_size_override("font_size", 12)
+	login_gear_btn.add_theme_stylebox_override("normal", _style(Color("#2b221a"), Color("#4d3a2a"), 1, 6, 6))
+	login_gear_btn.add_theme_color_override("font_color", Color("#c4b295"))
+	login_gear_btn.pressed.connect(_open_dev_settings)
+	login_layer.add_child(login_gear_btn)
 
 	_build_dev_settings_dialog()
 
@@ -1184,10 +1287,18 @@ func _build_city_drawer() -> void:
 	city_action_supply_btn.pressed.connect(func(): _toast("【军需官】本据点粮草充足，士饱马腾！"))
 	h_act.add_child(city_action_supply_btn)
 
-	city_action_withdraw_btn = _button("↩️ 撤销令", Color("#5c4c3d"), 42)
-	city_action_withdraw_btn.custom_minimum_size = Vector2(86, 42)
+	city_action_withdraw_btn = _button("↩️ 撤销", Color("#5c4c3d"), 42)
+	city_action_withdraw_btn.custom_minimum_size = Vector2(72, 42)
 	city_action_withdraw_btn.pressed.connect(_withdraw_order)
 	h_act.add_child(city_action_withdraw_btn)
+
+	# 5. 城池小传：填满抽屉底部，避免大块空面板
+	var lore_box := PanelContainer.new()
+	lore_box.add_theme_stylebox_override("panel", _style(Color("#241d18"), Color("#4a3b2c"), 1, 6, 8))
+	v.add_child(lore_box)
+	city_lore_label = _label("城池小传：--", 12, Color("#bfae95"))
+	city_lore_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lore_box.add_child(city_lore_label)
 
 func _open_city_drawer(code: String) -> void:
 	var n: Dictionary = map.node_by_code(code)
@@ -1236,6 +1347,16 @@ func _open_city_drawer(code: String) -> void:
 	var neighbors := _neighbors(code)
 	city_routes_label.text = "🗺️ 连通驰道：%s" % ("、".join(neighbors) if neighbors.size() > 0 else "无")
 	city_tactical_label.text = "🎯 战术地位：东南重镇，粮秣咽喉" if is_start else "🎯 战术地位：兵家必争，交锋要害"
+
+	var lore := ""
+	match code:
+		"A_START": lore = "唐风边塞，烽火台高踞山脊。控扼北道，是青竹书院的门户。"
+		"N1": lore = "兰舟晚渡，松风两岸。谁掌握渡口，谁就掌握粮道。"
+		"N2": lore = "耕读传家，稻浪千顷。看似无险，却是四路交汇的粮仓。"
+		"N3": lore = "琴心竹韵，烟雨楼台。高台可望十里，是侦察与奇袭的支点。"
+		"B_START": lore = "鸿雁关山，塞下秋声。墨点精据此为营，与云麓关遥遥相望。"
+		_: lore = "山河要冲，兵家必争。"
+	city_lore_label.text = "城池小传：" + lore
 
 	var role := str(me.get("role", "player"))
 	var can_edit := bool(state.get("can_edit", false)) and role == "player" and not order_submitting
@@ -2047,10 +2168,24 @@ func _build_placeholder_page(page_id: String, title: String, subtitle: String, i
 	pages[page_id] = p
 	pages_container.add_child(p)
 
-	var bg := ColorRect.new()
-	bg.color = Color("#17110d")
-	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	p.add_child(bg)
+	if page_id == "S10_SEASON" and ResourceLoader.exists("res://assets/art/keyart_c.png"):
+		var keyart_tex: Texture2D = load("res://assets/art/keyart_c.png")
+		var keyart_rect := TextureRect.new()
+		keyart_rect.texture = keyart_tex
+		keyart_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		keyart_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		keyart_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		p.add_child(keyart_rect)
+
+		var scrim := ColorRect.new()
+		scrim.color = Color(0.12, 0.09, 0.07, 0.65)
+		scrim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		p.add_child(scrim)
+	else:
+		var bg := ColorRect.new()
+		bg.color = C_WOOD_DESK.darkened(0.2)
+		bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		p.add_child(bg)
 
 	var header := _create_page_header(title, subtitle)
 	p.add_child(header)

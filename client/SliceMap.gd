@@ -5,14 +5,57 @@ extends Control
 
 const FONT_PATH := "res://fonts/NotoSerifCJKsc-Regular.otf"
 
-const INK_DARK := Color("#201a15")
+# ---------------------------------------------------------------------------
+# Style C 水彩纸雕国风色板（严格对齐 ART_BRIEF_GPT.md）
+# ---------------------------------------------------------------------------
+const C_XUANZHI := Color("#f6efe2")     # 宣纸米黄（面板底色、纸卡底衬）
+const C_MOLAN := Color("#1e3a5f")       # 墨蓝（次级按钮、文墨高贵深蓝）
+const C_ZHUQING := Color("#276f57")     # 竹青（青竹书院主色、防守与确认按钮）
+const C_ZHUSHA := Color("#b83b32")      # 朱砂（主行动按钮、红营主色、警示印章）
+const C_TENGHUANG := Color("#cf8325")   # 藤黄（烫金线条、高亮标识、重点点缀）
+const C_TIANQING := Color("#a9d6e5")    # 天青（水域微光、信息标签、清雅蓝）
+const C_WOOD_DESK := Color("#2f2721")   # 深墨木桌（案台底色、深木色面板封边）
+const C_SHADOW_WARM := Color(0.24, 0.20, 0.17, 0.35) # 暖灰纸片投影（杜绝死黑）
+
+const INK_DARK := C_WOOD_DESK
 const INK_LIGHT := Color("#4a3e35")
-const CREAM := Color("#fff9ee")
-const GOLD := Color("#d4af37")
+const CREAM := C_XUANZHI
+const GOLD := C_TENGHUANG
 const GOLD_LIGHT := Color("#fae19c")
-const CORAL := Color("#b83b32")
-const BAMBOO := Color("#276f57")
+const CORAL := C_ZHUSHA
+const BAMBOO := C_ZHUQING
 const NEUTRAL := Color("#7e7263")
+
+# ---------------------------------------------------------------------------
+# C 版水彩纸雕地图底图（来自 keyart_c.png 的地图区域）
+# 只在横向/平板等足够宽的地图区域启用；手机竖屏继续用绘制版，避免拉伸。
+# ---------------------------------------------------------------------------
+const ART_MAP_PATH := "res://assets/art/map_c.png"
+const ART_MAP_MIN_ASPECT := 1.15
+const ART_MAP_INSET := 14.0
+
+# 5 个节点在底图中的归一化锚点（按 keyart_c.png 原画位置标定）
+const ART_NODE_POS := {
+	"A_START": Vector2(0.240, 0.265),
+	"N1": Vector2(0.174, 0.766),
+	"N2": Vector2(0.520, 0.500),
+	"N3": Vector2(0.846, 0.208),
+	"B_START": Vector2(0.785, 0.807),
+}
+
+# 旧版 GPT 5 城地标 PNG 与 C 原画风格不一致，只保留在 city 资产中，
+# 不再盖到地图上。需要时改为 true 可回退对比。
+const USE_LANDMARK_PNGS := false
+const LANDMARK_ASSET_PATHS := {
+	"A_START": "res://assets/art/city_yunlu.png",
+	"N1": "res://assets/art/city_songfeng.png",
+	"N2": "res://assets/art/city_luoxia.png",
+	"N3": "res://assets/art/city_tingyu.png",
+	"B_START": "res://assets/art/city_yanhui.png",
+}
+
+var art_map_texture: Texture2D = null
+var landmark_textures: Dictionary = {}
 
 var map_data: Dictionary = {}
 var selected_code := ""
@@ -20,6 +63,18 @@ var my_order: Variant = null
 var pulse := 0.0
 var font: Font
 var zoom_level: float = 1.0
+
+func _init_asset_slots() -> void:
+	art_map_texture = null
+	if ResourceLoader.exists(ART_MAP_PATH):
+		art_map_texture = load(ART_MAP_PATH)
+	landmark_textures.clear()
+	for code in LANDMARK_ASSET_PATHS.keys():
+		var path: String = LANDMARK_ASSET_PATHS[code]
+		if ResourceLoader.exists(path):
+			var tex: Texture2D = load(path)
+			if tex != null:
+				landmark_textures[code] = tex
 
 func set_zoom_level(z: float) -> void:
 	zoom_level = z
@@ -36,8 +91,39 @@ func _map_rect() -> Rect2:
 	else:
 		return Rect2(52.0, 70.0, maxf(w - 104.0, 260.0), maxf(h - 140.0, 200.0))
 
+func _art_enabled() -> bool:
+	if art_map_texture == null:
+		return false
+	var mr := _map_rect()
+	if mr.size.y <= 0.0:
+		return false
+	return mr.size.x / mr.size.y >= ART_MAP_MIN_ASPECT
+
+func _art_dest_rect(mr: Rect2) -> Rect2:
+	return mr.grow(-ART_MAP_INSET)
+
+func _art_source_rect(dest: Rect2) -> Rect2:
+	var tex_size := art_map_texture.get_size()
+	if tex_size.x <= 0.0 or tex_size.y <= 0.0 or dest.size.x <= 0.0 or dest.size.y <= 0.0:
+		return Rect2(Vector2.ZERO, tex_size)
+	var dest_aspect := dest.size.x / dest.size.y
+	var tex_aspect := tex_size.x / tex_size.y
+	if dest_aspect > tex_aspect:
+		var src_h := tex_size.x / dest_aspect
+		return Rect2(0.0, (tex_size.y - src_h) / 2.0, tex_size.x, src_h)
+	var src_w := tex_size.y * dest_aspect
+	return Rect2((tex_size.x - src_w) / 2.0, 0.0, src_w, tex_size.y)
+
+func _art_point(normalized: Vector2, dest: Rect2) -> Vector2:
+	var src := _art_source_rect(dest)
+	var tex_size := art_map_texture.get_size()
+	var u := (normalized.x * tex_size.x - src.position.x) / src.size.x
+	var v := (normalized.y * tex_size.y - src.position.y) / src.size.y
+	return dest.position + Vector2(u * dest.size.x, v * dest.size.y)
+
 func _ready() -> void:
 	font = load(FONT_PATH)
+	_init_asset_slots()
 	set_process(true)
 
 func setup(data: Dictionary) -> void:
@@ -54,6 +140,8 @@ func set_my_order(order: Variant) -> void:
 
 func node_position(code: String) -> Vector2:
 	var mr := _map_rect()
+	if _art_enabled() and ART_NODE_POS.has(code):
+		return _art_point(ART_NODE_POS[code], _art_dest_rect(mr))
 	for n in map_data.get("nodes", []):
 		if str(n.get("code", "")) == code:
 			var nx := clampf((float(n.get("x", 500)) - 100.0) / 800.0, 0.0, 1.0)
@@ -80,19 +168,30 @@ func _draw() -> void:
 	var total_rect := Rect2(Vector2.ZERO, size)
 	var mr := _map_rect()
 
-	# 1. 外围案台底色（沉稳胡桃木质感）
-	draw_rect(total_rect, Color("#1a1410"))
+	# 1. 外围案台底色（Style C 深墨木桌）
+	draw_rect(total_rect, C_WOOD_DESK)
 
 	# 2. 卷轴阴影与绢布本体
 	var shadow_rect := mr.grow(10)
 	shadow_rect.position += Vector2(0, 6)
-	draw_rect(shadow_rect, Color(0, 0, 0, 0.45))
+	draw_rect(shadow_rect, C_SHADOW_WARM)
 	
-	# 仿宋绢纸底衬与质感外框
-	draw_rect(mr, Color("#f2e9d4")) # 宣纸米黄
-	draw_rect(mr.grow(-8), Color("#ebe0c7")) # 渐层内纸
-	draw_rect(mr, Color("#5a4533"), false, 7.0) # 檀木封边
-	draw_rect(mr.grow(5), GOLD, false, 2.0) # 烫金丝线
+	# 宣纸底衬
+	draw_rect(mr, C_XUANZHI) # 宣纸米黄
+	draw_rect(mr.grow(-8), Color("#eee7d7")) # 渐层内纸
+
+	# C 版水彩地图底图：横向/平板启用；竖屏或资产缺失时回退到绘制版
+	if _art_enabled():
+		var dest := _art_dest_rect(mr)
+		draw_texture_rect_region(art_map_texture, dest, _art_source_rect(dest))
+		# 轻罩暖纸色，保证 HUD/标签在复杂地形上的对比度
+		draw_rect(dest, Color(0.96, 0.91, 0.82, 0.05))
+	else:
+		_draw_landscape_accents(mr)
+
+	# 质感外框（压在底图之上）
+	draw_rect(mr, C_WOOD_DESK, false, 7.0) # 深墨木桌封边
+	draw_rect(mr.grow(5), C_TENGHUANG, false, 2.0) # 藤黄丝线
 	draw_rect(mr.grow(-14), Color("#c8b89e"), false, 1.5) # 内边墨线
 
 	# 3. 四角烫金云纹饰件
@@ -101,25 +200,32 @@ func _draw() -> void:
 	_draw_corner_ornament(Vector2(mr.position.x, mr.end.y), 1, -1)
 	_draw_corner_ornament(mr.end, -1, -1)
 
-	# 4. 背景淡墨山水点缀
-	_draw_landscape_accents(mr)
-
 	# 5. 城际驰道连接线
 	var edges: Array = map_data.get("edges", [])
-	for e in edges:
-		if typeof(e) != TYPE_ARRAY or e.size() < 2:
-			continue
-		var a := node_position(str(e[0]))
-		var b := node_position(str(e[1]))
-		var is_active := (selected_code != "" and (str(e[0]) == selected_code or str(e[1]) == selected_code))
-		
-		# 驰道路基（宽条石纹）
-		draw_line(a, b, Color("#dfcfb4"), 10.0, true)
-		draw_line(a, b, Color("#baa789"), 8.0, true)
-		# 动态战意流光虚线
-		var line_color := GOLD if is_active else Color("#8c7a65")
-		var dash_offset := fmod(pulse * (22.0 if is_active else 8.0), 20.0)
-		_draw_animated_path(a, b, line_color, 3.2 if is_active else 2.0, 10.0, 8.0, dash_offset)
+	if _art_enabled():
+		# C 版底图已有手绘驰道，只高亮当前选中城池的相邻路线
+		for e in edges:
+			if typeof(e) != TYPE_ARRAY or e.size() < 2:
+				continue
+			if selected_code != "" and (str(e[0]) == selected_code or str(e[1]) == selected_code):
+				var ea := node_position(str(e[0]))
+				var eb := node_position(str(e[1]))
+				draw_line(ea, eb, Color(GOLD.r, GOLD.g, GOLD.b, 0.45), 3.0, true)
+	else:
+		for e in edges:
+			if typeof(e) != TYPE_ARRAY or e.size() < 2:
+				continue
+			var a := node_position(str(e[0]))
+			var b := node_position(str(e[1]))
+			var is_active := (selected_code != "" and (str(e[0]) == selected_code or str(e[1]) == selected_code))
+			
+			# 驰道路基（宽条石纹）
+			draw_line(a, b, Color("#dfcfb4"), 10.0, true)
+			draw_line(a, b, Color("#baa789"), 8.0, true)
+			# 动态战意流光虚线
+			var line_color := GOLD if is_active else Color("#8c7a65")
+			var dash_offset := fmod(pulse * (22.0 if is_active else 8.0), 20.0)
+			_draw_animated_path(a, b, line_color, 3.2 if is_active else 2.0, 10.0, 8.0, dash_offset)
 
 	# 6. 如果有已下达的军令，绘制高光行军动效箭头
 	_draw_order_trajectory()
@@ -193,6 +299,10 @@ func _draw_node(n: Dictionary) -> void:
 	var faction_color := NEUTRAL
 	if typeof(owner) == TYPE_DICTIONARY:
 		faction_color = Color(str(owner.get("color", "#7e7263")))
+
+	if _art_enabled():
+		_draw_node_over_art(n, pos, faction_color, is_start, is_mine, owner)
+		return
 
 	# 1. 选中光圈与战术瞄准环
 	if code == selected_code:
@@ -270,7 +380,85 @@ func _draw_node(n: Dictionary) -> void:
 	if zoom_level >= 1.7:
 		_draw_cultural_verse(pos, code)
 
+# C 版水彩底图上的节点：保留原画建筑，只叠归属光环、旌旗与纸签
+func _draw_node_over_art(n: Dictionary, pos: Vector2, faction_color: Color, is_start: bool, is_mine: bool, owner: Variant) -> void:
+	var code := str(n.get("code", ""))
+
+	# 1. 选中/归属光环
+	if code == selected_code:
+		var r := 50.0 + sin(pulse * 3.5) * 4.0
+		draw_circle(pos, r, Color(GOLD.r, GOLD.g, GOLD.b, 0.16))
+		draw_arc(pos, r, 0.0, TAU, 48, GOLD, 3.5, true)
+		draw_arc(pos, r + 8.0, 0.0, TAU, 48, Color(CORAL.r, CORAL.g, CORAL.b, 0.55), 1.5, true)
+	else:
+		var r := 42.0 if is_start else 38.0
+		draw_circle(pos, r, Color(faction_color.r, faction_color.g, faction_color.b, 0.10))
+		draw_arc(pos, r + 3.0, 0.0, TAU, 40, Color(CREAM.r, CREAM.g, CREAM.b, 0.72), 1.5, true)
+		draw_arc(pos, r, 0.0, TAU, 40, Color(faction_color.r, faction_color.g, faction_color.b, 0.78), 3.0, true)
+		if is_start:
+			draw_arc(pos, r + 6.0, 0.0, TAU, 40, GOLD, 2.0, true)
+
+	# 2. 小旗：放在建筑右侧，避免盖住原画
+	var flag_pole_h := 52.0 if is_start else 44.0
+	var pole_base := pos + Vector2(28, -10)
+	var pole_top := pole_base + Vector2(0, -flag_pole_h)
+	draw_line(pole_base, pole_top, Color("#3a2a1a"), 3.0, true)
+	draw_circle(pole_top, 3.0, GOLD)
+	var wave := sin(pulse * 3.2 + pos.x * 0.05) * 3.0
+	var flag := PackedVector2Array([
+		pole_top,
+		pole_top + Vector2(32, 6 + wave),
+		pole_top + Vector2(22, 18),
+		pole_top + Vector2(34, 28 - wave),
+		pole_top + Vector2(0, 22),
+	])
+	# 旗面先描一圈米白边，避免红/蓝旗压在红山蓝山上糊成一团
+	draw_polyline(flag, Color(CREAM.r, CREAM.g, CREAM.b, 0.92), 4.5, true)
+	draw_colored_polygon(flag, faction_color)
+	draw_polyline(flag, Color("#2b1e13"), 1.6, true)
+
+	# 3. 城名纸签（放在建筑基座下方，不盖城门）
+	var label := str(n.get("name", code))
+	var fsize := 15
+	var tw := 100.0
+	if font != null:
+		tw = font.get_string_size(label, HORIZONTAL_ALIGNMENT_CENTER, -1, fsize).x + 28.0
+	var tag_rect := Rect2(pos + Vector2(-tw / 2.0, 48), Vector2(tw, 26))
+	draw_rect(tag_rect.grow(2), Color(0, 0, 0, 0.18))
+	draw_rect(tag_rect, CREAM)
+	draw_rect(tag_rect, faction_color, false, 2.2)
+	draw_rect(tag_rect.grow(-3), Color("#cfbfa6"), false, 1.0)
+	if font != null:
+		draw_string(font, tag_rect.position + Vector2(0, 19), label, HORIZONTAL_ALIGNMENT_CENTER, tag_rect.size.x, fsize, INK_DARK)
+
+	# 4. 归属小签
+	if font != null:
+		var owner_name := "中立关隘"
+		if typeof(owner) == TYPE_DICTIONARY:
+			owner_name = str(owner.get("name", "中立")) + "阵营"
+		if is_start:
+			owner_name += " [大营]"
+		var sub_color := Color("#8c3a32") if is_mine else Color("#5f5242")
+		var owner_rect := Rect2(pos + Vector2(-62, 82), Vector2(124, 20))
+		draw_rect(owner_rect, Color(CREAM.r, CREAM.g, CREAM.b, 0.88))
+		draw_rect(owner_rect, Color(faction_color.r, faction_color.g, faction_color.b, 0.45), false, 1.0)
+		draw_string(font, owner_rect.position + Vector2(0, 15), owner_name, HORIZONTAL_ALIGNMENT_CENTER, owner_rect.size.x, 12, sub_color)
+
+	# 5. 高缩放文化标签/诗词
+	if zoom_level >= 1.35:
+		_draw_cultural_tag(pos, code, 108.0)
+	if zoom_level >= 1.7:
+		_draw_cultural_verse(pos, code, 134.0)
+
 func _draw_landmark_silhouette(pos: Vector2, code: String, _color: Color) -> void:
+	# 旧版 GPT 地标 PNG 与 C 原画风格不一致，默认不盖到地图上
+	if USE_LANDMARK_PNGS and landmark_textures.has(code):
+		var tex: Texture2D = landmark_textures[code]
+		var l_rect := Rect2(pos + Vector2(-36, -60), Vector2(72, 72))
+		draw_texture_rect(tex, l_rect, false)
+		return
+
+	# 资产未到位前：工笔国风矢量剪影占位
 	match code:
 		"A_START": # 云麓关：关隘 / 烽火台
 			var tower := Rect2(pos + Vector2(24, -38), Vector2(16, 26))
@@ -325,7 +513,7 @@ func _draw_landmark_silhouette(pos: Vector2, code: String, _color: Color) -> voi
 			draw_arc(Vector2(pos.x + 48, gy), 4.0, PI * 1.1, PI * 1.9, 6, Color("#1a1410"), 1.5)
 			draw_arc(Vector2(pos.x + 56, gy - 6), 3.5, PI * 1.1, PI * 1.9, 6, Color("#1a1410"), 1.5)
 
-func _draw_cultural_tag(pos: Vector2, code: String) -> void:
+func _draw_cultural_tag(pos: Vector2, code: String, y_offset: float = 102.0) -> void:
 	if font == null:
 		return
 	var tag_text := ""
@@ -337,13 +525,13 @@ func _draw_cultural_tag(pos: Vector2, code: String) -> void:
 		"B_START": tag_text = "【关】鸿雁关山"
 	if tag_text == "":
 		return
-	var rect := Rect2(pos + Vector2(-60, 102), Vector2(120, 22))
+	var rect := Rect2(pos + Vector2(-60, y_offset), Vector2(120, 22))
 	draw_rect(rect.grow(1), Color(0, 0, 0, 0.18))
 	draw_rect(rect, Color("#261c16"))
 	draw_rect(rect, GOLD, false, 1.0)
 	draw_string(font, rect.position + Vector2(0, 16), tag_text, HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 11, GOLD_LIGHT)
 
-func _draw_cultural_verse(pos: Vector2, code: String) -> void:
+func _draw_cultural_verse(pos: Vector2, code: String, y_offset: float = 128.0) -> void:
 	if font == null:
 		return
 	var verse := ""
@@ -356,7 +544,7 @@ func _draw_cultural_verse(pos: Vector2, code: String) -> void:
 	if verse == "":
 		return
 	var v_width := 240.0
-	var rect := Rect2(pos + Vector2(-v_width / 2.0, 128), Vector2(v_width, 24))
+	var rect := Rect2(pos + Vector2(-v_width / 2.0, y_offset), Vector2(v_width, 24))
 	draw_rect(rect.grow(2), Color(0, 0, 0, 0.22))
 	draw_rect(rect, Color("#fffdf8")) # 宣纸底色
 	draw_rect(rect, Color("#c4a77d"), false, 1.0)
@@ -447,7 +635,7 @@ func _draw_mini_legend(mr: Rect2) -> void:
 	draw_rect(bg_rect, Color("#baa789"), false, 1.0)
 	
 	draw_string(font, Vector2(lx, ly + 16), "阵营：", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, INK_DARK)
-	var tags = [["青竹", CORAL], ["墨点", BAMBOO], ["中立", NEUTRAL]]
+	var tags = [["笔", CORAL], ["墨", C_MOLAN], ["中立", NEUTRAL]]
 	var ox := lx + 44.0
 	for t in tags:
 		draw_circle(Vector2(ox, ly + 12), 5.5, t[1])
