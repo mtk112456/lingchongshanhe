@@ -1,0 +1,21 @@
+【OpenCode · 当前编译错误】
+
+`client/Slice.gd` 第 2044 行用了 `NEUTRAL`，但调色板重构后只保留了 `MUTED`，Godot 报：
+
+```text
+Parse Error: Identifier "NEUTRAL" not declared in the current scope.
+at: res://Slice.gd:2043
+```
+
+请改成 `MUTED`（或补回 `const NEUTRAL := Color("#7e7263")`），然后跑：
+
+```text
+godot --headless --path client res://tests/ClientSmoke.tscn
+godot --headless --path client res://tests/ReplaySmoke.tscn
+```
+
+另外 GPT 已交付 `art_src/gpt/assets_c_v2/`：
+- 5 城地标 v2（无边框、低饱和、64px 可读）；
+- `map_c_portrait.png` 936×1664，手机竖屏 C 版地图。
+
+我已把 v2 地标和竖屏图复制到 `client/assets/art/`，并在 `SliceMap.gd` 里加了竖屏底图分支。你只需保证 `Slice.gd` 编译通过，不要改 `SliceMap.gd` 的锚点。

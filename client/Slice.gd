@@ -31,6 +31,7 @@ const GOLD := C_TENGHUANG
 const GOLD_LIGHT := Color("#fae19c")
 const MUTED := Color("#8a7c6c")
 const DARK := Color("#1c1612")
+const NEUTRAL := Color("#7e7263")
 
 # ---------------------------------------------------------------------------
 # GPT Style C UI Kit Asset 插槽注册表
@@ -1224,7 +1225,7 @@ func _build_city_drawer() -> void:
 	close_btn.pressed.connect(func(): city_drawer.visible = false)
 	h_top.add_child(close_btn)
 
-	# 2. 城池两列属性卡片（守备情报 + 驰道地理）
+	# 2. 城池两列属性卡片（守备情报 + 驰道地理，C 宣纸纸卡内衬）
 	var info_row := HBoxContainer.new()
 	info_row.add_theme_constant_override("separation", 10)
 	v.add_child(info_row)
@@ -1232,34 +1233,34 @@ func _build_city_drawer() -> void:
 	# 左卡：城防守备
 	var def_box := PanelContainer.new()
 	def_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	def_box.add_theme_stylebox_override("panel", _style(Color("#2c221b"), Color("#5a4533"), 1, 6, 8))
+	def_box.add_theme_stylebox_override("panel", _panel_style(C_XUANZHI, Color("#dfcaa7"), 1, 6, 8))
 	info_row.add_child(def_box)
 	var def_v := VBoxContainer.new()
 	def_v.add_theme_constant_override("separation", 2)
 	def_box.add_child(def_v)
-	city_def_badge = _label("🛡️ 城防守备：3 / 3 点 · 坚固", 13, GOLD_LIGHT)
+	city_def_badge = _label("🛡️ 城防守备：3 / 3 点 · 坚固", 13, C_ZHUSHA)
 	def_v.add_child(city_def_badge)
-	city_garrison_label = _label("👥 驻防状态：守备严整", 12, Color("#c9bca8"))
+	city_garrison_label = _label("👥 驻防状态：守备严整", 12, Color("#554433"))
 	def_v.add_child(city_garrison_label)
 
 	# 右卡：驰道地理与战术地位
 	var route_box := PanelContainer.new()
 	route_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	route_box.add_theme_stylebox_override("panel", _style(Color("#2c221b"), Color("#5a4533"), 1, 6, 8))
+	route_box.add_theme_stylebox_override("panel", _panel_style(C_XUANZHI, Color("#dfcaa7"), 1, 6, 8))
 	info_row.add_child(route_box)
 	var route_v := VBoxContainer.new()
 	route_v.add_theme_constant_override("separation", 2)
 	route_box.add_child(route_v)
-	city_routes_label = _label("🗺️ 连通驰道：--", 13, GOLD_LIGHT)
+	city_routes_label = _label("🗺️ 连通驰道：--", 13, C_WOOD_DESK)
 	route_v.add_child(city_routes_label)
-	city_tactical_label = _label("🎯 战术地位：兵家必争，交锋要冲", 12, Color("#c9bca8"))
+	city_tactical_label = _label("🎯 战术地位：兵家必争，交锋要冲", 12, Color("#554433"))
 	route_v.add_child(city_tactical_label)
 
 	# 3. 今日军令状态条
 	var order_banner := PanelContainer.new()
-	order_banner.add_theme_stylebox_override("panel", _style(Color("#18232e"), Color("#3b5066"), 1, 6, 6))
+	order_banner.add_theme_stylebox_override("panel", _style(C_MOLAN, C_TENGHUANG, 1, 6, 6))
 	v.add_child(order_banner)
-	city_order_hint = _label("今日军令：待命中 · 请选择下方军略指令", 12, Color("#9fd4ff"))
+	city_order_hint = _label("今日军令：待命中 · 请选择下方军略指令", 12, C_XUANZHI)
 	order_banner.add_child(city_order_hint)
 
 	# 4. 动作按钮组
@@ -1267,17 +1268,17 @@ func _build_city_drawer() -> void:
 	h_act.add_theme_constant_override("separation", 8)
 	v.add_child(h_act)
 
-	city_action_advance_btn = _button("⚔️ 进军攻打", CORAL, 42)
+	city_action_advance_btn = _button("⚔️ 进军攻打", C_ZHUSHA, 42)
 	city_action_advance_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	city_action_advance_btn.pressed.connect(_on_city_advance_pressed)
 	h_act.add_child(city_action_advance_btn)
 
-	city_action_defend_btn = _button("🛡️ 驻守据点", BAMBOO, 42)
+	city_action_defend_btn = _button("🛡️ 驻守据点", C_ZHUQING, 42)
 	city_action_defend_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	city_action_defend_btn.pressed.connect(_on_city_defend_pressed)
 	h_act.add_child(city_action_defend_btn)
 
-	city_action_scout_btn = _button("🔍 斥候探报", Color("#423429"), 42)
+	city_action_scout_btn = _button("🔍 斥候探报", C_MOLAN, 42)
 	city_action_scout_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	city_action_scout_btn.pressed.connect(func(): _toast("【斥候急报】据点守备严整，敌军哨探在侧。"))
 	h_act.add_child(city_action_scout_btn)
@@ -1294,9 +1295,9 @@ func _build_city_drawer() -> void:
 
 	# 5. 城池小传：填满抽屉底部，避免大块空面板
 	var lore_box := PanelContainer.new()
-	lore_box.add_theme_stylebox_override("panel", _style(Color("#241d18"), Color("#4a3b2c"), 1, 6, 8))
+	lore_box.add_theme_stylebox_override("panel", _panel_style(C_XUANZHI, Color("#dfcaa7"), 1, 6, 8))
 	v.add_child(lore_box)
-	city_lore_label = _label("城池小传：--", 12, Color("#bfae95"))
+	city_lore_label = _label("城池小传：--", 12, Color("#443322"))
 	city_lore_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	lore_box.add_child(city_lore_label)
 
@@ -1425,7 +1426,7 @@ func _build_order_confirm_modal() -> void:
 	order_confirm_modal = Panel.new()
 	order_confirm_modal.position = Vector2(420, 300)
 	order_confirm_modal.size = Vector2(560, 400)
-	order_confirm_modal.add_theme_stylebox_override("panel", _style(CREAM, Color("#a8864b"), 3, 16))
+	order_confirm_modal.add_theme_stylebox_override("panel", _panel_style(C_XUANZHI, C_TENGHUANG, 2, 16, 20))
 	order_confirm_overlay.add_child(order_confirm_modal)
 
 	var margin := MarginContainer.new()
@@ -1437,7 +1438,7 @@ func _build_order_confirm_modal() -> void:
 	v.add_theme_constant_override("separation", 12)
 	margin.add_child(v)
 
-	confirm_title_label = _label("⚔️ 九州军令出征确认", 20, INK)
+	confirm_title_label = _label("⚔️ 九州军令出征确认", 20, C_WOOD_DESK)
 	confirm_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(confirm_title_label)
 
@@ -1445,37 +1446,37 @@ func _build_order_confirm_modal() -> void:
 	v.add_child(sep1)
 
 	var card := PanelContainer.new()
-	card.add_theme_stylebox_override("panel", _style(Color("#f7f0e1"), Color("#cfb995"), 1, 8, 12))
+	card.add_theme_stylebox_override("panel", _style(Color("#f7f0e1"), Color("#dfcaa7"), 1, 8, 12))
 	var card_v := VBoxContainer.new()
 	card_v.add_theme_constant_override("separation", 8)
 	card.add_child(card_v)
 	v.add_child(card)
 
-	confirm_origin_label = _label("出发据点：【问津关】", 14, INK)
+	confirm_origin_label = _label("出发据点：【问津关】", 14, C_WOOD_DESK)
 	card_v.add_child(confirm_origin_label)
 
-	confirm_target_label = _label("目标据点：【墨池隘】", 14, CORAL)
+	confirm_target_label = _label("目标据点：【墨池隘】", 14, C_ZHUSHA)
 	card_v.add_child(confirm_target_label)
 
-	confirm_pet_label = _label("出征灵宠：青竹灵猫（战力 120）", 14, BAMBOO)
+	confirm_pet_label = _label("出征灵宠：青竹灵猫（战力 120）", 14, C_ZHUQING)
 	card_v.add_child(confirm_pet_label)
 
 	confirm_cost_label = _label("军令开销：今日军令 1 道（每日限 1 道）", 13, Color("#7a5223"))
 	card_v.add_child(confirm_cost_label)
 
-	confirm_hint_label = _label("决算谕告：今夕 21:00 准时决战，战果载入次日战报", 12, MUTED)
+	confirm_hint_label = _label("决算谕告：今夕 21:00 准时决战，战果载入次日战报", 12, Color("#685848"))
 	v.add_child(confirm_hint_label)
 
 	var row_act := HBoxContainer.new()
 	row_act.add_theme_constant_override("separation", 14)
 	v.add_child(row_act)
 
-	var cancel_btn := _button("再作权衡", Color("#55493b"), 44)
+	var cancel_btn := _button("再作权衡", C_MOLAN, 44)
 	cancel_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	cancel_btn.pressed.connect(func(): order_confirm_overlay.visible = false)
 	row_act.add_child(cancel_btn)
 
-	var do_confirm_btn := _button("加盖军印", CORAL, 44)
+	var do_confirm_btn := _button("加盖军印", C_ZHUSHA, 44)
 	do_confirm_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	do_confirm_btn.pressed.connect(_on_confirm_order_pressed)
 	row_act.add_child(do_confirm_btn)
@@ -1519,7 +1520,7 @@ func _build_report_page() -> void:
 	pages_container.add_child(report_page)
 
 	var bg := ColorRect.new()
-	bg.color = Color("#17110d")
+	bg.color = C_WOOD_DESK
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	report_page.add_child(bg)
 
@@ -1535,9 +1536,9 @@ func _build_report_page() -> void:
 	v.add_theme_constant_override("separation", 10)
 	report_margin.add_child(v)
 
-	# 1. 顶部决战头条 Banner
+	# 1. 顶部决战头条 Banner（C 宣纸纸卡 + 金边）
 	report_headline_panel = PanelContainer.new()
-	report_headline_panel.add_theme_stylebox_override("panel", _style(Color("#261e18"), GOLD, 1, 8, 10))
+	report_headline_panel.add_theme_stylebox_override("panel", _panel_style(C_XUANZHI, C_TENGHUANG, 2, 10, 12))
 	v.add_child(report_headline_panel)
 
 	var hl_v := VBoxContainer.new()
@@ -1548,16 +1549,16 @@ func _build_report_page() -> void:
 	hl_row.add_theme_constant_override("separation", 10)
 	hl_v.add_child(hl_row)
 
-	report_headline_lbl = _label("【决战头条】九州第一候推演决战备战中", 17, GOLD_LIGHT)
+	report_headline_lbl = _label("【决战头条】九州第一候推演决战备战中", 17, C_WOOD_DESK)
 	report_headline_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hl_row.add_child(report_headline_lbl)
 
-	var view_replay_btn := _button("🔄 调取沙盘复盘", Color("#33485c"), 34)
+	var view_replay_btn := _button("🔄 调取沙盘复盘", C_ZHUSHA, 34)
 	view_replay_btn.custom_minimum_size = Vector2(140, 34)
 	view_replay_btn.pressed.connect(_open_replay)
 	hl_row.add_child(view_replay_btn)
 
-	report_time_lbl = _label("推演时点：今夜 21:00 准时结算", 12, Color("#d5c4a1"))
+	report_time_lbl = _label("推演时点：今夜 21:00 准时结算", 12, Color("#685848"))
 	hl_v.add_child(report_time_lbl)
 
 	# 2. 三大板块（支持滑动）
@@ -1585,14 +1586,14 @@ func _build_report_card(parent: Control, card_title: String) -> RichTextLabel:
 	var p := PanelContainer.new()
 	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	p.custom_minimum_size = Vector2(0, 150)
-	p.add_theme_stylebox_override("panel", _style(Color("#241c16"), Color("#4d3a2a"), 1, 8, 12))
+	p.add_theme_stylebox_override("panel", _panel_style(C_XUANZHI, Color("#dfcaa7"), 1, 10, 14))
 	parent.add_child(p)
 
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 6)
 	p.add_child(v)
 
-	var tl := _label(card_title, 15, GOLD_LIGHT)
+	var tl := _label(card_title, 15, C_ZHUSHA)
 	v.add_child(tl)
 
 	var sep := HSeparator.new()
@@ -1604,6 +1605,7 @@ func _build_report_card(parent: Control, card_title: String) -> RichTextLabel:
 	rtl.scroll_active = false
 	rtl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	rtl.add_theme_font_size_override("normal_font_size", 13)
+	rtl.add_theme_color_override("default_color", C_WOOD_DESK)
 	v.add_child(rtl)
 	return rtl
 
@@ -1646,11 +1648,11 @@ func _render_in_progress_report() -> void:
 	if typeof(my_ord) == TYPE_DICTIONARY and not my_ord.is_empty():
 		var act := str(my_ord.get("action", ""))
 		var t_name := str(my_ord.get("target_name", ""))
-		my_b += "[color=#fae19c]• 当前已签军令：向【%s】执行【%s】，已加盖行营帅印！[/color]\n" % [
+		my_b += "[color=#b83b32]• 当前已签军令：向【%s】执行【%s】，已加盖行营帅印！[/color]\n" % [
 			t_name, "挥师进军攻打" if act == "advance" else "坚壁固守城池"
 		]
 	else:
-		my_b += "[color=#ff8a80]• 当前军令状态：尚未签发军令！请尽快前往【沙盘】轻触城池下达【进军】或【坚守】。[/color]\n"
+		my_b += "[color=#b83b32]• 当前军令状态：尚未签发军令！请前往【沙盘】轻触城池下达【进军】或【坚守】。[/color]\n"
 	
 	var cur_score := int(wallet.get("score", 0))
 	var cur_wenyu := int(wallet.get("balance", 0))
@@ -1668,10 +1670,16 @@ func _render_in_progress_report() -> void:
 		var is_start := bool(n.get("is_start", false))
 		var owner: Variant = n.get("owner", null)
 		var owner_name := "中立关塞"
+		var f_color := "#5f5242"
 		if typeof(owner) == TYPE_DICTIONARY:
 			owner_name = str(owner.get("name", "中立")) + "阵营"
-		w_b += "• [b]%s[/b]（%s）：归属 [color=#fae19c]%s[/color] | 守备强度：3 点（固若金汤）\n" % [
-			c_name, "起兵大营" if is_start else "要冲关隘", owner_name
+			var ocode := str(owner.get("code", ""))
+			if ocode == "bi" or ocode == "bamboo":
+				f_color = "#b83b32"
+			elif ocode == "mo" or ocode == "ink":
+				f_color = "#1e3a5f"
+		w_b += "• [b]%s[/b]（%s）：归属 [color=%s]%s[/color] | 守备强度：3 点（固若金汤）\n" % [
+			c_name, "起兵大营" if is_start else "要冲关隘", f_color, owner_name
 		]
 	report_world_text.text = w_b
 
@@ -1684,7 +1692,7 @@ func _render_in_progress_report() -> void:
 		var conf := int(f.get("confirmed", 0))
 		var tot := int(f.get("players", 0))
 		s_b += "• %s：参战 %d 人 / 已交令 %d 人\n" % [f_name, tot, conf]
-	s_b += "\n[color=#fae19c]◆ 下候推演备忘：[/color]\n"
+	s_b += "\n[color=#b83b32]◆ 下候推演备忘：[/color]\n"
 	s_b += "• 每日 21:00 系统准时生成只读快照并触发结算，锁令后不可撤销；\n"
 	s_b += "• 结算完成后自动生成详细战报与战局回放，请及时查阅战场复盘。"
 	report_summary_text.text = s_b
@@ -1721,7 +1729,7 @@ func _show_report(data: Dictionary) -> void:
 		b_world += "本候四野承平，各处关隘城防坚固，未有易帜失陷。\n"
 	else:
 		for c in changes:
-			b_world += "• [b]%s[/b]：从 [color=#8b7d68]%s[/color] 易为 [color=#cf8325]%s[/color]（原因：%s）\n" % [
+			b_world += "• [b]%s[/b]：从 [color=#6f6252]%s[/color] 易为 [color=#b83b32]%s[/color]（原因：%s）\n" % [
 				str(c.get("node_name", "")),
 				str(c.get("prev_owner_name", "中立")),
 				str(c.get("new_owner_name", "中立")),
@@ -1741,7 +1749,7 @@ func _show_report(data: Dictionary) -> void:
 			str(r.get("target_name", "")),
 			str(r.get("result_summary", "")),
 		]
-	b_sum += "\n[color=#fae19c]◆ 下候备战提示：[/color]\n下一候军令已开启，请前往沙盘审视关防，谋划进军或坚守！"
+	b_sum += "\n[color=#b83b32]◆ 下候备战提示：[/color]\n下一候军令已开启，请前往沙盘审视关防，谋划进军或坚守！"
 	report_summary_text.text = b_sum
 
 # ---------------------------------------------------------------------------
@@ -1757,7 +1765,7 @@ func _build_replay_page() -> void:
 	pages_container.add_child(replay_page)
 
 	var bg := ColorRect.new()
-	bg.color = Color("#17110d")
+	bg.color = C_WOOD_DESK
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	replay_page.add_child(bg)
 
@@ -1780,21 +1788,22 @@ func _build_replay_page() -> void:
 	row.add_child(_label("回放回合：", 14, GOLD_LIGHT))
 	replay_turn_select = OptionButton.new()
 	replay_turn_select.custom_minimum_size = Vector2(160, 38)
-	replay_turn_select.add_theme_stylebox_override("normal", _style(Color("#fffdf8"), Color("#c9b99a"), 1, 7, 6))
+	replay_turn_select.add_theme_stylebox_override("normal", _style(C_XUANZHI, Color("#c9baa7"), 1, 7, 8))
+	replay_turn_select.add_theme_color_override("font_color", C_WOOD_DESK)
 	replay_turn_select.item_selected.connect(_render_replay_turn)
 	row.add_child(replay_turn_select)
 
-	prev_turn_btn = _button("◀ 上一候", Color("#55493b"), 38)
+	prev_turn_btn = _button("◀ 上一候", C_MOLAN, 38)
 	prev_turn_btn.custom_minimum_size = Vector2(88, 38)
 	prev_turn_btn.pressed.connect(_step_replay.bind(-1))
 	row.add_child(prev_turn_btn)
 
-	next_turn_btn = _button("下一候 ▶", Color("#55493b"), 38)
+	next_turn_btn = _button("下一候 ▶", C_MOLAN, 38)
 	next_turn_btn.custom_minimum_size = Vector2(88, 38)
 	next_turn_btn.pressed.connect(_step_replay.bind(1))
 	row.add_child(next_turn_btn)
 
-	replay_time_lbl = _label("推演时点：--", 12, MUTED)
+	replay_time_lbl = _label("推演时点：--", 12, Color("#d5c4a1"))
 	replay_time_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(replay_time_lbl)
 
@@ -1806,13 +1815,14 @@ func _build_replay_page() -> void:
 
 	var text_panel := PanelContainer.new()
 	text_panel.custom_minimum_size = Vector2(0, 160)
-	text_panel.add_theme_stylebox_override("panel", _style(Color("#261e18"), Color("#4d3a2a"), 1, 8, 10))
+	text_panel.add_theme_stylebox_override("panel", _panel_style(C_XUANZHI, Color("#dfcaa7"), 1, 10, 14))
 	v.add_child(text_panel)
 
 	replay_text = RichTextLabel.new()
 	replay_text.bbcode_enabled = true
 	replay_text.scroll_active = true
 	replay_text.add_theme_font_size_override("normal_font_size", 13)
+	replay_text.add_theme_color_override("default_color", C_WOOD_DESK)
 	text_panel.add_child(replay_text)
 
 func _open_replay() -> void:
@@ -1843,7 +1853,7 @@ func _show_replay(data: Dictionary) -> void:
 			owners[str(n.get("code", ""))] = n.get("owner", {})
 		replay_map.setup(nodes, edges, owners, {})
 		replay_time_lbl.text = "推演时点：今夜 21:00 准时结算"
-		replay_text.text = "[font_size=16][color=#fae19c]◆ 第一候沙盘军情态势（备战中）[/color][/font_size]\n天下 5 大要害据点布防已毕，各大书院同门学子正在集结待命。\n[color=#c4b295]今夜 21:00 定时结算后，系统将自动生成城池易帜金色光环与战场动态对决复盘。[/color]"
+		replay_text.text = "[font_size=16][color=#b83b32]◆ 第一候沙盘军情态势（备战中）[/color][/font_size]\n天下 5 大要害据点布防已毕，各大书院同门学子正在集结待命。\n[color=#685848]今夜 21:00 定时结算后，系统将自动生成城池易帜金色光环与战场动态对决复盘。[/color]"
 		_navigate_to("S05_REPLAY")
 		return
 
@@ -1868,7 +1878,7 @@ func _render_fallback_replay() -> void:
 	replay_turn_select.select(0)
 	replay_map.setup(nodes, edges, owners, {})
 	replay_time_lbl.text = "推演时点：今夜 21:00 准时结算"
-	replay_text.text = "[font_size=16][color=#fae19c]◆ 第一候沙盘军情态势（备战中）[/color][/font_size]\n天下 5 大要害据点布防已毕，各大书院同门学子正在集结待命。"
+	replay_text.text = "[font_size=16][color=#b83b32]◆ 第一候沙盘军情态势（备战中）[/color][/font_size]\n天下 5 大要害据点布防已毕，各大书院同门学子正在集结待命。"
 
 func _step_replay(delta: int) -> void:
 	var total := replay_turn_select.item_count
@@ -1898,7 +1908,7 @@ func _render_replay_turn(index: int) -> void:
 	replay_map.setup(nodes, edges, owners, changed_codes)
 	replay_time_lbl.text = "推演时点：%s" % str(t.get("settled_at", "—"))
 
-	var b := "[font_size=17][color=#fae19c]第 %d 候战况复盘[/color][/font_size]（决算时点：%s）\n" % [
+	var b := "[font_size=17][color=#b83b32]第 %d 候战况复盘[/color][/font_size]（决算时点：%s）\n" % [
 		int(t.get("turn_no", 0)),
 		str(t.get("settled_at", "—")),
 	]
@@ -1926,7 +1936,7 @@ func _build_faction_page() -> void:
 	pages_container.add_child(faction_page)
 
 	var bg := ColorRect.new()
-	bg.color = Color("#17110d")
+	bg.color = C_WOOD_DESK
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	faction_page.add_child(bg)
 
@@ -1947,20 +1957,20 @@ func _build_faction_page() -> void:
 	v.add_theme_constant_override("separation", 12)
 	scroll.add_child(v)
 
-	# 1. 顶部本军概览卡
+	# 1. 顶部本军概览卡（C 宣纸纸卡 + 朱砂金边）
 	faction_summary_box = PanelContainer.new()
 	faction_summary_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	faction_summary_box.add_theme_stylebox_override("panel", _style(Color("#241c16"), GOLD, 1, 10, 14))
+	faction_summary_box.add_theme_stylebox_override("panel", _panel_style(C_XUANZHI, C_ZHUSHA, 2, 10, 14))
 	v.add_child(faction_summary_box)
 
 	var sum_v := VBoxContainer.new()
 	sum_v.add_theme_constant_override("separation", 6)
 	faction_summary_box.add_child(sum_v)
 
-	faction_top_title = _label("🚩 本方阵营：青竹书院（青竹军）", 18, GOLD_LIGHT)
+	faction_top_title = _label("🚩 本方阵营：笔阵营（青竹书院）", 18, C_ZHUSHA)
 	sum_v.add_child(faction_top_title)
 
-	faction_top_desc = _label("【阵营加成】驻守本方据点守备力额外 +1 | 参战同袍：集结中", 13, Color("#d5c4a1"))
+	faction_top_desc = _label("【阵营加成】驻守本方据点守备力额外 +1 | 参战同袍：集结中", 13, Color("#554433"))
 	sum_v.add_child(faction_top_desc)
 
 	# 2. 四大书院势力卡片网格
@@ -1974,17 +1984,17 @@ func _build_faction_page() -> void:
 	# 3. 待接入特性规划提示卡
 	var roadmap_card := PanelContainer.new()
 	roadmap_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	roadmap_card.add_theme_stylebox_override("panel", _style(Color("#1d1712"), Color("#5a4533"), 1, 8, 12))
+	roadmap_card.add_theme_stylebox_override("panel", _panel_style(C_XUANZHI, C_ZHUQING, 1, 8, 12))
 	v.add_child(roadmap_card)
 
 	var rm_v := VBoxContainer.new()
 	rm_v.add_theme_constant_override("separation", 4)
 	roadmap_card.add_child(rm_v)
 
-	var rm_t := _label("📜 阵营文脉进阶特性（后续赛季规划）", 15, GOLD_LIGHT)
+	var rm_t := _label("📜 阵营文脉进阶特性（后续赛季规划）", 15, C_ZHUQING)
 	rm_v.add_child(rm_t)
 
-	var rm_d := _label("• 【同盟战功榜】：待下赛季接入，结算后根据阵营贡献发放额外文玉；\n• 【书院科技树】：待下赛季接入，研发【墨染山河】、【竹韵清风】等全阵营被动技。", 13, Color("#bdaea0"))
+	var rm_d := _label("• 【同盟战功榜】：待下赛季接入，结算后根据阵营贡献发放额外文玉；\n• 【书院科技树】：待下赛季接入，研发【墨染山河】、【竹韵清风】等全阵营被动技。", 13, Color("#554433"))
 	rm_v.add_child(rm_d)
 
 	_refresh_faction_page()
@@ -1997,25 +2007,28 @@ func _refresh_faction_page() -> void:
 
 	var f_data := [
 		{
-			"code": "bamboo",
-			"name": "青竹书院（青竹军 · 本方）",
+			"code": "bi",
+			"alias": "bamboo",
+			"name": "笔阵营 · 青竹书院（本方）",
 			"slogan": "宁折不弯，文脉延绵",
-			"color": BAMBOO,
-			"icon": "🎋",
+			"color": C_ZHUSHA,
+			"icon": "🖌️",
 			"is_mine": true,
 			"desc": "本方书院，学子英才辈出，擅长以守为攻、坚壁清野。"
 		},
 		{
-			"code": "ink",
-			"name": "玄墨书院（玄墨军）",
+			"code": "mo",
+			"alias": "ink",
+			"name": "墨阵营 · 玄墨书院（墨点精）",
 			"slogan": "笔锋如剑，墨染九州",
-			"color": Color("#1e252b"),
+			"color": C_MOLAN,
 			"icon": "🖋️",
 			"is_mine": false,
-			"desc": "扼守平江府，兵强马壮，斥候探明其主力有合围问津关之势。"
+			"desc": "扼守塞外重镇，兵强马壮，主力与云麓关遥遥相对。"
 		},
 		{
 			"code": "azure",
+			"alias": "azure",
 			"name": "沧浪书院（苍岚军）",
 			"slogan": "沧浪之水，滔滔不绝",
 			"color": Color("#274f73"),
@@ -2024,13 +2037,14 @@ func _refresh_faction_page() -> void:
 			"desc": "依傍水寨要冲，战船巡弋，随时准备渡江争夺中立关防。"
 		},
 		{
-			"code": "crimson",
-			"name": "丹霞书院（赤华军）",
-			"slogan": "赤子丹心，势若烈火",
-			"color": CORAL,
-			"icon": "🔥",
+			"code": "neutral",
+			"alias": "neutral",
+			"name": "九州中立关塞（待破关）",
+			"slogan": "天地不仁，山河以待",
+			"color": NEUTRAL,
+			"icon": "🏰",
 			"is_mine": false,
-			"desc": "盘踞塞上要隘，行军迅捷，多次试探进攻中立防线。"
+			"desc": "松风渡、落霞原、听雨台等天下要塞，静待英豪合力夺取。"
 		}
 	]
 
@@ -2057,9 +2071,10 @@ func _refresh_faction_page() -> void:
 
 	for fd in f_data:
 		var code: String = fd["code"]
+		var alias: String = fd["alias"]
 		var p_card := PanelContainer.new()
 		p_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		p_card.add_theme_stylebox_override("panel", _style(Color("#241c16"), fd["color"].lightened(0.1), 1, 8, 12))
+		p_card.add_theme_stylebox_override("panel", _panel_style(C_XUANZHI, fd["color"], 2, 10, 12))
 		faction_cards_container.add_child(p_card)
 
 		var cv := VBoxContainer.new()
@@ -2070,20 +2085,20 @@ func _refresh_faction_page() -> void:
 		h_head.add_theme_constant_override("separation", 8)
 		cv.add_child(h_head)
 
-		var icn := _label(str(fd["icon"]), 20, GOLD_LIGHT)
+		var icn := _label(str(fd["icon"]), 20, fd["color"])
 		h_head.add_child(icn)
 
-		var name_lbl := _label(str(fd["name"]), 16, CREAM if fd["is_mine"] else Color("#dcd2bf"))
+		var name_lbl := _label(str(fd["name"]), 16, C_WOOD_DESK)
 		name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		h_head.add_child(name_lbl)
 
-		var tag := _label("【数据已接入】", 11, BAMBOO if fd["is_mine"] else Color("#a89a84"))
+		var tag := _label("【数据已接入】", 11, fd["color"])
 		h_head.add_child(tag)
 
-		var slog := _label("校训：%s" % str(fd["slogan"]), 12, GOLD)
+		var slog := _label("校训：%s" % str(fd["slogan"]), 12, fd["color"])
 		cv.add_child(slog)
 
-		var desc_lbl := _label(str(fd["desc"]), 12, Color("#baa892"))
+		var desc_lbl := _label(str(fd["desc"]), 12, Color("#685848"))
 		desc_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		cv.add_child(desc_lbl)
 
@@ -2091,14 +2106,16 @@ func _refresh_faction_page() -> void:
 		cv.add_child(sep)
 
 		var my_nodes: Array = owned_map.get(code, [])
+		if my_nodes.is_empty():
+			my_nodes = owned_map.get(alias, [])
 		var node_str := "、".join(my_nodes) if not my_nodes.is_empty() else "无据点（待破关夺取）"
-		var nodes_lbl := _label("🏰 占领据点：%s" % node_str, 13, GOLD_LIGHT)
+		var nodes_lbl := _label("🏰 占领据点：%s" % node_str, 13, C_WOOD_DESK)
 		cv.add_child(nodes_lbl)
 
-		var p_info: Dictionary = part_map.get(code, {"confirmed": 0, "players": 1})
+		var p_info: Dictionary = part_map.get(code, part_map.get(alias, {"confirmed": 0, "players": 1}))
 		var part_lbl := _label("👥 阵营兵力：已交令 %d 人 / 总参战 %d 人" % [
 			p_info["confirmed"], max(p_info["players"], 1)
-		], 12, Color("#d5c4a1"))
+		], 12, Color("#554433"))
 		cv.add_child(part_lbl)
 
 # ---------------------------------------------------------------------------
@@ -2206,12 +2223,12 @@ func _build_placeholder_page(page_id: String, title: String, subtitle: String, i
 
 	var summary_card := PanelContainer.new()
 	summary_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	summary_card.add_theme_stylebox_override("panel", _style(Color("#261e18"), GOLD, 1, 10, 14))
+	summary_card.add_theme_stylebox_override("panel", _panel_style(C_XUANZHI, C_TENGHUANG, 2, 10, 14))
 	var s_row := HBoxContainer.new()
 	s_row.add_theme_constant_override("separation", 16)
 	summary_card.add_child(s_row)
 
-	var icn_lbl := _label(icon, 30, GOLD_LIGHT)
+	var icn_lbl := _label(icon, 30, C_TENGHUANG)
 	s_row.add_child(icn_lbl)
 
 	var text_v := VBoxContainer.new()
@@ -2219,10 +2236,10 @@ func _build_placeholder_page(page_id: String, title: String, subtitle: String, i
 	text_v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	s_row.add_child(text_v)
 
-	var title_lbl := _label(title, 17, CREAM)
+	var title_lbl := _label(title, 17, C_WOOD_DESK)
 	text_v.add_child(title_lbl)
 
-	var badge_lbl := _label("【状态】" + badge + " · 待下赛季版本接入", 12, Color("#c4b295"))
+	var badge_lbl := _label("【状态】" + badge + " · 待下赛季版本接入", 12, Color("#685848"))
 	text_v.add_child(badge_lbl)
 	v.add_child(summary_card)
 
@@ -2236,7 +2253,7 @@ func _build_placeholder_page(page_id: String, title: String, subtitle: String, i
 	for c in cards:
 		var c_panel := PanelContainer.new()
 		c_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		c_panel.add_theme_stylebox_override("panel", _style(Color("#241c16"), Color("#5a4533"), 1, 8, 12))
+		c_panel.add_theme_stylebox_override("panel", _panel_style(C_XUANZHI, Color("#dfcaa7"), 1, 8, 12))
 		var cv := VBoxContainer.new()
 		cv.add_theme_constant_override("separation", 6)
 		c_panel.add_child(cv)
@@ -2245,14 +2262,14 @@ func _build_placeholder_page(page_id: String, title: String, subtitle: String, i
 		h_head.add_theme_constant_override("separation", 8)
 		cv.add_child(h_head)
 
-		var ct := _label(str(c.get("title", "")), 15, GOLD_LIGHT)
+		var ct := _label(str(c.get("title", "")), 15, C_WOOD_DESK)
 		ct.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		h_head.add_child(ct)
 
-		var c_tag := _label("【待接入】", 11, Color("#a89a84"))
+		var c_tag := _label("【待接入】", 11, C_ZHUQING)
 		h_head.add_child(c_tag)
 
-		var cs := _label(str(c.get("desc", "")), 13, Color("#d5c4a1"))
+		var cs := _label(str(c.get("desc", "")), 13, Color("#554433"))
 		cs.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		cv.add_child(cs)
 		grid.add_child(c_panel)
@@ -2722,10 +2739,18 @@ func _load_config() -> void:
 		if u != "":
 			url_edit.text = u
 			api.set_base_url(u)
-		name_edit.text = cfg.get_value("auth", "name", "")
+		var saved_name := str(cfg.get_value("auth", "name", ""))
+		# 学生 App 不提供教师入口：旧测试留下的 teacher 不预填
+		if saved_name != "" and saved_name.to_lower() != "teacher":
+			name_edit.text = saved_name
 
 func _save_config() -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value("net", "url", url_edit.text.strip_edges())
-	cfg.set_value("auth", "name", name_edit.text.strip_edges())
+	var role := str(me.get("role", "player")) if typeof(me) == TYPE_DICTIONARY else "player"
+	var saved_name := name_edit.text.strip_edges()
+	# 只记住学生姓名；教师账号不写进学生 App 配置
+	if role != "player" or saved_name.to_lower() == "teacher":
+		saved_name = ""
+	cfg.set_value("auth", "name", saved_name)
 	cfg.save("user://slice.cfg")

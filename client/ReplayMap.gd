@@ -5,12 +5,22 @@ extends Control
 
 const FONT_PATH := "res://fonts/NotoSerifCJKsc-Regular.otf"
 
-const INK := Color("#201a15")
-const CREAM := Color("#fffaf0")
-const GOLD := Color("#d4af37")
+# ---------------------------------------------------------------------------
+# Style C 水彩纸雕国风色板（严格对齐 ART_BRIEF_GPT.md）
+# ---------------------------------------------------------------------------
+const C_XUANZHI := Color("#f6efe2")     # 宣纸米黄（底衬与纸签）
+const C_MOLAN := Color("#1e3a5f")       # 墨蓝（墨阵营）
+const C_ZHUQING := Color("#276f57")     # 竹青（青竹书院）
+const C_ZHUSHA := Color("#b83b32")      # 朱砂（笔阵营）
+const C_TENGHUANG := Color("#cf8325")   # 藤黄（烫金线条与高亮光环）
+const C_WOOD_DESK := Color("#2f2721")   # 深墨木桌（案台底色）
+
+const INK := C_WOOD_DESK
+const CREAM := C_XUANZHI
+const GOLD := C_TENGHUANG
 const GOLD_LIGHT := Color("#fae19c")
-const CORAL := Color("#b83b32")
-const BAMBOO := Color("#276f57")
+const CORAL := C_ZHUSHA
+const BAMBOO := C_ZHUQING
 const NEUTRAL := Color("#7e7263")
 
 var nodes: Array = []
@@ -51,17 +61,27 @@ func node_position(code: String) -> Vector2:
 func _draw() -> void:
 	var mr := _map_rect()
 	# 案台底木
-	draw_rect(Rect2(Vector2.ZERO, size), Color("#1e1712"))
+	draw_rect(Rect2(Vector2.ZERO, size), C_WOOD_DESK)
 	
 	# 绢布卷轴
-	draw_rect(mr, Color("#f3ebd8"))
-	draw_rect(mr.grow(-6), Color("#ebe0c7"))
-	draw_rect(mr, Color("#5a4533"), false, 4.0)
-	draw_rect(mr.grow(4), Color("#c9a45c"), false, 1.5)
+	draw_rect(mr, C_XUANZHI)
+	draw_rect(mr.grow(-6), Color("#efe5d2"))
+	draw_rect(mr, Color("#5a4533"), false, 3.0)
+	draw_rect(mr.grow(4), C_TENGHUANG, false, 1.5)
 	_draw_corners(mr)
 
 	if font != null:
 		draw_string(font, mr.position + Vector2(20, 32), "沙盘战局复盘 · 节点归属演化", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, INK)
+		# 阵营微型图例（对齐“笔 / 墨 / 中立”）
+		var lx := mr.end.x - 210.0
+		var ly := mr.position.y + 16.0
+		draw_string(font, Vector2(lx, ly + 14), "阵营：", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, INK)
+		var tags = [["笔", CORAL], ["墨", C_MOLAN], ["中立", NEUTRAL]]
+		var ox := lx + 40.0
+		for t in tags:
+			draw_circle(Vector2(ox, ly + 10), 4.5, t[1])
+			draw_string(font, Vector2(ox + 8, ly + 14), t[0], HORIZONTAL_ALIGNMENT_LEFT, -1, 11, INK)
+			ox += 52.0
 
 	for e in edges:
 		if typeof(e) != TYPE_ARRAY or e.size() < 2:
@@ -76,7 +96,7 @@ func _draw() -> void:
 
 func _draw_corners(r: Rect2) -> void:
 	var clen := 14.0
-	var ccol := Color("#c9a45c")
+	var ccol := C_TENGHUANG
 	draw_line(r.position, r.position + Vector2(clen, 0), ccol, 2.0)
 	draw_line(r.position, r.position + Vector2(0, clen), ccol, 2.0)
 	draw_line(Vector2(r.end.x, r.position.y), Vector2(r.end.x - clen, r.position.y), ccol, 2.0)
@@ -104,13 +124,14 @@ func _draw_node(n: Dictionary) -> void:
 	if bool(n.get("is_start", false)) or str(n.get("type", "")) == "start":
 		draw_arc(pos, 25.0, 0.0, TAU, 48, Color("#c9a45c"), 3.5, true)
 
-	# 2. 旗杆与旌旗（垂直向上）
+	# 2. 旗杆与旌旗（垂直向上，加米白描边避免糊成一团）
 	draw_line(pos + Vector2(0, -10), pos + Vector2(0, -46), Color("#4b3a2a"), 3.0)
 	var flag := PackedVector2Array([
 		pos + Vector2(1, -44),
 		pos + Vector2(28, -39),
 		pos + Vector2(1, -30),
 	])
+	draw_polyline(flag, Color(CREAM.r, CREAM.g, CREAM.b, 0.92), 3.5, true)
 	draw_colored_polygon(flag, color)
 	draw_polyline(flag, Color("#3a2e24"), 1.8, true)
 

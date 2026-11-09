@@ -91,6 +91,14 @@ def check_assets() -> dict:
                             ok=im.width == 1635 and im.height == 1300)
     checks["map_c.png"] = map_info
 
+    portrait_path = art / "map_c_portrait.png"
+    portrait_info = {"exists": portrait_path.is_file()}
+    if portrait_path.is_file():
+        with Image.open(portrait_path) as im:
+            portrait_info.update(width=im.width, height=im.height, mode=im.mode,
+                                  ok=im.width == 936 and im.height == 1664)
+    checks["map_c_portrait.png"] = portrait_info
+
     keyart = source / "keyart_c.png"
     keyart_info = {"exists": keyart.is_file()}
     if keyart.is_file():

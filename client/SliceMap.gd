@@ -27,20 +27,31 @@ const BAMBOO := C_ZHUQING
 const NEUTRAL := Color("#7e7263")
 
 # ---------------------------------------------------------------------------
-# C 版水彩纸雕地图底图（来自 keyart_c.png 的地图区域）
-# 只在横向/平板等足够宽的地图区域启用；手机竖屏继续用绘制版，避免拉伸。
+# C 版水彩纸雕地图底图
+# 横向/平板用 keyart_c.png 裁出的 map_c.png；手机竖屏用专门的 9:16 原画。
 # ---------------------------------------------------------------------------
 const ART_MAP_PATH := "res://assets/art/map_c.png"
+const ART_MAP_PORTRAIT_PATH := "res://assets/art/map_c_portrait.png"
 const ART_MAP_MIN_ASPECT := 1.15
+const ART_MAP_MAX_PORTRAIT_ASPECT := 0.90
 const ART_MAP_INSET := 14.0
 
-# 5 个节点在底图中的归一化锚点（按 keyart_c.png 原画位置标定）
+# 5 个节点在横向底图中的归一化锚点（按 keyart_c.png 原画位置标定）
 const ART_NODE_POS := {
 	"A_START": Vector2(0.240, 0.265),
 	"N1": Vector2(0.174, 0.766),
 	"N2": Vector2(0.520, 0.500),
 	"N3": Vector2(0.846, 0.208),
 	"B_START": Vector2(0.785, 0.807),
+}
+
+# 5 个节点在 9:16 竖屏底图中的归一化锚点
+const ART_NODE_POS_PORTRAIT := {
+	"A_START": Vector2(0.200, 0.270),
+	"N1": Vector2(0.190, 0.670),
+	"N2": Vector2(0.500, 0.520),
+	"N3": Vector2(0.790, 0.340),
+	"B_START": Vector2(0.785, 0.685),
 }
 
 # 旧版 GPT 5 城地标 PNG 与 C 原画风格不一致，只保留在 city 资产中，
@@ -55,6 +66,7 @@ const LANDMARK_ASSET_PATHS := {
 }
 
 var art_map_texture: Texture2D = null
+var art_map_portrait_texture: Texture2D = null
 var landmark_textures: Dictionary = {}
 
 var map_data: Dictionary = {}
@@ -68,6 +80,9 @@ func _init_asset_slots() -> void:
 	art_map_texture = null
 	if ResourceLoader.exists(ART_MAP_PATH):
 		art_map_texture = load(ART_MAP_PATH)
+	art_map_portrait_texture = null
+	if ResourceLoader.exists(ART_MAP_PORTRAIT_PATH):
+		art_map_portrait_texture = load(ART_MAP_PORTRAIT_PATH)
 	landmark_textures.clear()
 	for code in LANDMARK_ASSET_PATHS.keys():
 		var path: String = LANDMARK_ASSET_PATHS[code]
@@ -91,7 +106,7 @@ func _map_rect() -> Rect2:
 	else:
 		return Rect2(52.0, 70.0, maxf(w - 104.0, 260.0), maxf(h - 140.0, 200.0))
 
-func _art_enabled() -> bool:
+func _art_landscape_enabled() -> bool:
 	if art_map_texture == null:
 		return false
 	var mr := _map_rect()
@@ -99,11 +114,31 @@ func _art_enabled() -> bool:
 		return false
 	return mr.size.x / mr.size.y >= ART_MAP_MIN_ASPECT
 
+func _art_portrait_enabled() -> bool:
+	if art_map_portrait_texture == null:
+		return false
+	var mr := _map_rect()
+	if mr.size.y <= 0.0:
+		return false
+	return mr.size.x / mr.size.y <= ART_MAP_MAX_PORTRAIT_ASPECT
+
+func _art_map_active() -> bool:
+	return _art_landscape_enabled() or _art_portrait_enabled()
+
+func _art_texture() -> Texture2D:
+	if _art_landscape_enabled():
+		return art_map_texture
+	if _art_portrait_enabled():
+		return art_map_portrait_texture
+	return null
+
 func _art_dest_rect(mr: Rect2) -> Rect2:
 	return mr.grow(-ART_MAP_INSET)
 
-func _art_source_rect(dest: Rect2) -> Rect2:
-	var tex_size := art_map_texture.get_size()
+func _art_source_rect_for(tex: Texture2D, dest: Rect2) -> Rect2:
+	if tex == null:
+		return Rect2()
+	var tex_size := tex.get_size()
 	if tex_size.x <= 0.0 or tex_size.y <= 0.0 or dest.size.x <= 0.0 or dest.size.y <= 0.0:
 		return Rect2(Vector2.ZERO, tex_size)
 	var dest_aspect := dest.size.x / dest.size.y
@@ -115,8 +150,11 @@ func _art_source_rect(dest: Rect2) -> Rect2:
 	return Rect2((tex_size.x - src_w) / 2.0, 0.0, src_w, tex_size.y)
 
 func _art_point(normalized: Vector2, dest: Rect2) -> Vector2:
-	var src := _art_source_rect(dest)
-	var tex_size := art_map_texture.get_size()
+	var tex := _art_texture()
+	if tex == null:
+		return dest.get_center()
+	var src := _art_source_rect_for(tex, dest)
+	var tex_size := tex.get_size()
 	var u := (normalized.x * tex_size.x - src.position.x) / src.size.x
 	var v := (normalized.y * tex_size.y - src.position.y) / src.size.y
 	return dest.position + Vector2(u * dest.size.x, v * dest.size.y)
@@ -140,8 +178,10 @@ func set_my_order(order: Variant) -> void:
 
 func node_position(code: String) -> Vector2:
 	var mr := _map_rect()
-	if _art_enabled() and ART_NODE_POS.has(code):
+	if _art_landscape_enabled() and ART_NODE_POS.has(code):
 		return _art_point(ART_NODE_POS[code], _art_dest_rect(mr))
+	if _art_portrait_enabled() and ART_NODE_POS_PORTRAIT.has(code):
+		return _art_point(ART_NODE_POS_PORTRAIT[code], _art_dest_rect(mr))
 	for n in map_data.get("nodes", []):
 		if str(n.get("code", "")) == code:
 			var nx := clampf((float(n.get("x", 500)) - 100.0) / 800.0, 0.0, 1.0)
@@ -181,9 +221,10 @@ func _draw() -> void:
 	draw_rect(mr.grow(-8), Color("#eee7d7")) # 渐层内纸
 
 	# C 版水彩地图底图：横向/平板启用；竖屏或资产缺失时回退到绘制版
-	if _art_enabled():
+	if _art_map_active():
+		var tex := _art_texture()
 		var dest := _art_dest_rect(mr)
-		draw_texture_rect_region(art_map_texture, dest, _art_source_rect(dest))
+		draw_texture_rect_region(tex, dest, _art_source_rect_for(tex, dest))
 		# 轻罩暖纸色，保证 HUD/标签在复杂地形上的对比度
 		draw_rect(dest, Color(0.96, 0.91, 0.82, 0.05))
 	else:
@@ -202,7 +243,7 @@ func _draw() -> void:
 
 	# 5. 城际驰道连接线
 	var edges: Array = map_data.get("edges", [])
-	if _art_enabled():
+	if _art_map_active():
 		# C 版底图已有手绘驰道，只高亮当前选中城池的相邻路线
 		for e in edges:
 			if typeof(e) != TYPE_ARRAY or e.size() < 2:
@@ -300,7 +341,7 @@ func _draw_node(n: Dictionary) -> void:
 	if typeof(owner) == TYPE_DICTIONARY:
 		faction_color = Color(str(owner.get("color", "#7e7263")))
 
-	if _art_enabled():
+	if _art_map_active():
 		_draw_node_over_art(n, pos, faction_color, is_start, is_mine, owner)
 		return
 

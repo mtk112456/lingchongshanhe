@@ -126,11 +126,12 @@ function Get-Fingerprint {
         Get-ChildItem -LiteralPath $gpt -File -ErrorAction SilentlyContinue |
             Where-Object { $_.Extension -in '.png', '.md', '.json' } |
             ForEach-Object { $files.Add($_.FullName) }
-        $assetsC = Join-Path $gpt 'assets_c'
-        if (Test-Path -LiteralPath $assetsC) {
-            Get-ChildItem -LiteralPath $assetsC -File -ErrorAction SilentlyContinue |
-                ForEach-Object { $files.Add($_.FullName) }
-        }
+        Get-ChildItem -LiteralPath $gpt -Directory -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -like 'assets_c*' } |
+            ForEach-Object {
+                Get-ChildItem -LiteralPath $_.FullName -File -ErrorAction SilentlyContinue |
+                    ForEach-Object { $files.Add($_.FullName) }
+            }
     }
 
     foreach ($sub in @('src', 'public', 'tests', 'migrations')) {
