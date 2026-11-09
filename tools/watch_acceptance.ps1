@@ -355,6 +355,7 @@ function Invoke-Cycle {
 
     if (-not $SkipResetDb) {
         Invoke-ProcessWithTimeout -Exe $Php -Arguments ($phpBase + @((Join-Path $Server 'scripts\setup_test_db.php'))) -TimeoutSeconds 90 -Name 'setup_before_smoke' -Stamp $stamp | Out-Null
+        Start-Sleep -Milliseconds 600
     }
 
     Write-Log 'ClientSmoke...'
@@ -367,11 +368,22 @@ function Invoke-Cycle {
 
     if (-not $SkipResetDb) {
         Invoke-ProcessWithTimeout -Exe $Php -Arguments ($phpBase + @((Join-Path $Server 'scripts\setup_test_db.php'))) -TimeoutSeconds 90 -Name 'setup_before_replay' -Stamp $stamp | Out-Null
+        Start-Sleep -Milliseconds 600
     }
 
     Write-Log 'ReplaySmoke...'
     $r = Invoke-ProcessWithTimeout -Exe $Godot -Arguments @('--headless', '--path', $Client, 'res://tests/ReplaySmoke.tscn') -TimeoutSeconds 120 -Name 'replay_smoke' -Stamp $stamp
     $replayOk = ($r.ExitCode -eq 0 -and $r.Out -match 'REPLAY_SMOKE PASS')
+    if (-not $replayOk) {
+        # 偶发：测试库刚重建，教师账号/连接尚未稳定；重置后重试一次
+        Write-Log "ReplaySmoke failed (exit=$($r.ExitCode)); retry once after DB reset..."
+        if (-not $SkipResetDb) {
+            Invoke-ProcessWithTimeout -Exe $Php -Arguments ($phpBase + @((Join-Path $Server 'scripts\setup_test_db.php'))) -TimeoutSeconds 90 -Name 'setup_before_replay_retry' -Stamp $stamp | Out-Null
+            Start-Sleep -Milliseconds 1000
+        }
+        $r = Invoke-ProcessWithTimeout -Exe $Godot -Arguments @('--headless', '--path', $Client, 'res://tests/ReplaySmoke.tscn') -TimeoutSeconds 120 -Name 'replay_smoke_retry' -Stamp $stamp
+        $replayOk = ($r.ExitCode -eq 0 -and $r.Out -match 'REPLAY_SMOKE PASS')
+    }
     if (-not $replayOk) {
         $failReasons.Add("ReplaySmoke failed (exit=$($r.ExitCode))")
     }
@@ -380,6 +392,7 @@ function Invoke-Cycle {
     if (-not $SkipCapture) {
         if (-not $SkipResetDb) {
             Invoke-ProcessWithTimeout -Exe $Php -Arguments ($phpBase + @((Join-Path $Server 'scripts\setup_test_db.php'))) -TimeoutSeconds 90 -Name 'setup_before_capture' -Stamp $stamp | Out-Null
+            Start-Sleep -Milliseconds 600
         }
         Write-Log 'screenshot suite...'
         $r = Invoke-ProcessWithTimeout -Exe $Godot -Arguments @('--path', $Client, 'res://tests/CaptureScreenshots.tscn') -TimeoutSeconds 180 -Name 'capture' -Stamp $stamp
