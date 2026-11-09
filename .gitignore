@@ -40,6 +40,11 @@ Qingzhu_*.zip
 
 # Agent 运行日志（只保留交付文件）
 art_src/gpt/codex_*.log
+art_src/gpt/*.preview.jpg
+
+# Godot 测试截图导入缓存 / 联系表
+client/tests/*.import
+client/tests/screenshots_contact*.jpg
 
 # 系统文件
 Thumbs.db

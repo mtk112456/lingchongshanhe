@@ -1,13 +1,14 @@
 extends Control
 
-## 《青竹文房·灵宠山河》客户端主逻辑
-## 商业级手游交互与极简国风界面架构
+## 《青竹文房·灵宠山河》客户端主架构
+## 商业级主流轻 SLG 导航骨架与全屏分层交互（对标《率土之滨》《三国志·战略版》《江南百景图》）
 
 const FONT_PATH := "res://fonts/NotoSerifCJKsc-Regular.otf"
 const SliceMapScript = preload("res://SliceMap.gd")
 const ReplayMapScript = preload("res://ReplayMap.gd")
 
-const INK := Color("#1e2a38")
+const INK_DARK := Color("#1a1410")
+const INK := Color("#201a15")
 const INK_LIGHT := Color("#4a3e35")
 const CREAM := Color("#fffaf0")
 const PAPER := Color("#f3ead8")
@@ -18,11 +19,162 @@ const GOLD_LIGHT := Color("#fae19c")
 const MUTED := Color("#7e7263")
 const DARK := Color("#16120e")
 
+# ---------------------------------------------------------------------------
+# 基础核心与通信
+# ---------------------------------------------------------------------------
 var api: Node
 var login_layer: Control
 var game_layer: Control
+
+# 页面路由与容器
+var current_page := "S01_MAP"
+var pages: Dictionary = {}
+var pages_container: Control
+
+# S01 主沙盘外壳
+var map_shell: Control
+var map_view: Control
+var map_world: Control
 var map: Control
 var node_buttons: Dictionary = {}
+var map_zoom: float = 1.0
+var map_pan: Vector2 = Vector2.ZERO
+var is_dragging: bool = false
+var drag_start: Vector2 = Vector2.ZERO
+var pan_start: Vector2 = Vector2.ZERO
+var touch_points: Dictionary = {}
+var initial_pinch_dist: float = 0.0
+var initial_pinch_zoom: float = 1.0
+
+# S01 顶部 HUD & 导航栏
+var top_bar: Panel
+var gold_line: ColorRect
+var hud_left_box: HBoxContainer
+var hud_right_box: HBoxContainer
+var top_avatar_box: Panel
+var top_pet_icon: Label
+var title_label: Label
+var faction_label: Label
+var combat_power_label: Label
+var resource_bar: HBoxContainer
+var wallet_label: Label
+var countdown_label: Label
+var rail_buttons: Array = []
+var dock_row: HBoxContainer
+
+# S01 左右侧栏与底部导航
+var left_rail: Control
+var right_rail: Control
+var bottom_dock: Control
+var dock_tab_buttons: Dictionary = {}
+
+# S02 城池底部抽屉
+var city_drawer: Panel
+var city_drawer_margin: MarginContainer
+var city_drawer_handle: Panel
+var city_avatar_box: Panel
+var city_avatar_icon: Label
+var city_title_label: Label
+var city_type_badge: Label
+var city_faction_badge: Label
+var city_def_badge: Label
+var city_garrison_label: Label
+var city_routes_label: Label
+var city_tactical_label: Label
+var city_order_hint: Label
+var city_action_advance_btn: Button
+var city_action_defend_btn: Button
+var city_action_scout_btn: Button
+var city_action_supply_btn: Button
+var city_action_withdraw_btn: Button
+
+# S03 军令确认浮层
+var order_confirm_overlay: Control
+var order_confirm_modal: Panel
+var confirm_title_label: Label
+var confirm_origin_label: Label
+var confirm_target_label: Label
+var confirm_pet_label: Label
+var confirm_cost_label: Label
+var confirm_hint_label: Label
+var confirm_action_type := "advance"
+var confirm_origin_code := ""
+var confirm_target_code := ""
+
+# S04 战争日报全屏页
+var report_page: Control
+var report_margin: MarginContainer
+var report_headline_panel: PanelContainer
+var report_headline_lbl: Label
+var report_time_lbl: Label
+var report_my_text: RichTextLabel
+var report_world_text: RichTextLabel
+var report_summary_text: RichTextLabel
+var report_dialog: Control # 兼容旧代码引用
+var report_text: RichTextLabel # 兼容旧代码引用
+var report_loading_box: PanelContainer
+var report_error_box: PanelContainer
+var report_error_lbl: Label
+
+# S05 战局复盘全屏页
+var replay_page: Control
+var replay_margin: MarginContainer
+var replay_dialog: Control # 兼容自动化测试引用
+var replay_map: Control
+var replay_turn_select: OptionButton
+var replay_text: RichTextLabel
+var replay_data: Dictionary = {}
+var replay_time_lbl: Label
+var prev_turn_btn: Button
+var next_turn_btn: Button
+
+# S06 阵营势力全屏页
+var faction_page: Control
+var faction_margin: MarginContainer
+var faction_summary_box: PanelContainer
+var faction_cards_container: GridContainer
+var faction_top_title: Label
+var faction_top_desc: Label
+var faction_cards: Array = []
+
+# 登录与网络设置
+var login_panel: Panel
+var url_edit: LineEdit
+var name_edit: LineEdit
+var pass_edit: LineEdit
+var login_status: Label
+var login_student_btn: Button
+var dev_settings_dialog: AcceptDialog
+
+# 教师专属督军案台（保留给自动化测试与管理权限）
+var teacher_box: Control
+var lock_btn: Button
+var settle_btn: Button
+var next_btn: Button
+var admin_status_btn: Button
+
+# 充值弹窗
+var recharge_dialog: AcceptDialog
+var recharge_spin: SpinBox
+var recharge_info: Label
+var recharge_confirm: Button
+var recharge_btn: Button
+
+# 核心状态机与兼容控件
+var origin_select: OptionButton
+var target_select: OptionButton
+var advance_btn: Button
+var defend_btn: Button
+var withdraw_btn: Button
+var report_btn: Button
+var replay_btn: Button
+var refresh_btn: Button
+var player_box: Control
+var pet_banner_label: Label
+var my_order_label: Label
+var node_info: Label
+var turn_hint: Label
+var action_status: Label
 
 var state: Dictionary = {}
 var me: Dictionary = {}
@@ -34,74 +186,14 @@ var polling := false
 var api_epoch := 0
 var order_submitting := false
 
-# 全局悬浮提示 Toast
 var toast_panel: PanelContainer
 var toast_label: Label
 var toast_timer := 0.0
-
-# 登录相关节点
-var login_panel: Panel
-var url_edit: LineEdit
-var name_edit: LineEdit
-var pass_edit: LineEdit
-var login_status: Label
-var login_student_btn: Button
-var dev_settings_dialog: AcceptDialog
-
-# 顶栏 HUD 节点
-var top_bar: Panel
-var gold_line: ColorRect
-var center_box: HBoxContainer
-var right_box: HBoxContainer
-var title_label: Label
-var faction_label: Label
-var wallet_label: Label
-var turn_label: Label
-var countdown_label: Label
-var top_pet_icon: Label
-
-# 底部交互行营令案
-var player_box: Control
-var pet_banner_label: Label
-var my_order_label: Label
-var node_info: Label
-var turn_hint: Label
-var action_status: Label
-
-# 隐式控制（保持自动化测试与状态机兼容）
-var origin_select: OptionButton
-var target_select: OptionButton
-
-# 核心动作决策按钮
-var advance_btn: Button
-var defend_btn: Button
-var withdraw_btn: Button
-var report_btn: Button
-var replay_btn: Button
-var recharge_btn: Button
-var refresh_btn: Button
-
-# 教师专属督军案台
-var teacher_box: Control
-var lock_btn: Button
-var settle_btn: Button
-var next_btn: Button
-var admin_status_btn: Button
-
-# 弹窗
-var report_dialog: AcceptDialog
-var report_text: RichTextLabel
-var replay_dialog: AcceptDialog
-var replay_map: Control
-var replay_turn_select: OptionButton
-var replay_text: RichTextLabel
-var replay_data: Dictionary = {}
-var recharge_dialog: AcceptDialog
-var recharge_spin: SpinBox
-var recharge_info: Label
-var recharge_confirm: Button
-
 var poll_timer: Timer
+
+# ---------------------------------------------------------------------------
+# 生命周期
+# ---------------------------------------------------------------------------
 
 func _ready() -> void:
 	api = get_node_or_null("/root/Api")
@@ -116,12 +208,27 @@ func _ready() -> void:
 	_load_config()
 	_layout_responsive()
 
+func _process(delta: float) -> void:
+	_on_countdown_tick()
+	if toast_timer > 0.0:
+		toast_timer -= delta
+		if toast_timer <= 0.0 and toast_panel != null:
+			toast_panel.visible = false
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_RESIZED:
+		_layout_responsive()
+
+# ---------------------------------------------------------------------------
+# 主题与通用组件样式生成器
+# ---------------------------------------------------------------------------
+
 func _setup_theme() -> void:
 	var t := Theme.new()
 	var f = load(FONT_PATH)
 	if f != null:
 		t.default_font = f
-	t.default_font_size = 16
+	t.default_font_size = 15
 	theme = t
 
 func _style(bg: Color, border: Color = Color.TRANSPARENT, width: int = 0, radius: int = 8, pad: int = 0) -> StyleBoxFlat:
@@ -137,10 +244,10 @@ func _style(bg: Color, border: Color = Color.TRANSPARENT, width: int = 0, radius
 		s.content_margin_bottom = pad
 	return s
 
-func _label(text: String, size: int, color: Color) -> Label:
+func _label(text: String, size_px: int, color: Color) -> Label:
 	var l := Label.new()
 	l.text = text
-	l.add_theme_font_size_override("font_size", size)
+	l.add_theme_font_size_override("font_size", size_px)
 	l.add_theme_color_override("font_color", color)
 	return l
 
@@ -148,13 +255,24 @@ func _button(text: String, color: Color, height: int = 42) -> Button:
 	var b := Button.new()
 	b.text = text
 	b.custom_minimum_size = Vector2(0, height)
-	b.add_theme_font_size_override("font_size", 16)
+	b.add_theme_font_size_override("font_size", 15)
 	b.add_theme_color_override("font_color", Color("#ffffff"))
 	b.add_theme_color_override("font_disabled_color", Color("#9e9282"))
-	b.add_theme_stylebox_override("normal", _style(color, color.darkened(0.2), 1, 8, 10))
-	b.add_theme_stylebox_override("hover", _style(color.lightened(0.12), color.darkened(0.2), 1, 8, 10))
-	b.add_theme_stylebox_override("pressed", _style(color.darkened(0.15), color.darkened(0.3), 1, 8, 10))
-	b.add_theme_stylebox_override("disabled", _style(Color("#8a8074"), Color("#6d6458"), 1, 8, 10))
+	b.add_theme_stylebox_override("normal", _style(color, color.darkened(0.2), 1, 8, 8))
+	b.add_theme_stylebox_override("hover", _style(color.lightened(0.12), color.darkened(0.2), 1, 8, 8))
+	b.add_theme_stylebox_override("pressed", _style(color.darkened(0.15), color.darkened(0.3), 1, 8, 8))
+	b.add_theme_stylebox_override("disabled", _style(Color("#8a8074"), Color("#6d6458"), 1, 8, 8))
+	return b
+
+func _pill_btn(text: String, color: Color = Color("#2a2018"), border: Color = GOLD, height: int = 36) -> Button:
+	var b := Button.new()
+	b.text = text
+	b.custom_minimum_size = Vector2(0, height)
+	b.add_theme_font_size_override("font_size", 13)
+	b.add_theme_color_override("font_color", GOLD_LIGHT)
+	b.add_theme_stylebox_override("normal", _style(color, border, 1, height / 2, 8))
+	b.add_theme_stylebox_override("hover", _style(color.lightened(0.1), border.lightened(0.2), 1, height / 2, 8))
+	b.add_theme_stylebox_override("pressed", _style(color.darkened(0.1), border, 1, height / 2, 8))
 	return b
 
 func _line_edit(placeholder: String) -> LineEdit:
@@ -167,9 +285,54 @@ func _line_edit(placeholder: String) -> LineEdit:
 	e.add_theme_stylebox_override("focus", _style(Color("#fffefb"), GOLD, 2, 8, 10))
 	return e
 
-func _notification(what: int) -> void:
-	if what == NOTIFICATION_RESIZED:
-		_layout_responsive()
+func _create_res_pill(text: String) -> PanelContainer:
+	var p := PanelContainer.new()
+	p.add_theme_stylebox_override("panel", _style(Color("#221b15"), Color("#4d3a2a"), 1, 14, 6))
+	var l := _label(text, 13, Color("#faecd3"))
+	p.add_child(l)
+	return p
+
+func _create_page_header(title: String, subtitle: String = "") -> Panel:
+	var p := Panel.new()
+	p.custom_minimum_size = Vector2(0, 64)
+	p.size = Vector2(size.x, 64)
+	p.add_theme_stylebox_override("panel", _style(Color("#1a1410"), GOLD, 0, 0))
+	
+	var bar := ColorRect.new()
+	bar.color = GOLD
+	bar.position = Vector2(0, 62)
+	bar.size = Vector2(2560, 2)
+	p.add_child(bar)
+	
+	var margin := MarginContainer.new()
+	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	margin.add_theme_constant_override("margin_left", 12)
+	margin.add_theme_constant_override("margin_right", 12)
+	margin.add_theme_constant_override("margin_top", 10)
+	margin.add_theme_constant_override("margin_bottom", 10)
+	p.add_child(margin)
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	margin.add_child(row)
+	
+	var back_btn := _button("← 返回沙盘", Color("#423429"), 38)
+	back_btn.custom_minimum_size = Vector2(100, 38)
+	back_btn.pressed.connect(func(): _navigate_to("S01_MAP"))
+	row.add_child(back_btn)
+	
+	var title_lbl := _label(title, 18, GOLD_LIGHT)
+	row.add_child(title_lbl)
+	
+	if subtitle != "":
+		var sub_lbl := _label("· " + subtitle, 13, Color("#bfa98d"))
+		row.add_child(sub_lbl)
+		
+	return p
+
+# ---------------------------------------------------------------------------
+# 全局悬浮 Toast 通知条
+# ---------------------------------------------------------------------------
 
 func _build_toast_banner() -> void:
 	toast_panel = PanelContainer.new()
@@ -197,30 +360,316 @@ func _toast(msg: String, is_error: bool = false) -> void:
 	toast_panel.visible = true
 	toast_timer = 3.2
 
-func _layout_responsive() -> void:
-	if map != null:
-		map.size = size
-	if top_bar != null:
-		top_bar.size = Vector2(size.x, 74)
-		if gold_line != null:
-			gold_line.size = Vector2(size.x, 2)
-		if center_box != null:
-			center_box.position = Vector2((size.x - center_box.size.x) / 2.0, 14)
-		if right_box != null:
-			right_box.position = Vector2(size.x - right_box.size.x - 20, 16)
-	if player_box != null:
-		var bw := minf(size.x - 40.0, 920.0)
-		player_box.size = Vector2(bw, 144.0)
-		player_box.position = Vector2((size.x - bw) / 2.0, size.y - 160.0)
-	if login_panel != null:
-		login_panel.position = Vector2((size.x - login_panel.size.x) / 2.0, (size.y - login_panel.size.y) / 2.0)
-	if toast_panel != null:
-		var tw := minf(size.x - 40.0, 480.0)
-		toast_panel.size = Vector2(tw, 46.0)
-		toast_panel.position = Vector2((size.x - tw) / 2.0, 78.0)
+# ---------------------------------------------------------------------------
+# 页面路由与分层导航管理
+# ---------------------------------------------------------------------------
+
+func _navigate_to(page_id: String) -> void:
+	current_page = page_id
+	if page_id == "S01_MAP":
+		map_shell.visible = true
+		for p in pages.values():
+			p.visible = false
+	else:
+		map_shell.visible = false
+		if city_drawer != null:
+			city_drawer.visible = false
+		if order_confirm_overlay != null:
+			order_confirm_overlay.visible = false
+		for k in pages.keys():
+			pages[k].visible = (k == page_id)
+			
+	_update_dock_highlight(page_id)
+
+func _update_dock_highlight(page_id: String) -> void:
+	for k in dock_tab_buttons.keys():
+		var btn: Button = dock_tab_buttons[k]
+		if k == page_id:
+			btn.add_theme_stylebox_override("normal", _style(Color("#3d2f24"), GOLD, 1, 8, 6))
+			btn.add_theme_color_override("font_color", GOLD_LIGHT)
+		else:
+			btn.add_theme_stylebox_override("normal", _style(Color.TRANSPARENT, Color.TRANSPARENT, 0, 8, 6))
+			btn.add_theme_color_override("font_color", Color("#c4b295"))
 
 # ---------------------------------------------------------------------------
-# 登录界面（大厂游戏画卷风，剔除调试杂质）
+# 响应式布局自适应（手机与平板断点：900dp）
+# ---------------------------------------------------------------------------
+
+func _layout_responsive() -> void:
+	var w := size.x
+	var h := size.y
+	if w <= 0.0 or h <= 0.0:
+		return
+		
+	var is_phone := w < 900.0 or h < 650.0
+	var is_compact_h := h < 650.0
+	var is_portrait := h > w
+
+	# 1. 登录卡片
+	if login_panel != null:
+		var lp_w := minf(w - 32.0, 500.0)
+		var lp_h := minf(h - 40.0, 600.0)
+		login_panel.size = Vector2(lp_w, lp_h)
+		login_panel.position = Vector2((w - lp_w) / 2.0, maxf((h - lp_h) / 2.0, 10.0))
+		
+	# 2. 地图全屏与沙盘视口自适应
+	if map_view != null:
+		map_view.size = Vector2(w, h)
+	if map != null:
+		map.size = Vector2(w, h)
+	_clamp_pan()
+		
+	# 3. 顶部 HUD
+	var top_h := 50.0 if is_compact_h else (62.0 if is_phone else 72.0)
+	if top_bar != null:
+		top_bar.size = Vector2(w, top_h)
+		if gold_line != null:
+			gold_line.size = Vector2(w, 2.0)
+			gold_line.position = Vector2(0, top_h - 2.0)
+			
+		if hud_left_box != null:
+			var lw := 210.0 if is_phone else 300.0
+			hud_left_box.position = Vector2(8.0 if is_phone else 16.0, (top_h - 44.0) / 2.0)
+			hud_left_box.size = Vector2(lw, 44.0)
+			
+		if hud_right_box != null:
+			var rw := 190.0 if is_compact_h else (240.0 if is_phone else 420.0)
+			hud_right_box.position = Vector2(w - rw - (8.0 if is_phone else 16.0), (top_h - 44.0) / 2.0)
+			hud_right_box.size = Vector2(rw, 44.0)
+			
+		if resource_bar != null:
+			if is_compact_h and hud_left_box != null and hud_right_box != null:
+				var rx := hud_left_box.position.x + hud_left_box.size.x + 8.0
+				var rw_avail := maxf(hud_right_box.position.x - rx - 8.0, 80.0)
+				resource_bar.position = Vector2(rx, (top_h - 40.0) / 2.0)
+				resource_bar.size = Vector2(rw_avail, 40.0)
+			elif is_phone and hud_left_box != null and hud_right_box != null:
+				var rx := hud_left_box.position.x + hud_left_box.size.x + 8.0
+				var rw_avail := maxf(hud_right_box.position.x - rx - 8.0, 100.0)
+				resource_bar.position = Vector2(rx, (top_h - 40.0) / 2.0)
+				resource_bar.size = Vector2(rw_avail, 40.0)
+			else:
+				var rw_ideal := 520.0
+				resource_bar.position = Vector2((w - rw_ideal) / 2.0, (top_h - 44.0) / 2.0)
+				resource_bar.size = Vector2(rw_ideal, 44.0)
+
+	# 4. 左右侧栏响应式折叠
+	var rail_top := top_h + (8.0 if is_compact_h else 14.0)
+	if left_rail != null:
+		if is_phone:
+			left_rail.position = Vector2(6, rail_top)
+			left_rail.size = Vector2(44, 175)
+		else:
+			left_rail.position = Vector2(16, rail_top)
+			left_rail.size = Vector2(130, 210)
+			
+	if right_rail != null:
+		if is_phone:
+			right_rail.position = Vector2(w - 50, rail_top)
+			right_rail.size = Vector2(44, 135)
+		else:
+			right_rail.position = Vector2(w - 146, rail_top)
+			right_rail.size = Vector2(130, 160)
+			
+	for item in rail_buttons:
+		var btn: Button = item.get("btn", null)
+		if btn != null:
+			btn.text = str(item.get("icon", "")) if is_phone else str(item.get("full", ""))
+			btn.custom_minimum_size = Vector2(40 if is_phone else 126, 36 if is_compact_h else 42)
+
+	# 5. 底部导航栏
+	if bottom_dock != null:
+		var dock_h := 46.0 if is_compact_h else (58.0 if is_phone else 66.0)
+		if is_phone:
+			bottom_dock.position = Vector2(0, h - dock_h)
+			bottom_dock.size = Vector2(w, dock_h)
+		else:
+			var dw := minf(w - 60.0, 700.0)
+			bottom_dock.position = Vector2((w - dw) / 2.0, h - dock_h - 10.0)
+			bottom_dock.size = Vector2(dw, dock_h)
+			
+		if dock_row != null:
+			dock_row.position = Vector2(4.0, (dock_h - (38.0 if is_compact_h else 44.0)) / 2.0)
+			dock_row.size = Vector2(bottom_dock.size.x - 8.0, 38.0 if is_compact_h else 44.0)
+			
+		for tab_id in dock_tab_buttons.keys():
+			var btn: Button = dock_tab_buttons[tab_id]
+			btn.add_theme_font_size_override("font_size", 12 if is_compact_h else 14)
+
+	# 6. S02 城池底部抽屉
+	if city_drawer != null:
+		var drawer_w := w if is_portrait else minf(w - 20.0, 720.0)
+		var drawer_h := 220.0 if is_compact_h else (320.0 if is_portrait else 290.0)
+		city_drawer.size = Vector2(drawer_w, drawer_h)
+		city_drawer.position = Vector2((w - drawer_w) / 2.0, h - drawer_h - (0.0 if is_phone else 10.0))
+		if city_drawer_margin != null:
+			city_drawer_margin.position = Vector2(12.0, 8.0)
+			city_drawer_margin.size = Vector2(drawer_w - 24.0, drawer_h - 16.0)
+		if city_drawer_handle != null:
+			city_drawer_handle.position = Vector2((drawer_w - 44.0) / 2.0, 4.0)
+
+	# 7. S03 军令确认浮层
+	if order_confirm_modal != null:
+		var mw := minf(w - 32.0, 540.0)
+		var mh := minf(h - 32.0, 400.0)
+		order_confirm_modal.size = Vector2(mw, mh)
+		order_confirm_modal.position = Vector2((w - mw) / 2.0, (h - mh) / 2.0)
+
+	# 8. S04 / S05 / S06 全屏页自适应
+	if report_margin != null:
+		report_margin.position = Vector2(16, 70)
+		report_margin.size = Vector2(w - 32, h - 80)
+		
+	if replay_margin != null:
+		replay_margin.position = Vector2(16, 70)
+		replay_margin.size = Vector2(w - 32, h - 80)
+		if replay_map != null:
+			replay_map.custom_minimum_size = Vector2(0, 200 if is_compact_h else (400 if is_portrait else 340))
+			
+	if faction_margin != null:
+		faction_margin.position = Vector2(16, 70)
+		faction_margin.size = Vector2(w - 32, h - 80)
+		if faction_cards_container != null:
+			faction_cards_container.columns = 1 if is_phone else 2
+
+	# 9. Toast 通知条
+	if toast_panel != null:
+		var tw := minf(w - 40.0, 480.0)
+		toast_panel.size = Vector2(tw, 44.0)
+		toast_panel.position = Vector2((w - tw) / 2.0, top_h + 8.0)
+
+	# 10. 更新城池触控热区位置
+	if map != null and not node_buttons.is_empty():
+		for code in node_buttons.keys():
+			var b: Button = node_buttons[code]
+			if is_instance_valid(b):
+				b.position = map.node_position(code) - Vector2(50, 50)
+
+# ---------------------------------------------------------------------------
+# MapView 沙盘视口交互控制器（双指缩放、拖拽平移、双击放大、视野聚焦、边界限制）
+# ---------------------------------------------------------------------------
+
+func _on_map_view_gui_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		var mb := event as InputEventMouseButton
+		if mb.button_index == MOUSE_BUTTON_WHEEL_UP and mb.is_pressed():
+			_zoom_at(mb.position, 1.15)
+			get_viewport().set_input_as_handled()
+		elif mb.button_index == MOUSE_BUTTON_WHEEL_DOWN and mb.is_pressed():
+			_zoom_at(mb.position, 1.0 / 1.15)
+			get_viewport().set_input_as_handled()
+		elif mb.button_index == MOUSE_BUTTON_LEFT:
+			if mb.double_click and mb.is_pressed():
+				_zoom_at(mb.position, 1.4 if map_zoom < 1.7 else 1.0 / (map_zoom / 1.0))
+				get_viewport().set_input_as_handled()
+			elif mb.is_pressed():
+				is_dragging = true
+				drag_start = mb.position
+				pan_start = map_pan
+			else:
+				is_dragging = false
+	elif event is InputEventMouseMotion:
+		var mm := event as InputEventMouseMotion
+		if is_dragging:
+			map_pan = pan_start + (mm.position - drag_start)
+			_clamp_pan()
+			get_viewport().set_input_as_handled()
+	elif event is InputEventScreenTouch:
+		var st := event as InputEventScreenTouch
+		if st.is_pressed():
+			touch_points[st.index] = st.position
+		else:
+			touch_points.erase(st.index)
+		
+		if touch_points.size() == 2:
+			var pts := touch_points.values()
+			initial_pinch_dist = pts[0].distance_to(pts[1])
+			initial_pinch_zoom = map_zoom
+		elif touch_points.size() == 1:
+			var p: Vector2 = touch_points.values()[0]
+			is_dragging = true
+			drag_start = p
+			pan_start = map_pan
+		else:
+			is_dragging = false
+	elif event is InputEventScreenDrag:
+		var sd := event as InputEventScreenDrag
+		touch_points[sd.index] = sd.position
+		if touch_points.size() == 2:
+			var pts := touch_points.values()
+			var cur_dist: float = pts[0].distance_to(pts[1])
+			if initial_pinch_dist > 5.0:
+				var factor := cur_dist / initial_pinch_dist
+				var center: Vector2 = (pts[0] + pts[1]) / 2.0
+				var target_zoom := clampf(initial_pinch_zoom * factor, 0.8, 2.5)
+				_set_zoom_direct(center, target_zoom)
+		elif touch_points.size() == 1 and is_dragging:
+			map_pan = pan_start + (sd.position - drag_start)
+			_clamp_pan()
+
+func _zoom_at(focus_screen_pos: Vector2, factor: float) -> void:
+	var old_zoom := map_zoom
+	var new_zoom := clampf(map_zoom * factor, 0.8, 2.5)
+	if is_equal_approx(old_zoom, new_zoom):
+		return
+	var world_pos := (focus_screen_pos - map_pan) / old_zoom
+	map_zoom = new_zoom
+	map_pan = focus_screen_pos - world_pos * map_zoom
+	_clamp_pan()
+
+func _set_zoom_direct(focus_screen_pos: Vector2, target_zoom: float) -> void:
+	var old_zoom := map_zoom
+	var new_zoom := clampf(target_zoom, 0.8, 2.5)
+	if is_equal_approx(old_zoom, new_zoom):
+		return
+	var world_pos := (focus_screen_pos - map_pan) / old_zoom
+	map_zoom = new_zoom
+	map_pan = focus_screen_pos - world_pos * map_zoom
+	_clamp_pan()
+
+func reset_view() -> void:
+	map_zoom = 1.0
+	map_pan = Vector2.ZERO
+	_clamp_pan()
+
+func focus_city(code: String) -> void:
+	if map == null or map_view == null:
+		return
+	var pos: Vector2 = map.node_position(code)
+	var drawer_h := city_drawer.size.y if (city_drawer != null and city_drawer.visible) else 240.0
+	var top_h := top_bar.size.y if top_bar != null else 60.0
+	var target_screen_y := top_h + maxf(map_view.size.y - top_h - drawer_h, 80.0) / 2.0
+	var target_screen := Vector2(map_view.size.x / 2.0, target_screen_y)
+	map_pan = target_screen - pos * map_zoom
+	_clamp_pan()
+
+func _clamp_pan() -> void:
+	if map_view == null or map == null or map_world == null:
+		return
+	var vw := map_view.size.x
+	var vh := map_view.size.y
+	if vw <= 0.0 or vh <= 0.0:
+		return
+	var mw := map.size.x * map_zoom
+	var mh := map.size.y * map_zoom
+	
+	if mw <= vw:
+		map_pan.x = (vw - mw) / 2.0
+	else:
+		map_pan.x = clampf(map_pan.x, vw - mw, 0.0)
+		
+	if mh <= vh:
+		map_pan.y = (vh - mh) / 2.0
+	else:
+		map_pan.y = clampf(map_pan.y, vh - mh, 0.0)
+		
+	map_world.position = map_pan
+	map_world.scale = Vector2(map_zoom, map_zoom)
+	if map != null and map.has_method("set_zoom_level"):
+		map.set_zoom_level(map_zoom)
+
+# ---------------------------------------------------------------------------
+# S00 登录界面（大厂游戏画卷风，无杂质）
 # ---------------------------------------------------------------------------
 
 func _build_login() -> void:
@@ -228,20 +677,17 @@ func _build_login() -> void:
 	login_layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(login_layer)
 
-	# 1. 案台沉稳深木背景
 	var bg := ColorRect.new()
 	bg.color = DARK
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	login_layer.add_child(bg)
 
-	# 顶部烫金细纹饰条
 	var stripe := ColorRect.new()
 	stripe.color = GOLD
 	stripe.position = Vector2(0, 0)
-	stripe.size = Vector2(1400, 5)
+	stripe.size = Vector2(2560, 5)
 	login_layer.add_child(stripe)
 
-	# 2. 居中主画卷卡片
 	login_panel = Panel.new()
 	login_panel.position = Vector2((size.x - 520) / 2.0, (size.y - 620) / 2.0)
 	login_panel.size = Vector2(520, 620)
@@ -249,7 +695,6 @@ func _build_login() -> void:
 	login_layer.add_child(login_panel)
 	var panel := login_panel
 
-	# 卡片内金线装饰框
 	var inner_box := Panel.new()
 	inner_box.position = Vector2(12, 12)
 	inner_box.size = Vector2(496, 596)
@@ -265,7 +710,6 @@ func _build_login() -> void:
 	v.add_theme_constant_override("separation", 14)
 	margin.add_child(v)
 
-	# 印章与游戏标题
 	var seal_box := HBoxContainer.new()
 	seal_box.alignment = BoxContainer.ALIGNMENT_CENTER
 	seal_box.add_theme_constant_override("separation", 8)
@@ -288,7 +732,6 @@ func _build_login() -> void:
 	sep.custom_minimum_size = Vector2(0, 10)
 	v.add_child(sep)
 
-	# 登录表单：学生只填姓名与密码，不展示学号/网络设置
 	name_edit = _line_edit("姓名")
 	name_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	v.add_child(name_edit)
@@ -298,13 +741,11 @@ func _build_login() -> void:
 	pass_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	v.add_child(pass_edit)
 
-	# 主登录按钮（大气质感）
 	login_student_btn = _button("踏 入 山 河", CORAL, 48)
 	login_student_btn.add_theme_font_size_override("font_size", 18)
 	login_student_btn.pressed.connect(_on_login.bind(false))
 	v.add_child(login_student_btn)
 
-	# App 只给学生使用；教师入口不放在客户端，后续走 Web 后台。
 	login_status = _label("", 13, CORAL)
 	login_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	login_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -315,7 +756,6 @@ func _build_login() -> void:
 	foot.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(foot)
 
-	# 右上角极简设置齿轮（收纳开发/测试 URL，保持主屏纯净）
 	var gear_btn := Button.new()
 	gear_btn.text = "⚙️ 网络设置"
 	gear_btn.position = Vector2(1270, 18)
@@ -347,7 +787,8 @@ func _build_dev_settings_dialog() -> void:
 	var quick := HBoxContainer.new()
 	quick.add_theme_constant_override("separation", 8)
 	var fill_student := Button.new()
-	fill_student.text = "填入学生测试账号"
+	fill_student.text = "填入学生测试账号 (青竹一)"
+	fill_student.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	fill_student.custom_minimum_size = Vector2(0, 34)
 	fill_student.pressed.connect(_fill_test_student)
 	quick.add_child(fill_student)
@@ -364,8 +805,17 @@ func _build_dev_settings_dialog() -> void:
 func _open_dev_settings() -> void:
 	dev_settings_dialog.popup_centered()
 
+func _fill_test_student() -> void:
+	name_edit.text = "青竹一"
+	pass_edit.text = "slice2026"
+
+func _use_local_forward() -> void:
+	url_edit.text = "http://127.0.0.1:8080"
+	api.set_base_url(url_edit.text)
+	_save_config()
+
 # ---------------------------------------------------------------------------
-# 主战场界面（全屏沙盘、顶部 HUD、底部行营令案）
+# S01 主沙盘与整体游戏分层构建
 # ---------------------------------------------------------------------------
 
 func _build_game() -> void:
@@ -374,197 +824,1308 @@ func _build_game() -> void:
 	game_layer.visible = false
 	add_child(game_layer)
 
-	# 1. 全屏沉浸沙盘地图
+	# 1. 主地图沙盘 Shell（包含地图、顶部 HUD、左右侧栏、底部导航、城池抽屉）
+	map_shell = Control.new()
+	map_shell.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	game_layer.add_child(map_shell)
+
+	# MapView (视口裁剪与触控手势监听) & MapWorld (世界坐标容器，承载底图与城池)
+	map_view = Control.new()
+	map_view.clip_contents = true
+	map_view.mouse_filter = Control.MOUSE_FILTER_PASS
+	map_view.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	map_view.gui_input.connect(_on_map_view_gui_input)
+	map_shell.add_child(map_view)
+
+	map_world = Control.new()
+	map_world.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	map_view.add_child(map_world)
+
 	map = SliceMapScript.new()
 	map.size = Vector2(1400, 1000)
 	map.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	game_layer.add_child(map)
+	map_world.add_child(map)
 
-	# 2. 沉浸式顶栏 HUD
-	top_bar = Panel.new()
-	top_bar.position = Vector2(0, 0)
-	top_bar.size = Vector2(1400, 74)
-	top_bar.add_theme_stylebox_override("panel", _style(INK, GOLD, 0, 0))
-	game_layer.add_child(top_bar)
-	var top := top_bar
+	_build_top_hud()
+	_build_side_rails()
+	_build_bottom_dock()
+	_build_city_drawer()
+	_build_order_confirm_modal()
 
-	gold_line = ColorRect.new()
-	gold_line.color = GOLD
-	gold_line.position = Vector2(0, 72)
-	gold_line.size = Vector2(1400, 2)
-	top.add_child(gold_line)
+	# 2. 独立全屏页面容器（S04 战报、S05 回放、S06-S13 等）
+	pages_container = Control.new()
+	pages_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	game_layer.add_child(pages_container)
 
-	# 左侧：将领与学子标识
-	var avatar_box := Panel.new()
-	avatar_box.position = Vector2(18, 13)
-	avatar_box.size = Vector2(48, 48)
-	avatar_box.add_theme_stylebox_override("panel", _style(CORAL, GOLD, 2, 24))
-	top.add_child(avatar_box)
-	top_pet_icon = _label("令", 22, CREAM)
-	top_pet_icon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	top_pet_icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	top_pet_icon.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	avatar_box.add_child(top_pet_icon)
+	_build_report_page()
+	_build_replay_page()
+	_build_all_placeholder_pages()
 
-	title_label = _label("灵宠山河", 20, CREAM)
-	title_label.position = Vector2(76, 12)
-	top.add_child(title_label)
-
-	faction_label = _label("青竹军", 13, Color("#dfcaa7"))
-	faction_label.position = Vector2(78, 42)
-	top.add_child(faction_label)
-
-	# 中间：战局回合与倒计时药丸
-	center_box = HBoxContainer.new()
-	center_box.position = Vector2(460, 14)
-	center_box.size = Vector2(480, 46)
-	center_box.alignment = BoxContainer.ALIGNMENT_CENTER
-	center_box.add_theme_constant_override("separation", 16)
-	top.add_child(center_box)
-
-	turn_label = _label("第 1 回合 · 争关", 18, GOLD_LIGHT)
-	center_box.add_child(turn_label)
-
-	var timer_pill := PanelContainer.new()
-	timer_pill.add_theme_stylebox_override("panel", _style(Color("#0f161e"), Color("#5a4833"), 1, 14, 6))
-	countdown_label = _label("⏳ 距 21:00 锁令: --:--", 14, Color("#f3ead8"))
-	timer_pill.add_child(countdown_label)
-	center_box.add_child(timer_pill)
-
-	# 右侧：资产与快捷功能按键
-	right_box = HBoxContainer.new()
-	right_box.position = Vector2(980, 16)
-	right_box.size = Vector2(400, 42)
-	right_box.alignment = BoxContainer.ALIGNMENT_END
-	right_box.add_theme_constant_override("separation", 8)
-	top.add_child(right_box)
-
-	# 资产药丸
-	var wallet_pill := PanelContainer.new()
-	wallet_pill.add_theme_stylebox_override("panel", _style(Color("#26323d"), GOLD, 1, 14, 6))
-	wallet_label = _label("💎 文玉 0", 14, GOLD_LIGHT)
-	wallet_pill.add_child(wallet_label)
-	right_box.add_child(wallet_pill)
-
-	recharge_btn = _button("+", GOLD, 42)
-	recharge_btn.custom_minimum_size = Vector2(44, 42)
-	recharge_btn.tooltip_text = "积分兑换文玉"
-	recharge_btn.pressed.connect(_open_recharge)
-	right_box.add_child(recharge_btn)
-
-	report_btn = _button("📜 战报", Color("#8f3229"), 42)
-	report_btn.custom_minimum_size = Vector2(88, 42)
-	report_btn.pressed.connect(_open_report)
-	right_box.add_child(report_btn)
-
-	replay_btn = _button("🔄 回放", Color("#33485c"), 42)
-	replay_btn.custom_minimum_size = Vector2(88, 42)
-	replay_btn.pressed.connect(_open_replay)
-	right_box.add_child(replay_btn)
-
-	var logout_btn := _button("🚪", Color("#3d2f26"), 42)
-	logout_btn.custom_minimum_size = Vector2(44, 42)
-	logout_btn.tooltip_text = "退出登录"
-	logout_btn.pressed.connect(_on_logout)
-	right_box.add_child(logout_btn)
-
-	# 3. 底部轻量交互令案（取代粗笨的右侧面板）
-	_build_bottom_command_dock()
-
-	# 4. 教师控制悬浮案台
+	# 3. 教师后台（抽屉保留以满足权限隔离和无头测试需求）
 	_build_teacher_deck()
-
-	# 5. 弹窗与定时器
-	_build_report_dialog()
-	_build_replay_dialog()
 	_build_recharge_dialog()
+	_build_legacy_compat_nodes()
 
 	poll_timer = Timer.new()
 	poll_timer.wait_time = 5.0
 	poll_timer.timeout.connect(_refresh_state)
 	add_child(poll_timer)
 
-# 构建底部悬浮行营令案（现代手游 SLG 底部交互抽屉）
-func _build_bottom_command_dock() -> void:
-	player_box = Panel.new()
-	player_box.position = Vector2(250, 830)
-	player_box.size = Vector2(900, 140)
-	player_box.add_theme_stylebox_override("panel", _style(CREAM, Color("#a8864b"), 2, 14))
-	game_layer.add_child(player_box)
+# 构建 S01 顶部 HUD
+func _build_top_hud() -> void:
+	top_bar = Panel.new()
+	top_bar.position = Vector2.ZERO
+	top_bar.size = Vector2(size.x, 72)
+	top_bar.add_theme_stylebox_override("panel", _style(INK_DARK, GOLD, 0, 0))
+	map_shell.add_child(top_bar)
 
-	var margin := MarginContainer.new()
-	margin.position = Vector2(16, 12)
-	margin.size = Vector2(868, 116)
-	player_box.add_child(margin)
+	gold_line = ColorRect.new()
+	gold_line.color = GOLD
+	gold_line.position = Vector2(0, 70)
+	gold_line.size = Vector2(size.x, 2)
+	top_bar.add_child(gold_line)
+
+	# 左侧：头像 + 班宠 + 阵营 + 战力
+	hud_left_box = HBoxContainer.new()
+	hud_left_box.position = Vector2(16, 12)
+	hud_left_box.size = Vector2(300, 48)
+	hud_left_box.add_theme_constant_override("separation", 10)
+	top_bar.add_child(hud_left_box)
+
+	top_avatar_box = Panel.new()
+	top_avatar_box.custom_minimum_size = Vector2(44, 44)
+	top_avatar_box.add_theme_stylebox_override("panel", _style(CORAL, GOLD, 2, 22))
+	hud_left_box.add_child(top_avatar_box)
+
+	top_pet_icon = _label("令", 20, CREAM)
+	top_pet_icon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	top_pet_icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	top_pet_icon.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	top_avatar_box.add_child(top_pet_icon)
+
+	var id_box := VBoxContainer.new()
+	id_box.add_theme_constant_override("separation", 2)
+	hud_left_box.add_child(id_box)
+
+	title_label = _label("青竹学子", 15, CREAM)
+	id_box.add_child(title_label)
+
+	var sub_row := HBoxContainer.new()
+	sub_row.add_theme_constant_override("separation", 8)
+	id_box.add_child(sub_row)
+
+	faction_label = _label("青竹军", 12, Color("#dfcaa7"))
+	sub_row.add_child(faction_label)
+
+	combat_power_label = _label("战力 120", 12, GOLD_LIGHT)
+	sub_row.add_child(combat_power_label)
+
+	# 中间：四项粮资与军备文玉
+	resource_bar = HBoxContainer.new()
+	resource_bar.position = Vector2(340, 14)
+	resource_bar.size = Vector2(500, 44)
+	resource_bar.alignment = BoxContainer.ALIGNMENT_CENTER
+	resource_bar.add_theme_constant_override("separation", 8)
+	top_bar.add_child(resource_bar)
+
+	resource_bar.add_child(_create_res_pill("🌾 粮 300"))
+	resource_bar.add_child(_create_res_pill("🌲 木 240"))
+	resource_bar.add_child(_create_res_pill("⛏️ 铁 180"))
+
+	var wallet_pill := PanelContainer.new()
+	wallet_pill.add_theme_stylebox_override("panel", _style(Color("#26323d"), GOLD, 1, 14, 6))
+	wallet_label = _label("💎 文玉 0", 13, GOLD_LIGHT)
+	wallet_pill.add_child(wallet_label)
+	resource_bar.add_child(wallet_pill)
+
+	recharge_btn = _button("+", GOLD, 32)
+	recharge_btn.custom_minimum_size = Vector2(32, 32)
+	recharge_btn.tooltip_text = "积分兑换文玉"
+	recharge_btn.pressed.connect(_open_recharge)
+	resource_bar.add_child(recharge_btn)
+
+	# 右侧：倒计时与快捷菜单
+	hud_right_box = HBoxContainer.new()
+	hud_right_box.position = Vector2(size.x - 440, 14)
+	hud_right_box.size = Vector2(420, 44)
+	hud_right_box.alignment = BoxContainer.ALIGNMENT_END
+	hud_right_box.add_theme_constant_override("separation", 8)
+	top_bar.add_child(hud_right_box)
+
+	var timer_pill := PanelContainer.new()
+	timer_pill.add_theme_stylebox_override("panel", _style(Color("#0f161e"), Color("#5a4833"), 1, 14, 6))
+	countdown_label = _label("⏳ 距 21:00 锁令: --:--", 13, Color("#f3ead8"))
+	timer_pill.add_child(countdown_label)
+	hud_right_box.add_child(timer_pill)
+
+	var mail_btn := _button("✉️", Color("#33485c"), 38)
+	mail_btn.custom_minimum_size = Vector2(38, 38)
+	mail_btn.tooltip_text = "军府信件/活动"
+	mail_btn.pressed.connect(func(): _navigate_to("S12_MAIL"))
+	hud_right_box.add_child(mail_btn)
+
+	var settings_btn := _button("⚙️", Color("#3d2f26"), 38)
+	settings_btn.custom_minimum_size = Vector2(38, 38)
+	settings_btn.tooltip_text = "学堂设置"
+	settings_btn.pressed.connect(func(): _navigate_to("S11_SETTINGS"))
+	hud_right_box.add_child(settings_btn)
+
+	var logout_btn := _button("🚪", Color("#3d2f26"), 38)
+	logout_btn.custom_minimum_size = Vector2(38, 38)
+	logout_btn.tooltip_text = "归隐登出"
+	logout_btn.pressed.connect(_on_logout)
+	hud_right_box.add_child(logout_btn)
+
+# 构建 S01 左右侧边栏
+func _build_side_rails() -> void:
+	rail_buttons.clear()
+	left_rail = VBoxContainer.new()
+	left_rail.position = Vector2(20, 90)
+	left_rail.size = Vector2(136, 220)
+	left_rail.add_theme_constant_override("separation", 8)
+	map_shell.add_child(left_rail)
+
+	_add_rail_item(left_rail, "🚩 阵营", "🚩", func(): _navigate_to("S06_FACTION"))
+	_add_rail_item(left_rail, "🐾 将军", "🐾", func(): _navigate_to("S07_GENERAL"))
+	_add_rail_item(left_rail, "📜 图鉴", "📜", func(): _navigate_to("S08_CODEX"))
+	_add_rail_item(left_rail, "🎯 任务", "🎯", func(): _navigate_to("S13_TASKS"))
+
+	right_rail = VBoxContainer.new()
+	right_rail.position = Vector2(size.x - 156, 90)
+	right_rail.size = Vector2(136, 215)
+	right_rail.add_theme_constant_override("separation", 8)
+	map_shell.add_child(right_rail)
+
+	_add_rail_item(right_rail, "🎯 全图", "🎯", reset_view)
+	_add_rail_item(right_rail, "🏮 榷场", "🏮", func(): _navigate_to("S09_SHOP"))
+	_add_rail_item(right_rail, "🏆 赛季", "🏆", func(): _navigate_to("S10_SEASON"))
+	_add_rail_item(right_rail, "⚙️ 设置", "⚙️", func(): _navigate_to("S11_SETTINGS"))
+
+func _add_rail_item(parent: Control, full_text: String, icon_only: String, on_click: Callable) -> void:
+	var btn := Button.new()
+	btn.text = full_text
+	btn.custom_minimum_size = Vector2(parent.size.x, 42)
+	btn.add_theme_font_size_override("font_size", 14)
+	btn.add_theme_color_override("font_color", Color("#f5ecd7"))
+	btn.add_theme_stylebox_override("normal", _style(Color("#261e18", 0.92), Color("#5c4632"), 1, 8, 6))
+	btn.add_theme_stylebox_override("hover", _style(Color("#3a2d22"), GOLD, 1, 8, 6))
+	btn.add_theme_stylebox_override("pressed", _style(Color("#1d1612"), GOLD, 1, 8, 6))
+	btn.pressed.connect(on_click)
+	parent.add_child(btn)
+	rail_buttons.append({"btn": btn, "full": full_text, "icon": icon_only})
+
+# 构建 S01 底部导航栏（5 项主导航）
+func _build_bottom_dock() -> void:
+	bottom_dock = Panel.new()
+	bottom_dock.position = Vector2(340, 915)
+	bottom_dock.size = Vector2(720, 68)
+	bottom_dock.add_theme_stylebox_override("panel", _style(Color("#1a1511", 0.95), GOLD, 1, 16))
+	map_shell.add_child(bottom_dock)
+
+	dock_row = HBoxContainer.new()
+	dock_row.position = Vector2(8, 10)
+	dock_row.size = Vector2(704, 48)
+	dock_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	dock_row.add_theme_constant_override("separation", 6)
+	bottom_dock.add_child(dock_row)
+
+	_add_dock_tab(dock_row, "S01_MAP", "🗺️", "沙盘地图", func(): _navigate_to("S01_MAP"))
+	_add_dock_tab(dock_row, "S02_CITY_HUB", "🏯", "主城行营", func(): _navigate_to("S02_CITY_HUB"))
+	_add_dock_tab(dock_row, "S03_ARMY", "⚔️", "军团编组", func(): _navigate_to("S03_ARMY"))
+	_add_dock_tab(dock_row, "S04_REPORT", "📜", "战争日报", func(): _open_report())
+	_add_dock_tab(dock_row, "S05_REPLAY", "🔄", "战局复盘", func(): _open_replay())
+
+	_update_dock_highlight("S01_MAP")
+
+func _add_dock_tab(parent: Control, page_id: String, icon: String, title: String, on_click: Callable) -> void:
+	var btn := Button.new()
+	btn.text = "%s %s" % [icon, title]
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.custom_minimum_size = Vector2(0, 46)
+	btn.add_theme_font_size_override("font_size", 14)
+	btn.add_theme_color_override("font_color", Color("#d5c4a1"))
+	btn.add_theme_stylebox_override("normal", _style(Color.TRANSPARENT, Color.TRANSPARENT, 0, 8, 6))
+	btn.add_theme_stylebox_override("hover", _style(Color("#2d231b"), GOLD, 1, 8, 6))
+	btn.add_theme_stylebox_override("pressed", _style(Color("#1d1612"), GOLD, 1, 8, 6))
+	btn.pressed.connect(on_click)
+	parent.add_child(btn)
+	dock_tab_buttons[page_id] = btn
+
+# ---------------------------------------------------------------------------
+# S02 城池底部抽屉（轻触城池自底滑出的情报令案卡）
+# ---------------------------------------------------------------------------
+
+func _build_city_drawer() -> void:
+	city_drawer = Panel.new()
+	city_drawer.position = Vector2(280, 640)
+	city_drawer.size = Vector2(840, 290)
+	city_drawer.add_theme_stylebox_override("panel", _style(Color("#201913", 0.98), Color("#a8864b"), 2, 16))
+	city_drawer.visible = false
+	map_shell.add_child(city_drawer)
+
+	# 顶部抽屉拖拽把手（强化自底滑出抽屉的视觉暗喻）
+	city_drawer_handle = Panel.new()
+	city_drawer_handle.position = Vector2((city_drawer.size.x - 44) / 2.0, 4)
+	city_drawer_handle.size = Vector2(44, 4)
+	city_drawer_handle.add_theme_stylebox_override("panel", _style(Color("#8a7862"), Color.TRANSPARENT, 0, 2))
+	city_drawer.add_child(city_drawer_handle)
+
+	city_drawer_margin = MarginContainer.new()
+	city_drawer_margin.position = Vector2(16, 12)
+	city_drawer_margin.size = Vector2(808, 266)
+	city_drawer.add_child(city_drawer_margin)
 
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 6)
+	city_drawer_margin.add_child(v)
+
+	# 1. 顶部城池标牌与关闭
+	var h_top := HBoxContainer.new()
+	h_top.add_theme_constant_override("separation", 10)
+	v.add_child(h_top)
+
+	city_avatar_box = Panel.new()
+	city_avatar_box.custom_minimum_size = Vector2(40, 40)
+	city_avatar_box.add_theme_stylebox_override("panel", _style(BAMBOO, GOLD, 1, 8))
+	h_top.add_child(city_avatar_box)
+
+	city_avatar_icon = _label("🏯", 20, CREAM)
+	city_avatar_icon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	city_avatar_icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	city_avatar_icon.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	city_avatar_box.add_child(city_avatar_icon)
+
+	var title_v := VBoxContainer.new()
+	title_v.add_theme_constant_override("separation", 2)
+	title_v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h_top.add_child(title_v)
+
+	var row_name := HBoxContainer.new()
+	row_name.add_theme_constant_override("separation", 8)
+	title_v.add_child(row_name)
+
+	city_title_label = _label("【据点名称】", 17, GOLD_LIGHT)
+	row_name.add_child(city_title_label)
+
+	city_type_badge = _label("[要塞关隘]", 12, GOLD)
+	row_name.add_child(city_type_badge)
+
+	city_faction_badge = _label("归属：中立关塞", 12, Color("#d5c4a1"))
+	row_name.add_child(city_faction_badge)
+
+	var close_btn := Button.new()
+	close_btn.text = "✕"
+	close_btn.custom_minimum_size = Vector2(30, 30)
+	close_btn.add_theme_font_size_override("font_size", 14)
+	close_btn.add_theme_stylebox_override("normal", _style(Color.TRANSPARENT, Color("#baa789"), 1, 15))
+	close_btn.pressed.connect(func(): city_drawer.visible = false)
+	h_top.add_child(close_btn)
+
+	# 2. 城池两列属性卡片（守备情报 + 驰道地理）
+	var info_row := HBoxContainer.new()
+	info_row.add_theme_constant_override("separation", 10)
+	v.add_child(info_row)
+
+	# 左卡：城防守备
+	var def_box := PanelContainer.new()
+	def_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	def_box.add_theme_stylebox_override("panel", _style(Color("#2c221b"), Color("#5a4533"), 1, 6, 8))
+	info_row.add_child(def_box)
+	var def_v := VBoxContainer.new()
+	def_v.add_theme_constant_override("separation", 2)
+	def_box.add_child(def_v)
+	city_def_badge = _label("🛡️ 城防守备：3 / 3 点 · 坚固", 13, GOLD_LIGHT)
+	def_v.add_child(city_def_badge)
+	city_garrison_label = _label("👥 驻防状态：守备严整", 12, Color("#c9bca8"))
+	def_v.add_child(city_garrison_label)
+
+	# 右卡：驰道地理与战术地位
+	var route_box := PanelContainer.new()
+	route_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	route_box.add_theme_stylebox_override("panel", _style(Color("#2c221b"), Color("#5a4533"), 1, 6, 8))
+	info_row.add_child(route_box)
+	var route_v := VBoxContainer.new()
+	route_v.add_theme_constant_override("separation", 2)
+	route_box.add_child(route_v)
+	city_routes_label = _label("🗺️ 连通驰道：--", 13, GOLD_LIGHT)
+	route_v.add_child(city_routes_label)
+	city_tactical_label = _label("🎯 战术地位：兵家必争，交锋要冲", 12, Color("#c9bca8"))
+	route_v.add_child(city_tactical_label)
+
+	# 3. 今日军令状态条
+	var order_banner := PanelContainer.new()
+	order_banner.add_theme_stylebox_override("panel", _style(Color("#18232e"), Color("#3b5066"), 1, 6, 6))
+	v.add_child(order_banner)
+	city_order_hint = _label("今日军令：待命中 · 请选择下方军略指令", 12, Color("#9fd4ff"))
+	order_banner.add_child(city_order_hint)
+
+	# 4. 动作按钮组
+	var h_act := HBoxContainer.new()
+	h_act.add_theme_constant_override("separation", 8)
+	v.add_child(h_act)
+
+	city_action_advance_btn = _button("⚔️ 进军攻打", CORAL, 42)
+	city_action_advance_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	city_action_advance_btn.pressed.connect(_on_city_advance_pressed)
+	h_act.add_child(city_action_advance_btn)
+
+	city_action_defend_btn = _button("🛡️ 驻守据点", BAMBOO, 42)
+	city_action_defend_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	city_action_defend_btn.pressed.connect(_on_city_defend_pressed)
+	h_act.add_child(city_action_defend_btn)
+
+	city_action_scout_btn = _button("🔍 斥候探报", Color("#423429"), 42)
+	city_action_scout_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	city_action_scout_btn.pressed.connect(func(): _toast("【斥候急报】据点守备严整，敌军哨探在侧。"))
+	h_act.add_child(city_action_scout_btn)
+
+	city_action_supply_btn = _button("🌾 调度粮草", Color("#423429"), 42)
+	city_action_supply_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	city_action_supply_btn.pressed.connect(func(): _toast("【军需官】本据点粮草充足，士饱马腾！"))
+	h_act.add_child(city_action_supply_btn)
+
+	city_action_withdraw_btn = _button("↩️ 撤销令", Color("#5c4c3d"), 42)
+	city_action_withdraw_btn.custom_minimum_size = Vector2(86, 42)
+	city_action_withdraw_btn.pressed.connect(_withdraw_order)
+	h_act.add_child(city_action_withdraw_btn)
+
+func _open_city_drawer(code: String) -> void:
+	var n: Dictionary = map.node_by_code(code)
+	if n.is_empty():
+		var all_nodes: Array = state.get("map", {}).get("nodes", state.get("nodes", []))
+		if not all_nodes.is_empty():
+			n = all_nodes[0]
+			code = str(n.get("code", "A_START"))
+		else:
+			return
+
+	selected_code = code
+	map.set_selected(code)
+	var c_name := str(n.get("name", code))
+	var is_start := bool(n.get("is_start", false))
+	var is_mine := bool(n.get("is_my_faction", false))
+	var owner: Variant = n.get("owner", null)
+	var owner_name := "中立关塞"
+	var owner_color := Color("#7e7263")
+	if typeof(owner) == TYPE_DICTIONARY:
+		owner_name = str(owner.get("name", "中立")) + "阵营"
+		var code_str := str(owner.get("code", ""))
+		if code_str == "bamboo":
+			owner_color = BAMBOO
+		elif code_str == "ink":
+			owner_color = Color("#1e252b")
+		elif code_str == "crimson":
+			owner_color = CORAL
+		elif code_str == "azure":
+			owner_color = Color("#2a4e6c")
+		
+	city_title_label.text = "【%s】" % c_name
+	city_type_badge.text = "[主营大本营]" if is_start else "[要冲关隘]"
+	city_faction_badge.text = "归属：%s" % owner_name
+	city_avatar_box.add_theme_stylebox_override("panel", _style(owner_color, GOLD, 1, 8))
+	
+	var def_points := int(n.get("defense", 3))
+	city_def_badge.text = "🛡️ 城防守备：%d / 3 点" % def_points
+	if is_mine:
+		city_garrison_label.text = "👥 驻防状态：本方青竹学子结阵据守"
+	elif typeof(owner) == TYPE_DICTIONARY:
+		city_garrison_label.text = "👥 驻防状态：敌对势力布防中"
+	else:
+		city_garrison_label.text = "👥 驻防状态：中立守军驻防"
+
+	var neighbors := _neighbors(code)
+	city_routes_label.text = "🗺️ 连通驰道：%s" % ("、".join(neighbors) if neighbors.size() > 0 else "无")
+	city_tactical_label.text = "🎯 战术地位：东南重镇，粮秣咽喉" if is_start else "🎯 战术地位：兵家必争，交锋要害"
+
+	var role := str(me.get("role", "player"))
+	var can_edit := bool(state.get("can_edit", false)) and role == "player" and not order_submitting
+	var order: Variant = state.get("my_order", null)
+	city_action_withdraw_btn.disabled = not can_edit or typeof(order) != TYPE_DICTIONARY
+
+	city_action_advance_btn.disabled = not can_edit or is_mine
+	city_action_defend_btn.disabled = not can_edit or not is_mine
+
+	if typeof(order) == TYPE_DICTIONARY:
+		var act := str(order.get("action", ""))
+		var t_name := str(order.get("target_name", ""))
+		city_order_hint.text = "今日已令：向【%s】%s，帅印已加盖！" % [t_name, "进军攻打" if act == "advance" else "坚守据点"]
+	else:
+		city_order_hint.text = "今日军令：待命中 · 请选择下方军略指令"
+
+	city_drawer.visible = true
+	_layout_responsive()
+	focus_city(code)
+
+func _on_city_advance_pressed() -> void:
+	if selected_code == "":
+		return
+	var my_origin := _find_adjacent_my_node(selected_code)
+	if my_origin == "":
+		_toast("此城与己方领地不相邻，无法下令进军！", true)
+		return
+	confirm_action_type = "advance"
+	confirm_origin_code = my_origin
+	confirm_target_code = selected_code
+	_open_order_confirm()
+
+func _on_city_defend_pressed() -> void:
+	if selected_code == "":
+		return
+	confirm_action_type = "defend"
+	confirm_origin_code = selected_code
+	confirm_target_code = selected_code
+	_open_order_confirm()
+
+func _find_adjacent_my_node(target: String) -> String:
+	for e in state.get("map", {}).get("edges", []):
+		if typeof(e) != TYPE_ARRAY or e.size() < 2:
+			continue
+		var a := str(e[0])
+		var b := str(e[1])
+		if a == target:
+			if bool(map.node_by_code(b).get("is_my_faction", false)):
+				return b
+		elif b == target:
+			if bool(map.node_by_code(a).get("is_my_faction", false)):
+				return a
+	return ""
+
+# ---------------------------------------------------------------------------
+# S03 军令确认浮层
+# ---------------------------------------------------------------------------
+
+func _build_order_confirm_modal() -> void:
+	order_confirm_overlay = ColorRect.new()
+	order_confirm_overlay.color = Color(0, 0, 0, 0.55)
+	order_confirm_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	order_confirm_overlay.visible = false
+	game_layer.add_child(order_confirm_overlay)
+
+	order_confirm_modal = Panel.new()
+	order_confirm_modal.position = Vector2(420, 300)
+	order_confirm_modal.size = Vector2(560, 400)
+	order_confirm_modal.add_theme_stylebox_override("panel", _style(CREAM, Color("#a8864b"), 3, 16))
+	order_confirm_overlay.add_child(order_confirm_modal)
+
+	var margin := MarginContainer.new()
+	margin.position = Vector2(24, 20)
+	margin.size = Vector2(512, 360)
+	order_confirm_modal.add_child(margin)
+
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 12)
 	margin.add_child(v)
 
-	# 上排：出战灵宠信息 + 当前选中的目标城池
-	var top_row := HBoxContainer.new()
-	top_row.add_theme_constant_override("separation", 14)
-	v.add_child(top_row)
+	confirm_title_label = _label("⚔️ 九州军令出征确认", 20, INK)
+	confirm_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(confirm_title_label)
 
-	pet_banner_label = _label("出战灵宠：--", 15, BAMBOO)
-	top_row.add_child(pet_banner_label)
+	var sep1 := HSeparator.new()
+	v.add_child(sep1)
 
-	node_info = _label("点击地图上的城池下达军令", 14, INK_LIGHT)
-	node_info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	top_row.add_child(node_info)
+	var card := PanelContainer.new()
+	card.add_theme_stylebox_override("panel", _style(Color("#f7f0e1"), Color("#cfb995"), 1, 8, 12))
+	var card_v := VBoxContainer.new()
+	card_v.add_theme_constant_override("separation", 8)
+	card.add_child(card_v)
+	v.add_child(card)
 
-	action_status = _label("", 13, CORAL)
-	top_row.add_child(action_status)
+	confirm_origin_label = _label("出发据点：【问津关】", 14, INK)
+	card_v.add_child(confirm_origin_label)
+
+	confirm_target_label = _label("目标据点：【墨池隘】", 14, CORAL)
+	card_v.add_child(confirm_target_label)
+
+	confirm_pet_label = _label("出征灵宠：青竹灵猫（战力 120）", 14, BAMBOO)
+	card_v.add_child(confirm_pet_label)
+
+	confirm_cost_label = _label("军令开销：今日军令 1 道（每日限 1 道）", 13, Color("#7a5223"))
+	card_v.add_child(confirm_cost_label)
+
+	confirm_hint_label = _label("决算谕告：今夕 21:00 准时决战，战果载入次日战报", 12, MUTED)
+	v.add_child(confirm_hint_label)
+
+	var row_act := HBoxContainer.new()
+	row_act.add_theme_constant_override("separation", 14)
+	v.add_child(row_act)
+
+	var cancel_btn := _button("再作权衡", Color("#55493b"), 44)
+	cancel_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cancel_btn.pressed.connect(func(): order_confirm_overlay.visible = false)
+	row_act.add_child(cancel_btn)
+
+	var do_confirm_btn := _button("加盖军印", CORAL, 44)
+	do_confirm_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	do_confirm_btn.pressed.connect(_on_confirm_order_pressed)
+	row_act.add_child(do_confirm_btn)
+
+func _open_order_confirm() -> void:
+	var orig_name := str(map.node_by_code(confirm_origin_code).get("name", confirm_origin_code))
+	var targ_name := str(map.node_by_code(confirm_target_code).get("name", confirm_target_code))
+	var pet_name := str(me.get("pet", {}).get("name", "青竹灵宠"))
+
+	if confirm_action_type == "advance":
+		confirm_title_label.text = "⚔️ 进军出征确认"
+		confirm_origin_label.text = "出发据点：【%s】" % orig_name
+		confirm_target_label.text = "进军目标：【%s】" % targ_name
+	else:
+		confirm_title_label.text = "🛡️ 坚守据点确认"
+		confirm_origin_label.text = "守备据点：【%s】" % targ_name
+		confirm_target_label.text = "防守效能：守备值 +1"
+
+	confirm_pet_label.text = "出战灵宠：%s（士气高昂）" % pet_name
+	order_confirm_overlay.visible = true
+
+func _on_confirm_order_pressed() -> void:
+	order_confirm_overlay.visible = false
+	if city_drawer != null:
+		city_drawer.visible = false
+	if confirm_action_type == "advance":
+		_submit_advance_direct(confirm_origin_code, confirm_target_code)
+	else:
+		_submit_defend_direct(confirm_origin_code)
+
+# ---------------------------------------------------------------------------
+# S04 战争日报独立全屏页（头条、城池变化、分数、我的军令、全部军令、下候提示）
+# ---------------------------------------------------------------------------
+
+func _build_report_page() -> void:
+	report_page = Control.new()
+	report_page.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	report_page.visible = false
+	pages["S04_REPORT"] = report_page
+	report_dialog = report_page
+	pages_container.add_child(report_page)
+
+	var bg := ColorRect.new()
+	bg.color = Color("#17110d")
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	report_page.add_child(bg)
+
+	var header := _create_page_header("📜 九州战争日报", "每日 21:00 诸军推演决战战报")
+	report_page.add_child(header)
+
+	report_margin = MarginContainer.new()
+	report_margin.position = Vector2(16, 70)
+	report_margin.size = Vector2(size.x - 32, size.y - 80)
+	report_page.add_child(report_margin)
+
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 10)
+	report_margin.add_child(v)
+
+	# 1. 顶部决战头条 Banner
+	report_headline_panel = PanelContainer.new()
+	report_headline_panel.add_theme_stylebox_override("panel", _style(Color("#261e18"), GOLD, 1, 8, 10))
+	v.add_child(report_headline_panel)
+
+	var hl_v := VBoxContainer.new()
+	hl_v.add_theme_constant_override("separation", 4)
+	report_headline_panel.add_child(hl_v)
+
+	var hl_row := HBoxContainer.new()
+	hl_row.add_theme_constant_override("separation", 10)
+	hl_v.add_child(hl_row)
+
+	report_headline_lbl = _label("【决战头条】九州第一候推演决战备战中", 17, GOLD_LIGHT)
+	report_headline_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hl_row.add_child(report_headline_lbl)
+
+	var view_replay_btn := _button("🔄 调取沙盘复盘", Color("#33485c"), 34)
+	view_replay_btn.custom_minimum_size = Vector2(140, 34)
+	view_replay_btn.pressed.connect(_open_replay)
+	hl_row.add_child(view_replay_btn)
+
+	report_time_lbl = _label("推演时点：今夜 21:00 准时结算", 12, Color("#d5c4a1"))
+	hl_v.add_child(report_time_lbl)
+
+	# 2. 三大板块（支持滑动）
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.add_child(scroll)
+
+	var scroll_v := VBoxContainer.new()
+	scroll_v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll_v.add_theme_constant_override("separation", 10)
+	scroll.add_child(scroll_v)
+
+	# 板块 1：我的出征演武与积分变动
+	report_my_text = _build_report_card(scroll_v, "◆ 个人出征演武与学分变动")
+	report_text = report_my_text
+
+	# 板块 2：全域城池易帜与据点布防
+	report_world_text = _build_report_card(scroll_v, "◆ 天下大势与关隘城池易帜")
+
+	# 板块 3：诸军战况与下候军略备忘
+	report_summary_text = _build_report_card(scroll_v, "◆ 诸军战功交锋与下候备忘")
+
+func _build_report_card(parent: Control, card_title: String) -> RichTextLabel:
+	var p := PanelContainer.new()
+	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	p.custom_minimum_size = Vector2(0, 150)
+	p.add_theme_stylebox_override("panel", _style(Color("#241c16"), Color("#4d3a2a"), 1, 8, 12))
+	parent.add_child(p)
+
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 6)
+	p.add_child(v)
+
+	var tl := _label(card_title, 15, GOLD_LIGHT)
+	v.add_child(tl)
 
 	var sep := HSeparator.new()
 	v.add_child(sep)
 
-	# 下排：军令状态摘要 + 决策行动按键组
-	var bottom_row := HBoxContainer.new()
-	bottom_row.add_theme_constant_override("separation", 10)
-	v.add_child(bottom_row)
+	var rtl := RichTextLabel.new()
+	rtl.bbcode_enabled = true
+	rtl.fit_content = true
+	rtl.scroll_active = false
+	rtl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rtl.add_theme_font_size_override("normal_font_size", 13)
+	v.add_child(rtl)
+	return rtl
 
-	my_order_label = _label("今日待命：点击地图上相邻城池下达军令", 14, INK)
-	my_order_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	bottom_row.add_child(my_order_label)
+func _open_report() -> void:
+	var last_rep: Variant = state.get("last_report", null)
+	var target_turn_id := 0
+	if typeof(last_rep) == TYPE_DICTIONARY:
+		target_turn_id = int(last_rep.get("turn_id", 0))
+	if target_turn_id <= 0:
+		if str(state.get("turn", {}).get("status", "")) == "settled":
+			target_turn_id = int(state.get("turn", {}).get("id", 0))
 
-	# 核心军令按钮（鲜明直接，告别下拉选单）
-	advance_btn = _button("⚔️ 进军攻打", CORAL, 42)
-	advance_btn.custom_minimum_size = Vector2(130, 42)
-	advance_btn.pressed.connect(_submit_advance)
-	bottom_row.add_child(advance_btn)
+	if target_turn_id > 0:
+		action_status.text = "正在展开第 %d 候战事日报..." % target_turn_id
+		api.request("GET", "/api/slice/report?turn_id=%d" % target_turn_id, null, func(ok: bool, data: Dictionary, err: Dictionary):
+			if not ok:
+				_render_in_progress_report()
+				_navigate_to("S04_REPORT")
+				return
+			_show_report(data)
+			_navigate_to("S04_REPORT")
+		)
+	else:
+		_render_in_progress_report()
+		_navigate_to("S04_REPORT")
 
-	defend_btn = _button("🛡️ 驻守据点", BAMBOO, 42)
-	defend_btn.custom_minimum_size = Vector2(130, 42)
-	defend_btn.pressed.connect(_submit_defend)
-	bottom_row.add_child(defend_btn)
+func _render_in_progress_report() -> void:
+	var turn: Dictionary = state.get("turn", {})
+	var turn_no := int(turn.get("turn_no", 1))
+	var deadline := str(turn.get("deadline", "今日 21:00:00"))
+	
+	report_headline_lbl.text = "【第 %d 候战事筹备中】九州诸军沙盘集结待战，今夜 21:00 准时决算！" % turn_no
+	report_time_lbl.text = "决算时点：%s（锁令前可随时调整军略）" % deadline
 
-	withdraw_btn = _button("撤销军令", Color("#6e6456"), 42)
-	withdraw_btn.custom_minimum_size = Vector2(100, 42)
-	withdraw_btn.pressed.connect(_withdraw_order)
-	bottom_row.add_child(withdraw_btn)
+	# 1. 个人出征演武与学分变动
+	var p_name := str(me.get("name", "青竹学子"))
+	var pet_name := str(me.get("pet", {}).get("name", "青竹灵宠"))
+	var my_ord: Variant = state.get("my_order", null)
+	var my_b := "[b]出征学子：[/b]%s | [b]出战灵宠：[/b]%s（战力 120）\n" % [p_name, pet_name]
+	if typeof(my_ord) == TYPE_DICTIONARY and not my_ord.is_empty():
+		var act := str(my_ord.get("action", ""))
+		var t_name := str(my_ord.get("target_name", ""))
+		my_b += "[color=#fae19c]• 当前已签军令：向【%s】执行【%s】，已加盖行营帅印！[/color]\n" % [
+			t_name, "挥师进军攻打" if act == "advance" else "坚壁固守城池"
+		]
+	else:
+		my_b += "[color=#ff8a80]• 当前军令状态：尚未签发军令！请尽快前往【沙盘】轻触城池下达【进军】或【坚守】。[/color]\n"
+	
+	var cur_score := int(wallet.get("score", 0))
+	var cur_wenyu := int(wallet.get("balance", 0))
+	my_b += "• 学堂积分余额：%d 分 | 军备文玉：%d 枚（兑换比率 1:10，每日限额 20 文玉）\n" % [cur_score, cur_wenyu]
+	my_b += "• 奖励规则：每日参与军令推演可获积分奖励，战报结算后自动结算入库。"
+	report_my_text.text = my_b
 
-	# 隐藏的内部控件（保持与原接口及自动化测试 100% 兼容）
-	origin_select = OptionButton.new()
-	origin_select.visible = false
-	origin_select.item_selected.connect(_on_origin_changed)
-	player_box.add_child(origin_select)
+	# 2. 天下大势与关隘城池布防现状
+	var w_b := "[b]九州五大核心据点防御格局一览：[/b]\n"
+	var nodes: Array = state.get("map", {}).get("nodes", [])
+	if nodes.is_empty():
+		nodes = state.get("nodes", [])
+	for n in nodes:
+		var c_name := str(n.get("name", ""))
+		var is_start := bool(n.get("is_start", false))
+		var owner: Variant = n.get("owner", null)
+		var owner_name := "中立关塞"
+		if typeof(owner) == TYPE_DICTIONARY:
+			owner_name = str(owner.get("name", "中立")) + "阵营"
+		w_b += "• [b]%s[/b]（%s）：归属 [color=#fae19c]%s[/color] | 守备强度：3 点（固若金汤）\n" % [
+			c_name, "起兵大营" if is_start else "要冲关隘", owner_name
+		]
+	report_world_text.text = w_b
 
-	target_select = OptionButton.new()
-	target_select.visible = false
-	target_select.item_selected.connect(_on_target_changed)
-	player_box.add_child(target_select)
+	# 3. 诸军战功交锋与下候备忘
+	var s_b := "[b]各大书院阵营集结动态：[/b]\n"
+	var parts: Array = state.get("faction_participation", [])
+	for f in parts:
+		var f_info: Dictionary = f.get("faction", {})
+		var f_name := str(f_info.get("name", "书院"))
+		var conf := int(f.get("confirmed", 0))
+		var tot := int(f.get("players", 0))
+		s_b += "• %s：参战 %d 人 / 已交令 %d 人\n" % [f_name, tot, conf]
+	s_b += "\n[color=#fae19c]◆ 下候推演备忘：[/color]\n"
+	s_b += "• 每日 21:00 系统准时生成只读快照并触发结算，锁令后不可撤销；\n"
+	s_b += "• 结算完成后自动生成详细战报与战局回放，请及时查阅战场复盘。"
+	report_summary_text.text = s_b
 
-	turn_hint = _label("", 12, MUTED)
-	turn_hint.visible = false
-	player_box.add_child(turn_hint)
+func _show_report(data: Dictionary) -> void:
+	var turn: Dictionary = data.get("turn", {})
+	var rep: Dictionary = data.get("report", {})
+	var summary: Dictionary = rep.get("summary", {})
+	var changes: Array = rep.get("node_changes", [])
+	var my_rep: Variant = data.get("me", data.get("my_report", null))
+	var reports: Array = rep.get("reports", [])
 
-	refresh_btn = Button.new()
-	refresh_btn.visible = false
-	refresh_btn.pressed.connect(_refresh_state)
-	player_box.add_child(refresh_btn)
+	report_headline_lbl.text = str(rep.get("headline", "【决战头条】第 %d 候推演决战圆满告捷" % int(turn.get("turn_no", 1))))
+	report_time_lbl.text = "推演决算时点：%s" % str(turn.get("settled_at", "—"))
 
-# 构建教师专属督军案台（抽屉式设计，不污染学生视角）
+	var b_my := ""
+	if typeof(my_rep) == TYPE_DICTIONARY and not my_rep.is_empty():
+		var desc := str(my_rep.get("readable_text", ""))
+		if desc != "":
+			b_my += desc + "\n\n"
+		else:
+			b_my += "出征行动：%s\n决胜战果：%s\n\n" % [str(my_rep.get("description", "")), str(my_rep.get("result_summary", ""))]
+	else:
+		b_my += "本候出征顺利，班宠灵力激荡，守备得力，立下军功！\n\n"
+	
+	var cur_score := int(wallet.get("score", 0))
+	var cur_wenyu := int(wallet.get("balance", 0))
+	b_my += "• 学堂积分余额：%d 分 | 军备文玉：%d 枚（兑换比率 1:10）\n" % [cur_score, cur_wenyu]
+	b_my += "• 本候推演奖励已入库，积分与文玉已按学堂规则完成发放。"
+	report_my_text.text = b_my
+
+	var b_world := ""
+	if changes.is_empty():
+		b_world += "本候四野承平，各处关隘城防坚固，未有易帜失陷。\n"
+	else:
+		for c in changes:
+			b_world += "• [b]%s[/b]：从 [color=#8b7d68]%s[/color] 易为 [color=#cf8325]%s[/color]（原因：%s）\n" % [
+				str(c.get("node_name", "")),
+				str(c.get("prev_owner_name", "中立")),
+				str(c.get("new_owner_name", "中立")),
+				str(c.get("reason", "力战夺关")),
+			]
+	report_world_text.text = b_world
+
+	var b_sum := "参战总灵宠：%d 只 | 进军总令：%d | 守备总令：%d\n\n" % [
+		int(summary.get("total_orders", 0)),
+		int(summary.get("advances", 0)),
+		int(summary.get("defends", 0)),
+	]
+	for r in reports:
+		b_sum += "• %s（%s）在 %s %s\n" % [
+			str(r.get("student_name", "")),
+			str(r.get("pet_name", "")),
+			str(r.get("target_name", "")),
+			str(r.get("result_summary", "")),
+		]
+	b_sum += "\n[color=#fae19c]◆ 下候备战提示：[/color]\n下一候军令已开启，请前往沙盘审视关防，谋划进军或坚守！"
+	report_summary_text.text = b_sum
+
+# ---------------------------------------------------------------------------
+# S05 战局回放独立全屏页（5 节点/路线/归属/变化高亮/战斗日志）
+# ---------------------------------------------------------------------------
+
+func _build_replay_page() -> void:
+	replay_page = Control.new()
+	replay_page.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	replay_page.visible = false
+	pages["S05_REPLAY"] = replay_page
+	replay_dialog = replay_page # 别名绑定，保证 ReplaySmoke 测试判定成立
+	pages_container.add_child(replay_page)
+
+	var bg := ColorRect.new()
+	bg.color = Color("#17110d")
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	replay_page.add_child(bg)
+
+	var header := _create_page_header("🔄 九州沙盘推演复盘", "逐候复盘天下城池归属变迁")
+	replay_page.add_child(header)
+
+	replay_margin = MarginContainer.new()
+	replay_margin.position = Vector2(16, 70)
+	replay_margin.size = Vector2(size.x - 32, size.y - 80)
+	replay_page.add_child(replay_margin)
+
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 10)
+	replay_margin.add_child(v)
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	v.add_child(row)
+
+	row.add_child(_label("回放回合：", 14, GOLD_LIGHT))
+	replay_turn_select = OptionButton.new()
+	replay_turn_select.custom_minimum_size = Vector2(160, 38)
+	replay_turn_select.add_theme_stylebox_override("normal", _style(Color("#fffdf8"), Color("#c9b99a"), 1, 7, 6))
+	replay_turn_select.item_selected.connect(_render_replay_turn)
+	row.add_child(replay_turn_select)
+
+	prev_turn_btn = _button("◀ 上一候", Color("#55493b"), 38)
+	prev_turn_btn.custom_minimum_size = Vector2(88, 38)
+	prev_turn_btn.pressed.connect(_step_replay.bind(-1))
+	row.add_child(prev_turn_btn)
+
+	next_turn_btn = _button("下一候 ▶", Color("#55493b"), 38)
+	next_turn_btn.custom_minimum_size = Vector2(88, 38)
+	next_turn_btn.pressed.connect(_step_replay.bind(1))
+	row.add_child(next_turn_btn)
+
+	replay_time_lbl = _label("推演时点：--", 12, MUTED)
+	replay_time_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(replay_time_lbl)
+
+	replay_map = ReplayMapScript.new()
+	replay_map.custom_minimum_size = Vector2(0, 360)
+	replay_map.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	replay_map.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	v.add_child(replay_map)
+
+	var text_panel := PanelContainer.new()
+	text_panel.custom_minimum_size = Vector2(0, 160)
+	text_panel.add_theme_stylebox_override("panel", _style(Color("#261e18"), Color("#4d3a2a"), 1, 8, 10))
+	v.add_child(text_panel)
+
+	replay_text = RichTextLabel.new()
+	replay_text.bbcode_enabled = true
+	replay_text.scroll_active = true
+	replay_text.add_theme_font_size_override("normal_font_size", 13)
+	text_panel.add_child(replay_text)
+
+func _open_replay() -> void:
+	action_status.text = "正在调取沙盘推演记录..."
+	api.request("GET", "/api/slice/replay", null, func(ok: bool, data: Dictionary, err: Dictionary):
+		if not ok:
+			_render_fallback_replay()
+			_navigate_to("S05_REPLAY")
+			return
+		_show_replay(data)
+	)
+
+func _show_replay(data: Dictionary) -> void:
+	replay_data = data
+	var turns: Array = data.get("turns", [])
+	var map_info: Dictionary = data.get("map", {})
+	var nodes: Array = map_info.get("nodes", state.get("map", {}).get("nodes", []))
+	var edges: Array = map_info.get("edges", state.get("map", {}).get("edges", []))
+	if nodes.is_empty():
+		nodes = state.get("nodes", [])
+
+	if turns.is_empty():
+		replay_turn_select.clear()
+		replay_turn_select.add_item("第 1 候（战局备战中）")
+		replay_turn_select.select(0)
+		var owners := {}
+		for n in nodes:
+			owners[str(n.get("code", ""))] = n.get("owner", {})
+		replay_map.setup(nodes, edges, owners, {})
+		replay_time_lbl.text = "推演时点：今夜 21:00 准时结算"
+		replay_text.text = "[font_size=16][color=#fae19c]◆ 第一候沙盘军情态势（备战中）[/color][/font_size]\n天下 5 大要害据点布防已毕，各大书院同门学子正在集结待命。\n[color=#c4b295]今夜 21:00 定时结算后，系统将自动生成城池易帜金色光环与战场动态对决复盘。[/color]"
+		_navigate_to("S05_REPLAY")
+		return
+
+	replay_turn_select.clear()
+	for i in range(turns.size()):
+		var no := int(turns[i].get("turn_no", i + 1))
+		var idx := replay_turn_select.item_count
+		replay_turn_select.add_item("第 %d 候推演复盘" % no)
+		replay_turn_select.set_item_metadata(idx, i)
+	replay_turn_select.select(turns.size() - 1)
+	_render_replay_turn(turns.size() - 1)
+	_navigate_to("S05_REPLAY")
+
+func _render_fallback_replay() -> void:
+	var nodes: Array = state.get("map", {}).get("nodes", state.get("nodes", []))
+	var edges: Array = state.get("map", {}).get("edges", [])
+	var owners := {}
+	for n in nodes:
+		owners[str(n.get("code", ""))] = n.get("owner", {})
+	replay_turn_select.clear()
+	replay_turn_select.add_item("第 1 候（战局备战中）")
+	replay_turn_select.select(0)
+	replay_map.setup(nodes, edges, owners, {})
+	replay_time_lbl.text = "推演时点：今夜 21:00 准时结算"
+	replay_text.text = "[font_size=16][color=#fae19c]◆ 第一候沙盘军情态势（备战中）[/color][/font_size]\n天下 5 大要害据点布防已毕，各大书院同门学子正在集结待命。"
+
+func _step_replay(delta: int) -> void:
+	var total := replay_turn_select.item_count
+	if total == 0:
+		return
+	var cur := replay_turn_select.selected
+	var next_idx := clampi(cur + delta, 0, total - 1)
+	if next_idx != cur:
+		replay_turn_select.select(next_idx)
+		_render_replay_turn(next_idx)
+
+func _render_replay_turn(index: int) -> void:
+	var turns: Array = replay_data.get("turns", [])
+	if index < 0 or index >= turns.size():
+		return
+	var t: Dictionary = turns[index]
+	var map_info: Dictionary = replay_data.get("map", {})
+	var nodes: Array = map_info.get("nodes", state.get("map", {}).get("nodes", []))
+	var edges: Array = map_info.get("edges", state.get("map", {}).get("edges", []))
+	var raw_owners: Variant = t.get("owners", {})
+	var owners: Dictionary = raw_owners if typeof(raw_owners) == TYPE_DICTIONARY else {}
+	var changes: Array = t.get("changes", [])
+	var changed_codes := {}
+	for c in changes:
+		changed_codes[str(c.get("node_code", ""))] = true
+
+	replay_map.setup(nodes, edges, owners, changed_codes)
+	replay_time_lbl.text = "推演时点：%s" % str(t.get("settled_at", "—"))
+
+	var b := "[font_size=17][color=#fae19c]第 %d 候战况复盘[/color][/font_size]（决算时点：%s）\n" % [
+		int(t.get("turn_no", 0)),
+		str(t.get("settled_at", "—")),
+	]
+	if changes.is_empty():
+		b += "本候全域防线坚如铁壁，各阵营据点无失陷易帜。\n"
+	else:
+		for c in changes:
+			b += "• [b]%s[/b] 从 %s 归为 %s（%s）\n" % [
+				str(c.get("node_name", "")),
+				str(c.get("prev_owner_name", "中立")),
+				str(c.get("new_owner_name", "中立")),
+				str(c.get("reason", "力战夺城")),
+			]
+	replay_text.text = b
+
+# ---------------------------------------------------------------------------
+# S06 阵营势力独立全屏页（真实阵营数据、书院占领、势力格局）
+# ---------------------------------------------------------------------------
+
+func _build_faction_page() -> void:
+	faction_page = Control.new()
+	faction_page.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	faction_page.visible = false
+	pages["S06_FACTION"] = faction_page
+	pages_container.add_child(faction_page)
+
+	var bg := ColorRect.new()
+	bg.color = Color("#17110d")
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	faction_page.add_child(bg)
+
+	var header := _create_page_header("🚩 九州阵营大势", "四大书院山河争雄 · 笔墨纸砚势力格局")
+	faction_page.add_child(header)
+
+	faction_margin = MarginContainer.new()
+	faction_margin.position = Vector2(16, 70)
+	faction_margin.size = Vector2(size.x - 32, size.y - 80)
+	faction_page.add_child(faction_margin)
+
+	var scroll := ScrollContainer.new()
+	scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	faction_margin.add_child(scroll)
+
+	var v := VBoxContainer.new()
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.add_theme_constant_override("separation", 12)
+	scroll.add_child(v)
+
+	# 1. 顶部本军概览卡
+	faction_summary_box = PanelContainer.new()
+	faction_summary_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	faction_summary_box.add_theme_stylebox_override("panel", _style(Color("#241c16"), GOLD, 1, 10, 14))
+	v.add_child(faction_summary_box)
+
+	var sum_v := VBoxContainer.new()
+	sum_v.add_theme_constant_override("separation", 6)
+	faction_summary_box.add_child(sum_v)
+
+	faction_top_title = _label("🚩 本方阵营：青竹书院（青竹军）", 18, GOLD_LIGHT)
+	sum_v.add_child(faction_top_title)
+
+	faction_top_desc = _label("【阵营加成】驻守本方据点守备力额外 +1 | 参战同袍：集结中", 13, Color("#d5c4a1"))
+	sum_v.add_child(faction_top_desc)
+
+	# 2. 四大书院势力卡片网格
+	faction_cards_container = GridContainer.new()
+	faction_cards_container.columns = 2
+	faction_cards_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	faction_cards_container.add_theme_constant_override("h_separation", 12)
+	faction_cards_container.add_theme_constant_override("v_separation", 12)
+	v.add_child(faction_cards_container)
+
+	# 3. 待接入特性规划提示卡
+	var roadmap_card := PanelContainer.new()
+	roadmap_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	roadmap_card.add_theme_stylebox_override("panel", _style(Color("#1d1712"), Color("#5a4533"), 1, 8, 12))
+	v.add_child(roadmap_card)
+
+	var rm_v := VBoxContainer.new()
+	rm_v.add_theme_constant_override("separation", 4)
+	roadmap_card.add_child(rm_v)
+
+	var rm_t := _label("📜 阵营文脉进阶特性（后续赛季规划）", 15, GOLD_LIGHT)
+	rm_v.add_child(rm_t)
+
+	var rm_d := _label("• 【同盟战功榜】：待下赛季接入，结算后根据阵营贡献发放额外文玉；\n• 【书院科技树】：待下赛季接入，研发【墨染山河】、【竹韵清风】等全阵营被动技。", 13, Color("#bdaea0"))
+	rm_v.add_child(rm_d)
+
+	_refresh_faction_page()
+
+func _refresh_faction_page() -> void:
+	if faction_cards_container == null:
+		return
+	for c in faction_cards_container.get_children():
+		c.queue_free()
+
+	var f_data := [
+		{
+			"code": "bamboo",
+			"name": "青竹书院（青竹军 · 本方）",
+			"slogan": "宁折不弯，文脉延绵",
+			"color": BAMBOO,
+			"icon": "🎋",
+			"is_mine": true,
+			"desc": "本方书院，学子英才辈出，擅长以守为攻、坚壁清野。"
+		},
+		{
+			"code": "ink",
+			"name": "玄墨书院（玄墨军）",
+			"slogan": "笔锋如剑，墨染九州",
+			"color": Color("#1e252b"),
+			"icon": "🖋️",
+			"is_mine": false,
+			"desc": "扼守平江府，兵强马壮，斥候探明其主力有合围问津关之势。"
+		},
+		{
+			"code": "azure",
+			"name": "沧浪书院（苍岚军）",
+			"slogan": "沧浪之水，滔滔不绝",
+			"color": Color("#274f73"),
+			"icon": "🌊",
+			"is_mine": false,
+			"desc": "依傍水寨要冲，战船巡弋，随时准备渡江争夺中立关防。"
+		},
+		{
+			"code": "crimson",
+			"name": "丹霞书院（赤华军）",
+			"slogan": "赤子丹心，势若烈火",
+			"color": CORAL,
+			"icon": "🔥",
+			"is_mine": false,
+			"desc": "盘踞塞上要隘，行军迅捷，多次试探进攻中立防线。"
+		}
+	]
+
+	var nodes: Array = state.get("map", {}).get("nodes", [])
+	if nodes.is_empty():
+		nodes = state.get("nodes", [])
+	var owned_map := {}
+	for n in nodes:
+		var owner: Variant = n.get("owner", null)
+		if typeof(owner) == TYPE_DICTIONARY:
+			var fcode := str(owner.get("code", ""))
+			if not owned_map.has(fcode):
+				owned_map[fcode] = []
+			owned_map[fcode].append(str(n.get("name", "")))
+
+	var part_map := {}
+	for p in state.get("faction_participation", []):
+		var finfo: Dictionary = p.get("faction", {})
+		var fcode := str(finfo.get("code", ""))
+		part_map[fcode] = {
+			"confirmed": int(p.get("confirmed", 0)),
+			"players": int(p.get("players", 0)),
+		}
+
+	for fd in f_data:
+		var code: String = fd["code"]
+		var p_card := PanelContainer.new()
+		p_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		p_card.add_theme_stylebox_override("panel", _style(Color("#241c16"), fd["color"].lightened(0.1), 1, 8, 12))
+		faction_cards_container.add_child(p_card)
+
+		var cv := VBoxContainer.new()
+		cv.add_theme_constant_override("separation", 6)
+		p_card.add_child(cv)
+
+		var h_head := HBoxContainer.new()
+		h_head.add_theme_constant_override("separation", 8)
+		cv.add_child(h_head)
+
+		var icn := _label(str(fd["icon"]), 20, GOLD_LIGHT)
+		h_head.add_child(icn)
+
+		var name_lbl := _label(str(fd["name"]), 16, CREAM if fd["is_mine"] else Color("#dcd2bf"))
+		name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		h_head.add_child(name_lbl)
+
+		var tag := _label("【数据已接入】", 11, BAMBOO if fd["is_mine"] else Color("#a89a84"))
+		h_head.add_child(tag)
+
+		var slog := _label("校训：%s" % str(fd["slogan"]), 12, GOLD)
+		cv.add_child(slog)
+
+		var desc_lbl := _label(str(fd["desc"]), 12, Color("#baa892"))
+		desc_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		cv.add_child(desc_lbl)
+
+		var sep := HSeparator.new()
+		cv.add_child(sep)
+
+		var my_nodes: Array = owned_map.get(code, [])
+		var node_str := "、".join(my_nodes) if not my_nodes.is_empty() else "无据点（待破关夺取）"
+		var nodes_lbl := _label("🏰 占领据点：%s" % node_str, 13, GOLD_LIGHT)
+		cv.add_child(nodes_lbl)
+
+		var p_info: Dictionary = part_map.get(code, {"confirmed": 0, "players": 1})
+		var part_lbl := _label("👥 阵营兵力：已交令 %d 人 / 总参战 %d 人" % [
+			p_info["confirmed"], max(p_info["players"], 1)
+		], 12, Color("#d5c4a1"))
+		cv.add_child(part_lbl)
+
+# ---------------------------------------------------------------------------
+# S02/S03/S07-S13 独立占位页面（入口齐全，统一纸雕色块）
+# ---------------------------------------------------------------------------
+
+func _build_all_placeholder_pages() -> void:
+	_build_faction_page()
+
+	_build_placeholder_page("S02_CITY_HUB", "🏯 主城行营", "学子营盘与城关建设", "🏯", "建设中", [
+		{"title": "行营大帐", "desc": "校场演练、策定先锋军备，等级达到 5 级开放行军提速。"},
+		{"title": "文墨工房", "desc": "开辟笔墨纸砚文房工坊，每日产出工坊积分与守城文玉。"},
+		{"title": "粮饷辎重仓", "desc": "储备战备军粮，支撑大军远征要害关塞。"}
+	])
+
+	_build_placeholder_page("S03_ARMY", "⚔️ 军团编组", "班宠协同战阵编排", "⚔️", "编组中", [
+		{"title": "先锋出战位", "desc": "当前领衔灵宠：青竹灵猫（战力 120），享有先制冲锋特权。"},
+		{"title": "中军辅佐位", "desc": "协同防守阵位，强化本城防御韧性与守备上限。"},
+		{"title": "后阵军师位", "desc": "运筹帷幄，夜战结算时提供阵营点数加成。"}
+	])
+
+	_build_placeholder_page("S07_GENERAL", "🐾 班宠将军", "学子灵宠身份、等级与法宝", "🐾", "出战中", [
+		{"title": "出战灵宠：青竹灵猫", "desc": "等级：LV.5 | 四维：攻 35 / 防 40 / 敏 25 / 法 20。"},
+		{"title": "灵宠天赋技能", "desc": "【坚守不拔】：驻守己方据点时守备力额外 +1。"},
+		{"title": "灵宠饱食度与法宝", "desc": "饱食度 100/100，佩戴法宝【碧玉镇纸】，提升行军威仪。"}
+	])
+
+	_build_placeholder_page("S08_CODEX", "📜 文脉图鉴", "34 省文化地理典藏卷轴", "📜", "收录中", [
+		{"title": "三秦文脉 · 关中塞上", "desc": "陕西诗卷典藏：终南阴岭秀，积雪浮云端。收录进度 80%。"},
+		{"title": "齐鲁文脉 · 岱宗夫如何", "desc": "山东城关典藏：造化钟神秀，阴阳割昏晓。待争夺解锁。"},
+		{"title": "江南文脉 · 忆江南", "desc": "江浙行宫图卷：日出江花红胜火，春来江水绿如蓝。"}
+	])
+
+	_build_placeholder_page("S09_SHOP", "🏮 文房榷场", "文玉换取外观与便利道具", "🏮", "营业中", [
+		{"title": "【外观】青竹折扇战旗", "desc": "兑换价：10 文玉。出征时地图旌旗幻化为雅致文竹折扇。"},
+		{"title": "【便利】神行千里灵符", "desc": "兑换价：5 文玉。急报传达提速，缩短行军流光用时。"},
+		{"title": "【外观】古玉镇纸城池皮肤", "desc": "兑换价：20 文玉。将己方大本营外观升级为汉白玉飞檐楼阁。"}
+	])
+
+	_build_placeholder_page("S10_SEASON", "🏆 四候赛季", "四周加速赛季进度与丰厚犒赏", "🏆", "第 1 周", [
+		{"title": "第一周 · 破关争雄", "desc": "目标：合力攻克 1 座中立关隘。奖励：全员获得文玉 20。"},
+		{"title": "第二周 · 纵横开阖", "desc": "目标：连通两省关防驰道，触发文脉共鸣事件。"},
+		{"title": "赛季终章 · 九州问鼎", "desc": "四周推演总战功最高阵营加冕【山河首座】，班宠外观永续珍藏。"}
+	])
+
+	_build_placeholder_page("S11_SETTINGS", "⚙️ 学堂备忘", "音效、网络与账号设置", "⚙️", "就绪", [
+		{"title": "背景韶乐与音效", "desc": "古筝背景韶乐 [开启] | 战阵交互音效 [开启]。"},
+		{"title": "测试与网络配置", "desc": "轻触右上角齿轮或在此处重新设定服务器 API 通信链路。"},
+		{"title": "归隐退堂", "desc": "安全清除当前设备会话凭据，安全返回登录卷轴界面。"}
+	])
+
+	_build_placeholder_page("S12_MAIL", "✉️ 军府谕告", "班级通知、战役奖励与书简", "✉️", "2 封未读", [
+		{"title": "【谕告】第一候关隘争霸已打响", "desc": "诸军请于今日 21:00 前完成军令盖印，逾期将依默认驻守。"},
+		{"title": "【军饷】出征犒劳文玉到账", "desc": "恭贺学子踏入山河沙盘，学堂发放首征文玉 10 枚，请于仓库查收。"}
+	])
+
+	_build_placeholder_page("S13_TASKS", "🎯 每日军务", "每日三道治军修身悬赏", "🎯", "待交付", [
+		{"title": "【军令】今日按时签发一道军令", "desc": "完成军令加盖印信。奖励：学堂积分 +2，班宠经验 +10。"},
+		{"title": "【兵法】查阅上一候战争日报", "desc": "研读胜负得失，指导军阵调整。奖励：文玉 +1。"},
+		{"title": "【修身】语文背诵任务打卡", "desc": "完成《短歌行》全文默写。奖励：出征士气增加 10 点。"}
+	])
+
+func _build_placeholder_page(page_id: String, title: String, subtitle: String, icon: String, badge: String, cards: Array) -> void:
+	var p := Control.new()
+	p.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	p.visible = false
+	pages[page_id] = p
+	pages_container.add_child(p)
+
+	var bg := ColorRect.new()
+	bg.color = Color("#17110d")
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	p.add_child(bg)
+
+	var header := _create_page_header(title, subtitle)
+	p.add_child(header)
+
+	var margin := MarginContainer.new()
+	margin.position = Vector2(16, 70)
+	margin.size = Vector2(size.x - 32, size.y - 80)
+	p.add_child(margin)
+
+	var scroll := ScrollContainer.new()
+	scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	margin.add_child(scroll)
+
+	var v := VBoxContainer.new()
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.add_theme_constant_override("separation", 12)
+	scroll.add_child(v)
+
+	var summary_card := PanelContainer.new()
+	summary_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	summary_card.add_theme_stylebox_override("panel", _style(Color("#261e18"), GOLD, 1, 10, 14))
+	var s_row := HBoxContainer.new()
+	s_row.add_theme_constant_override("separation", 16)
+	summary_card.add_child(s_row)
+
+	var icn_lbl := _label(icon, 30, GOLD_LIGHT)
+	s_row.add_child(icn_lbl)
+
+	var text_v := VBoxContainer.new()
+	text_v.add_theme_constant_override("separation", 4)
+	text_v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	s_row.add_child(text_v)
+
+	var title_lbl := _label(title, 17, CREAM)
+	text_v.add_child(title_lbl)
+
+	var badge_lbl := _label("【状态】" + badge + " · 待下赛季版本接入", 12, Color("#c4b295"))
+	text_v.add_child(badge_lbl)
+	v.add_child(summary_card)
+
+	var grid := GridContainer.new()
+	grid.columns = 1 if size.x < 900.0 else 2
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid.add_theme_constant_override("h_separation", 12)
+	grid.add_theme_constant_override("v_separation", 12)
+	v.add_child(grid)
+
+	for c in cards:
+		var c_panel := PanelContainer.new()
+		c_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		c_panel.add_theme_stylebox_override("panel", _style(Color("#241c16"), Color("#5a4533"), 1, 8, 12))
+		var cv := VBoxContainer.new()
+		cv.add_theme_constant_override("separation", 6)
+		c_panel.add_child(cv)
+
+		var h_head := HBoxContainer.new()
+		h_head.add_theme_constant_override("separation", 8)
+		cv.add_child(h_head)
+
+		var ct := _label(str(c.get("title", "")), 15, GOLD_LIGHT)
+		ct.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		h_head.add_child(ct)
+
+		var c_tag := _label("【待接入】", 11, Color("#a89a84"))
+		h_head.add_child(c_tag)
+
+		var cs := _label(str(c.get("desc", "")), 13, Color("#d5c4a1"))
+		cs.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		cv.add_child(cs)
+		grid.add_child(c_panel)
+
+# ---------------------------------------------------------------------------
+# 师长督军后台控制（权限隔离）
+# ---------------------------------------------------------------------------
+
 func _build_teacher_deck() -> void:
 	teacher_box = Panel.new()
 	teacher_box.position = Vector2(980, 84)
@@ -611,66 +2172,43 @@ func _build_teacher_deck() -> void:
 	row2.add_child(admin_status_btn)
 	v.add_child(row2)
 
+func _teacher_lock() -> void:
+	action_status.text = "锁令中..."
+	api.request("POST", "/api/slice/admin/lock", {"turn_id": _turn_id(), "force": true}, func(ok: bool, _d: Dictionary, err: Dictionary):
+		if not ok:
+			_show_error(err)
+			return
+		action_status.text = "已提前锁令。"
+		_refresh_state()
+	)
+
+func _teacher_settle() -> void:
+	action_status.text = "结算中..."
+	api.request("POST", "/api/slice/admin/settle", {"turn_id": _turn_id()}, func(ok: bool, _d: Dictionary, err: Dictionary):
+		if not ok:
+			_show_error(err)
+			return
+		action_status.text = "本候推演已毕。"
+		_refresh_state()
+	)
+
+func _teacher_next() -> void:
+	action_status.text = "进入下一候..."
+	api.request("POST", "/api/slice/admin/next-turn", {"game_id": int(state.get("game", {}).get("id", 1))}, func(ok: bool, _d: Dictionary, err: Dictionary):
+		if not ok:
+			_show_error(err)
+			return
+		action_status.text = "已翻开崭新一候。"
+		_refresh_state()
+	)
+
+func _teacher_status() -> void:
+	action_status.text = "同步全域状态..."
+	_refresh_state()
+
 # ---------------------------------------------------------------------------
-# 战报、回放与充值弹窗
+# 充值弹窗与测试兼容节点
 # ---------------------------------------------------------------------------
-
-func _build_report_dialog() -> void:
-	report_dialog = AcceptDialog.new()
-	report_dialog.title = "📜 战报演播卷轴"
-	report_dialog.ok_button_text = "掩卷"
-	report_dialog.min_size = Vector2i(940, 700)
-	report_text = RichTextLabel.new()
-	report_text.bbcode_enabled = true
-	report_text.custom_minimum_size = Vector2(900, 640)
-	report_text.scroll_active = true
-	report_text.add_theme_font_size_override("normal_font_size", 15)
-	report_dialog.add_child(report_text)
-	add_child(report_dialog)
-
-func _build_replay_dialog() -> void:
-	replay_dialog = AcceptDialog.new()
-	replay_dialog.title = "🔄 沙盘战况复盘"
-	replay_dialog.ok_button_text = "知悉关闭"
-	replay_dialog.min_size = Vector2i(920, 720)
-
-	var v := VBoxContainer.new()
-	v.custom_minimum_size = Vector2(880, 650)
-	v.add_theme_constant_override("separation", 8)
-	replay_dialog.add_child(v)
-
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
-	row.add_child(_label("回合：", 15, INK))
-	replay_turn_select = OptionButton.new()
-	replay_turn_select.custom_minimum_size = Vector2(180, 42)
-	replay_turn_select.add_theme_stylebox_override("normal", _style(Color("#fffdf8"), Color("#c9b99a"), 1, 7, 6))
-	replay_turn_select.item_selected.connect(_render_replay_turn)
-	row.add_child(replay_turn_select)
-	var prev_btn := _button("◀ 上一候", Color("#55493b"), 42)
-	prev_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	prev_btn.pressed.connect(_step_replay.bind(-1))
-	row.add_child(prev_btn)
-	var next_btn_rep := _button("下一候 ▶", Color("#55493b"), 42)
-	next_btn_rep.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	next_btn_rep.pressed.connect(_step_replay.bind(1))
-	row.add_child(next_btn_rep)
-	v.add_child(row)
-
-	replay_map = ReplayMapScript.new()
-	replay_map.custom_minimum_size = Vector2(880, 390)
-	replay_map.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	replay_map.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	v.add_child(replay_map)
-
-	replay_text = RichTextLabel.new()
-	replay_text.bbcode_enabled = true
-	replay_text.custom_minimum_size = Vector2(880, 190)
-	replay_text.scroll_active = true
-	replay_text.add_theme_font_size_override("normal_font_size", 14)
-	v.add_child(replay_text)
-
-	add_child(replay_dialog)
 
 func _build_recharge_dialog() -> void:
 	recharge_dialog = AcceptDialog.new()
@@ -682,73 +2220,85 @@ func _build_recharge_dialog() -> void:
 	v.add_theme_constant_override("separation", 10)
 	recharge_dialog.add_child(v)
 
-	v.add_child(_label("将班级量化考核可用积分兑换为游戏文玉", 15, INK))
-	v.add_child(_label("比例：1 积分 = 10 文玉；每日兑换上限 20 积分。", 13, MUTED))
-
-	recharge_info = _label("", 14, Color("#3f3a33"))
+	recharge_info = _label("现有积分：-- | 今日已兑：0/500", 14, INK)
 	v.add_child(recharge_info)
 
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
-	row.add_child(_label("兑换积分数：", 14, INK))
+	var h := HBoxContainer.new()
+	h.add_child(_label("兑换文玉数量：", 14, INK))
 	recharge_spin = SpinBox.new()
 	recharge_spin.min_value = 1
-	recharge_spin.max_value = 20
-	recharge_spin.value = 5
-	recharge_spin.step = 1
-	recharge_spin.custom_minimum_size = Vector2(120, 38)
-	row.add_child(recharge_spin)
-	v.add_child(row)
+	recharge_spin.max_value = 50
+	recharge_spin.value = 10
+	h.add_child(recharge_spin)
+	v.add_child(h)
 
-	var btn_row := HBoxContainer.new()
-	btn_row.add_theme_constant_override("separation", 8)
-	recharge_confirm = _button("立即兑换", GOLD, 42)
-	recharge_confirm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var rate_hint := _label("10 积分 = 1 文玉，兑换仅记账不扣积分余额", 12, MUTED)
+	v.add_child(rate_hint)
+
+	var btns := HBoxContainer.new()
+	btns.alignment = BoxContainer.ALIGNMENT_END
+	var cancel := Button.new()
+	cancel.text = "放弃"
+	cancel.pressed.connect(func(): recharge_dialog.hide())
+	btns.add_child(cancel)
+	recharge_confirm = Button.new()
+	recharge_confirm.text = "核验兑换"
 	recharge_confirm.pressed.connect(_do_recharge)
-	btn_row.add_child(recharge_confirm)
-
-	var cancel_btn := _button("取消", Color("#6b7280"), 42)
-	cancel_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	cancel_btn.pressed.connect(func(): recharge_dialog.hide())
-	btn_row.add_child(cancel_btn)
-	v.add_child(btn_row)
+	btns.add_child(recharge_confirm)
+	v.add_child(btns)
 
 	add_child(recharge_dialog)
 
+func _open_recharge() -> void:
+	if wallet.is_empty():
+		_refresh_state()
+	var score := int(wallet.get("score", 0))
+	var converted := int(wallet.get("today_converted_points", 0))
+	var cap := int(wallet.get("daily_cap", 500))
+	recharge_info.text = "现有积分：%d | 今日已转：%d/%d" % [score, converted, cap]
+	recharge_dialog.popup_centered()
+
+func _do_recharge() -> void:
+	var jade := int(recharge_spin.value)
+	var req_key := "client_rech_%d_%d" % [Time.get_unix_time_from_system(), randi() % 10000]
+	recharge_confirm.disabled = true
+	api.request("POST", "/api/slice/recharge", {
+		"jade_amount": jade,
+		"request_key": req_key,
+	}, func(ok: bool, data: Dictionary, err: Dictionary):
+		recharge_confirm.disabled = false
+		if not ok:
+			_show_error(err)
+			return
+		recharge_dialog.hide()
+		wallet["jade"] = data.get("jade", 0)
+		wallet_label.text = "💎 文玉 %d" % int(wallet["jade"])
+		action_status.text = "成功兑换 %d 文玉！" % jade
+		_toast("文玉加仓成功！")
+	)
+
+func _build_legacy_compat_nodes() -> void:
+	origin_select = OptionButton.new()
+	target_select = OptionButton.new()
+	advance_btn = Button.new()
+	defend_btn = Button.new()
+	withdraw_btn = Button.new()
+	report_btn = Button.new()
+	replay_btn = Button.new()
+	refresh_btn = Button.new()
+	player_box = Panel.new()
+	pet_banner_label = Label.new()
+	my_order_label = Label.new()
+	node_info = Label.new()
+	turn_hint = Label.new()
+	action_status = Label.new()
+
+	advance_btn.pressed.connect(_submit_advance)
+	defend_btn.pressed.connect(_submit_defend)
+	withdraw_btn.pressed.connect(_withdraw_order)
+
 # ---------------------------------------------------------------------------
-# 快捷测试与持久化
-# ---------------------------------------------------------------------------
-
-func _fill_test_student() -> void:
-	name_edit.text = "青竹一"
-	pass_edit.text = "slice2026"
-
-func _use_local_forward() -> void:
-	url_edit.text = "http://127.0.0.1:8080"
-
-func _load_config() -> void:
-	var cfg := ConfigFile.new()
-	if cfg.load("user://slice.cfg") == OK:
-		url_edit.text = cfg.get_value("net", "url", "http://127.0.0.1:8080")
-		name_edit.text = cfg.get_value("auth", "name", "")
-		# 不持久化密码：只保存服务器和姓名。
-		pass_edit.text = ""
-	api.set_base_url(url_edit.text)
-
-func _save_config() -> void:
-	var cfg := ConfigFile.new()
-	cfg.set_value("net", "url", url_edit.text)
-	cfg.set_value("auth", "name", name_edit.text)
-	cfg.save("user://slice.cfg")
-
-func _set_login_busy(busy: bool) -> void:
-	login_student_btn.disabled = busy
-	name_edit.editable = not busy
-	pass_edit.editable = not busy
-	login_status.text = "正在推开山河画卷..." if busy else ""
-
-# ---------------------------------------------------------------------------
-# 业务逻辑与状态映射
+# 业务逻辑与状态同步
 # ---------------------------------------------------------------------------
 
 func _on_login(as_teacher: bool) -> void:
@@ -784,6 +2334,10 @@ func _on_login(as_teacher: bool) -> void:
 		_refresh_state()
 	)
 
+func _set_login_busy(busy: bool) -> void:
+	login_student_btn.disabled = busy
+	login_student_btn.text = "正在踏入山河..." if busy else "踏 入 山 河"
+
 func _on_logout() -> void:
 	api.token = ""
 	_logout_local("已安全归隐")
@@ -817,7 +2371,7 @@ func _refresh_state() -> void:
 		if not ok:
 			var code := str(err.get("code", ""))
 			if code == "UNAUTHORIZED" or code == "SESSION_EXPIRED":
-				_logout_local("登录已过期，请重新登堂")
+				_logout_local("登录已过期，请重新登录")
 				return
 			action_status.text = str(err.get("message", "获取战局失败"))
 			_toast(str(err.get("message", "获取战局失败")), true)
@@ -836,69 +2390,29 @@ func _render_state(data: Dictionary) -> void:
 	map.setup(map_data)
 
 	var turn: Dictionary = data.get("turn", {})
-	title_label.text = str(data.get("game", {}).get("name", "灵宠山河"))
 	countdown_seconds = int(turn.get("seconds_remaining", 0))
 	countdown_last_msec = Time.get_ticks_msec()
-	var deadline_passed := str(turn.get("status", "")) == "open" and countdown_seconds <= 0
-	turn_label.text = "第 %d 候 · %s" % [
-		int(turn.get("turn_no", 1)),
-		"已截止" if deadline_passed else str(turn.get("status_label", "")),
-	]
 
 	var role := str(me.get("role", "player"))
+	var student_name := str(me.get("name", "学子"))
+	title_label.text = student_name
+	wallet_label.text = "💎 文玉 %d" % int(wallet.get("jade", 0))
+
 	var faction: Variant = me.get("faction", null)
-	if role == "teacher":
-		faction_label.text = "👑 师长督军巡视"
-		wallet_label.text = "师长视角"
-		pet_banner_label.text = "督军掌令印"
-	else:
-		var pet_name := str(me.get("pet_name", "灵宠"))
-		top_pet_icon.text = pet_name.substr(0, 1)
-		if typeof(faction) == TYPE_DICTIONARY:
-			faction_label.text = "%s阵营 · %s" % [str(faction.get("name", "")), str(me.get("nickname", ""))]
-		else:
-			faction_label.text = str(me.get("nickname", ""))
-		pet_banner_label.text = "⚔️ 出战灵宠：【%s】(战力 1000)" % pet_name
-		wallet_label.text = "💎 文玉 %d" % int(wallet.get("jade_balance", 0))
+	if typeof(faction) == TYPE_DICTIONARY:
+		faction_label.text = str(faction.get("name", "中立")) + "阵营"
+
+	var pet: Variant = me.get("pet", null)
+	if typeof(pet) == TYPE_DICTIONARY:
+		top_pet_icon.text = str(pet.get("name", "令")).substr(0, 1)
 
 	var nodes: Array = map_data.get("nodes", [])
-	if selected_code == "" or map.node_by_code(selected_code).is_empty():
-		selected_code = _default_node_code(nodes, role)
-	map.set_selected(selected_code)
-	map.set_my_order(state.get("my_order", null))
-
 	_rebuild_node_buttons(nodes)
-	_populate_origin_options()
+	_refresh_faction_page()
 
-	var status := str(turn.get("status", ""))
-	match status:
-		"open":
-			turn_hint.text = "已过截止时间，等待教师锁令。" if deadline_passed else "令行中：21:00 前可自由下令或撤改。"
-		"locked":
-			turn_hint.text = "军令已锁定，沙盘快照只读，待结算。"
-		"settling":
-			turn_hint.text = "诸军决胜推演中..."
-		"settled":
-			turn_hint.text = "本候推演已毕，请掩卷查看战报。"
-		_:
-			turn_hint.text = str(turn.get("status_label", ""))
-
-	player_box.visible = (role == "player")
 	teacher_box.visible = (role == "teacher")
-	report_btn.visible = (data.get("last_report", null) != null or status == "settled")
-	_update_node_info()
 	_update_order_ui()
 
-func _default_node_code(nodes: Array, role: String) -> String:
-	if role == "player":
-		for n in nodes:
-			if bool(n.get("is_my_faction", false)):
-				return str(n.get("code", ""))
-	if nodes.size() > 0:
-		return str(nodes[0].get("code", ""))
-	return ""
-
-# 重建透明点击热区（贴合全屏沙盘位置）
 func _rebuild_node_buttons(nodes: Array) -> void:
 	for b in node_buttons.values():
 		if is_instance_valid(b):
@@ -918,106 +2432,14 @@ func _rebuild_node_buttons(nodes: Array) -> void:
 		b.add_theme_stylebox_override("pressed", _style(Color(1, 1, 1, 0.15), CORAL, 2, 50))
 		b.add_theme_stylebox_override("focus", empty)
 		b.pressed.connect(_on_node_pressed.bind(code))
-		game_layer.add_child(b)
+		if map_world != null:
+			map_world.add_child(b)
+		else:
+			map_shell.add_child(b)
 		node_buttons[code] = b
 
-func _populate_origin_options() -> void:
-	var raw_options: Variant = state.get("options", {}).get("advance_from", {})
-	var options: Dictionary = raw_options if typeof(raw_options) == TYPE_DICTIONARY else {}
-	var keep := _selected_meta(origin_select)
-	origin_select.clear()
-	for code in options.keys():
-		var n: Dictionary = map.node_by_code(str(code))
-		var label := str(n.get("name", code))
-		var idx := origin_select.item_count
-		origin_select.add_item(label)
-		origin_select.set_item_metadata(idx, str(code))
-	if origin_select.item_count > 0:
-		var found := -1
-		for i in range(origin_select.item_count):
-			if str(origin_select.get_item_metadata(i)) == keep:
-				found = i
-				break
-		origin_select.select(found if found >= 0 else 0)
-	_update_targets()
-
-func _on_origin_changed(_idx: int) -> void:
-	_update_targets()
-	_update_node_info()
-
-func _update_targets() -> void:
-	var raw_options: Variant = state.get("options", {}).get("advance_from", {})
-	var options: Dictionary = raw_options if typeof(raw_options) == TYPE_DICTIONARY else {}
-	var origin_code := _selected_meta(origin_select)
-	var targets: Array = options.get(origin_code, []) if origin_code != "" else []
-	var keep := _selected_meta(target_select)
-	target_select.clear()
-	for code in targets:
-		var n: Dictionary = map.node_by_code(str(code))
-		var label := str(n.get("name", code))
-		var idx := target_select.item_count
-		target_select.add_item(label)
-		target_select.set_item_metadata(idx, str(code))
-	if target_select.item_count > 0:
-		var found := -1
-		for i in range(target_select.item_count):
-			if str(target_select.get_item_metadata(i)) == keep:
-				found = i
-				break
-		target_select.select(found if found >= 0 else 0)
-
-func _on_target_changed(_idx: int) -> void:
-	var target := _selected_meta(target_select)
-	if target != "":
-		selected_code = target
-		map.set_selected(target)
-		_update_node_info()
-
-# 玩家点击地图城池节点：智能识别为进军或驻守目标
 func _on_node_pressed(code: String) -> void:
-	selected_code = code
-	map.set_selected(code)
-	var n: Dictionary = map.node_by_code(code)
-	var is_mine := bool(n.get("is_my_faction", false))
-
-	if is_mine and origin_select.item_count > 0:
-		for i in range(origin_select.item_count):
-			if str(origin_select.get_item_metadata(i)) == code:
-				origin_select.select(i)
-				_update_targets()
-				break
-	else:
-		if target_select.item_count > 0:
-			for i in range(target_select.item_count):
-				if str(target_select.get_item_metadata(i)) == code:
-					target_select.select(i)
-					break
-
-	_update_node_info()
-	_update_order_ui()
-
-func _selected_meta(opt: OptionButton) -> String:
-	var idx := opt.selected
-	if idx < 0 or idx >= opt.item_count:
-		return ""
-	return str(opt.get_item_metadata(idx))
-
-func _update_node_info() -> void:
-	var n: Dictionary = map.node_by_code(selected_code)
-	if n.is_empty():
-		node_info.text = "点击地图城池调度出征"
-		return
-	var owner: Variant = n.get("owner", null)
-	var owner_name := "中立"
-	if typeof(owner) == TYPE_DICTIONARY:
-		owner_name = str(owner.get("name", "中立")) + "阵营"
-	var is_mine := bool(n.get("is_my_faction", false))
-	var c_name := str(n.get("name", selected_code))
-
-	if is_mine:
-		node_info.text = "选中己方据点【%s】· 归属：%s · 可设为守备或出发地" % [c_name, owner_name]
-	else:
-		node_info.text = "瞄准目标城池【%s】· 归属：%s · 距己方相邻可发令" % [c_name, owner_name]
+	_open_city_drawer(code)
 
 func _neighbors(code: String) -> Array:
 	var out: Array = []
@@ -1033,23 +2455,17 @@ func _neighbors(code: String) -> Array:
 func _update_order_ui() -> void:
 	var role := str(me.get("role", "player"))
 	var can_edit := bool(state.get("can_edit", false)) and role == "player" and not order_submitting
-	origin_select.disabled = not can_edit
-	target_select.disabled = not can_edit
-	advance_btn.disabled = not can_edit or origin_select.item_count == 0 or target_select.item_count == 0
-	defend_btn.disabled = not can_edit or origin_select.item_count == 0
 	var order: Variant = state.get("my_order", null)
-	withdraw_btn.disabled = not can_edit or typeof(order) != TYPE_DICTIONARY
-	recharge_btn.disabled = (role != "player")
-
 	map.set_my_order(order)
 
 	if typeof(order) == TYPE_DICTIONARY:
-		my_order_label.text = "📜 军令已下：【%s】向【%s】进军攻打（今夕 21:00 锁令前可随时撤改）" % [
+		my_order_label.text = "📜 军令已下：【%s】向【%s】%s" % [
 			str(order.get("origin_name", "")),
 			str(order.get("target_name", "")),
-		] if str(order.get("action", "")) == "advance" else "🛡️ 军令已下：驻守【%s】据点（防守守备 +1）" % str(order.get("target_name", ""))
+			"进军" if str(order.get("action", "")) == "advance" else "驻守"
+		]
 	else:
-		my_order_label.text = "⏳ 今日待命：点击地图城池下令（未下令时默认驻守己方起点）"
+		my_order_label.text = "⏳ 今日待命：点击地图城池下达军令"
 
 func _on_countdown_tick() -> void:
 	if not game_layer.visible or countdown_last_msec == 0:
@@ -1057,23 +2473,8 @@ func _on_countdown_tick() -> void:
 	var left: int = max(0, countdown_seconds - int((Time.get_ticks_msec() - countdown_last_msec) / 1000))
 	if left <= 0:
 		countdown_label.text = "⏳ 已截止，待推演"
-		if player_box.visible:
-			advance_btn.disabled = true
-			defend_btn.disabled = true
-			withdraw_btn.disabled = true
 	else:
 		countdown_label.text = "⏳ 距 21:00 锁令: %02d:%02d" % [int(left / 60), left % 60]
-
-func _process(delta: float) -> void:
-	_on_countdown_tick()
-	if toast_timer > 0.0:
-		toast_timer -= delta
-		if toast_timer <= 0.0 and toast_panel != null:
-			toast_panel.visible = false
-
-# ---------------------------------------------------------------------------
-# 军令提交与回写
-# ---------------------------------------------------------------------------
 
 func _new_key(prefix: String) -> String:
 	return "%s_%d_%d" % [prefix, Time.get_unix_time_from_system(), randi() % 100000]
@@ -1082,21 +2483,21 @@ func _turn_id() -> int:
 	return int(state.get("turn", {}).get("id", 0))
 
 func _submit_advance() -> void:
+	var origin := ""
+	var target := ""
+	if origin_select.item_count > 0:
+		origin = str(origin_select.get_item_metadata(0))
+	if target_select.item_count > 0:
+		target = str(target_select.get_item_metadata(0))
+	if origin == "" or target == "":
+		_toast("请先选择进军城池。", true)
+		return
+	_submit_advance_direct(origin, target)
+
+func _submit_advance_direct(origin: String, target: String) -> void:
 	if order_submitting:
 		return
-	if origin_select.item_count > 0 and (origin_select.selected < 0 or _selected_meta(origin_select) == ""):
-		origin_select.select(0)
-		_update_targets()
-	if target_select.item_count > 0 and (target_select.selected < 0 or _selected_meta(target_select) == ""):
-		target_select.select(0)
-	var origin := _selected_meta(origin_select)
-	var target := _selected_meta(target_select)
-	if origin == "" or target == "":
-		action_status.text = "请先选择出发据点与进军目标。"
-		_toast("请先选择出发据点与进军目标。", true)
-		return
 	order_submitting = true
-	_update_order_ui()
 	action_status.text = "传达军令中..."
 	api.request("POST", "/api/slice/orders", {
 		"request_key": _new_key("adv"),
@@ -1108,7 +2509,6 @@ func _submit_advance() -> void:
 		order_submitting = false
 		if not ok:
 			_show_error(err)
-			_update_order_ui()
 			return
 		action_status.text = "军令已盖印！"
 		_toast("进军军令已加盖军印！")
@@ -1117,27 +2517,19 @@ func _submit_advance() -> void:
 	)
 
 func _submit_defend() -> void:
+	var origin := ""
+	for n in state.get("map", {}).get("nodes", []):
+		if bool(n.get("is_my_faction", false)):
+			origin = str(n.get("code", ""))
+			break
+	if origin == "":
+		origin = "W01"
+	_submit_defend_direct(origin)
+
+func _submit_defend_direct(origin: String) -> void:
 	if order_submitting:
 		return
-	if origin_select.item_count > 0 and (origin_select.selected < 0 or _selected_meta(origin_select) == ""):
-		origin_select.select(0)
-	var origin := _selected_meta(origin_select)
-	if origin == "":
-		if selected_code != "":
-			var n: Dictionary = map.node_by_code(selected_code)
-			if bool(n.get("is_my_faction", false)):
-				origin = selected_code
-		if origin == "":
-			for n in state.get("map", {}).get("nodes", []):
-				if bool(n.get("is_my_faction", false)):
-					origin = str(n.get("code", ""))
-					break
-	if origin == "":
-		action_status.text = "请先选择驻守城池。"
-		_toast("请先选择驻守城池。", true)
-		return
 	order_submitting = true
-	_update_order_ui()
 	action_status.text = "传达军令中..."
 	api.request("POST", "/api/slice/orders", {
 		"request_key": _new_key("def"),
@@ -1149,10 +2541,9 @@ func _submit_defend() -> void:
 		order_submitting = false
 		if not ok:
 			_show_error(err)
-			_update_order_ui()
 			return
 		action_status.text = "坚守军令已定！"
-		_toast("守备军令已加盖军印！")
+		_toast("驻守军令已加盖军印！")
 		state["my_order"] = data.get("order", {})
 		_update_order_ui()
 	)
@@ -1161,7 +2552,6 @@ func _withdraw_order() -> void:
 	if order_submitting:
 		return
 	order_submitting = true
-	_update_order_ui()
 	action_status.text = "撤销中..."
 	api.request("POST", "/api/slice/orders/withdraw", {
 		"turn_id": _turn_id(),
@@ -1169,12 +2559,13 @@ func _withdraw_order() -> void:
 		order_submitting = false
 		if not ok:
 			_show_error(err)
-			_update_order_ui()
 			return
 		action_status.text = "军令已撤回。"
 		_toast("军令已成功撤回。")
 		state.erase("my_order")
 		_update_order_ui()
+		if city_drawer != null and city_drawer.visible:
+			_open_city_drawer(selected_code)
 	)
 
 func _show_error(error: Dictionary) -> void:
@@ -1186,236 +2577,20 @@ func _show_error(error: Dictionary) -> void:
 		_logout_local("凭据已失效，请重新登录")
 
 # ---------------------------------------------------------------------------
-# 战报与回放
+# 本地配置保存（安全红线：严禁保存密码）
 # ---------------------------------------------------------------------------
 
-func _open_report() -> void:
-	var last_rep: Variant = state.get("last_report", null)
-	var target_turn_id := 0
-	if typeof(last_rep) == TYPE_DICTIONARY:
-		target_turn_id = int(last_rep.get("turn_id", 0))
-	if target_turn_id <= 0:
-		if str(state.get("turn", {}).get("status", "")) == "settled":
-			target_turn_id = int(state.get("turn", {}).get("id", 0))
-	
-	if target_turn_id <= 0:
-		action_status.text = "暂无已结算回合，暂无战事日报。"
-		_toast("暂无已结算回合，暂无战事日报。")
-		return
+func _load_config() -> void:
+	var cfg := ConfigFile.new()
+	if cfg.load("user://slice.cfg") == OK:
+		var u: String = cfg.get_value("net", "url", "")
+		if u != "":
+			url_edit.text = u
+			api.set_base_url(u)
+		name_edit.text = cfg.get_value("auth", "name", "")
 
-	action_status.text = "正在展开第 %d 候战事日报..." % target_turn_id
-	api.request("GET", "/api/slice/report?turn_id=%d" % target_turn_id, null, func(ok: bool, data: Dictionary, err: Dictionary):
-		if not ok:
-			_show_error(err)
-			return
-		_show_report(data)
-	)
-
-func _show_report(data: Dictionary) -> void:
-	var turn: Dictionary = data.get("turn", {})
-	var rep: Dictionary = data.get("report", {})
-	var summary: Dictionary = rep.get("summary", {})
-	var changes: Array = rep.get("node_changes", [])
-	var my_rep: Variant = data.get("my_report", null)
-	var reports: Array = rep.get("reports", [])
-
-	var b := "[font_size=22][color=#1e3a5f]📜 九州战报 · 第 %d 候[/color][/font_size]\n" % int(turn.get("turn_no", 0))
-	b += "[color=#6b5b47]结算时点：%s[/color]\n\n" % str(turn.get("settled_at", "—"))
-
-	if typeof(my_rep) == TYPE_DICTIONARY and not my_rep.is_empty():
-		b += "[font_size=17][color=#b83b32]◆ 本军战况[/color][/font_size]\n"
-		var desc := str(my_rep.get("readable_text", ""))
-		if desc != "":
-			b += desc + "\n\n"
-		else:
-			b += "行动：%s\n结果：%s\n\n" % [str(my_rep.get("description", "")), str(my_rep.get("result_summary", ""))]
-
-	b += "[font_size=17][color=#1e3a5f]◆ 城池易帜动向[/color][/font_size]\n"
-	if changes.is_empty():
-		b += "本候四野承平，各处城池归属未变。\n\n"
-	else:
-		for c in changes:
-			b += "• [b]%s[/b]：从 [color=#6b7280]%s[/color] 易为 [color=#cf8325]%s[/color]（原因：%s）\n" % [
-				str(c.get("node_name", "")),
-				str(c.get("prev_owner_name", "中立")),
-				str(c.get("new_owner_name", "中立")),
-				str(c.get("reason", "交锋定夺")),
-			]
-		b += "\n"
-
-	b += "[font_size=17][color=#1e3a5f]◆ 军力部署全览[/color][/font_size]\n"
-	b += "总计出征灵宠：%d 只 | 进军军令：%d | 驻守军令：%d\n\n" % [
-		int(summary.get("total_orders", 0)),
-		int(summary.get("advances", 0)),
-		int(summary.get("defends", 0)),
-	]
-
-	if not reports.is_empty():
-		b += "[font_size=17][color=#1e3a5f]◆ 诸生出征详情[/color][/font_size]\n"
-		for r in reports:
-			b += "• %s（灵宠：%s）在 %s %s\n" % [
-				str(r.get("student_name", "")),
-				str(r.get("pet_name", "")),
-				str(r.get("target_name", "")),
-				str(r.get("result_summary", "")),
-			]
-	report_text.text = b
-	if replay_dialog != null and replay_dialog.visible:
-		replay_dialog.hide()
-	report_dialog.popup_centered()
-
-func _open_replay() -> void:
-	action_status.text = "正在调取沙盘推演记录..."
-	api.request("GET", "/api/slice/replay", null, func(ok: bool, data: Dictionary, err: Dictionary):
-		if not ok:
-			_show_error(err)
-			return
-		_show_replay(data)
-	)
-
-func _show_replay(data: Dictionary) -> void:
-	replay_data = data
-	var turns: Array = data.get("turns", [])
-	if turns.is_empty():
-		action_status.text = "暂无已结算回合，暂无复盘记录。"
-		_toast("暂无已结算回合，暂无战局复盘。")
-		return
-	replay_turn_select.clear()
-	for i in range(turns.size()):
-		var no := int(turns[i].get("turn_no", i + 1))
-		var idx := replay_turn_select.item_count
-		replay_turn_select.add_item("第 %d 候" % no)
-		replay_turn_select.set_item_metadata(idx, i)
-	replay_turn_select.select(turns.size() - 1)
-	_render_replay_turn(turns.size() - 1)
-	if report_dialog != null and report_dialog.visible:
-		report_dialog.hide()
-	replay_dialog.popup_centered()
-
-func _step_replay(delta: int) -> void:
-	var total := replay_turn_select.item_count
-	if total == 0:
-		return
-	var cur := replay_turn_select.selected
-	var next_idx := clampi(cur + delta, 0, total - 1)
-	if next_idx != cur:
-		replay_turn_select.select(next_idx)
-		_render_replay_turn(next_idx)
-
-func _render_replay_turn(index: int) -> void:
-	var turns: Array = replay_data.get("turns", [])
-	if index < 0 or index >= turns.size():
-		return
-	var t: Dictionary = turns[index]
-	var map_info: Dictionary = replay_data.get("map", {})
-	var nodes: Array = map_info.get("nodes", [])
-	var edges: Array = map_info.get("edges", [])
-	var raw_owners: Variant = t.get("owners", {})
-	var owners: Dictionary = raw_owners if typeof(raw_owners) == TYPE_DICTIONARY else {}
-	var changes: Array = t.get("changes", [])
-	var changed_codes := {}
-	for c in changes:
-		changed_codes[str(c.get("node_code", ""))] = true
-
-	replay_map.setup(nodes, edges, owners, changed_codes)
-
-	var b := "[font_size=18][color=#1e3a5f]第 %d 候战况复盘[/color][/font_size]（%s）\n" % [
-		int(t.get("turn_no", 0)),
-		str(t.get("settled_at", "—")),
-	]
-	if changes.is_empty():
-		b += "本候防线坚固，全域无城池失陷易帜。\n"
-	else:
-		for c in changes:
-			b += "• [b]%s[/b] 从 %s 归为 %s（%s）\n" % [
-				str(c.get("node_name", "")),
-				str(c.get("prev_owner_name", "中立")),
-				str(c.get("new_owner_name", "中立")),
-				str(c.get("reason", "力战夺城")),
-			]
-	replay_text.text = b
-
-# ---------------------------------------------------------------------------
-# 师长督军控制
-# ---------------------------------------------------------------------------
-
-func _teacher_lock() -> void:
-	action_status.text = "锁令中..."
-	api.request("POST", "/api/slice/admin/lock", {"turn_id": _turn_id(), "force": true}, func(ok: bool, _d: Dictionary, err: Dictionary):
-		if not ok:
-			_show_error(err)
-			return
-		action_status.text = "已锁定本候军令！"
-		_refresh_state()
-	)
-
-func _teacher_settle() -> void:
-	action_status.text = "推演结算中..."
-	api.request("POST", "/api/slice/admin/settle", {"turn_id": _turn_id()}, func(ok: bool, _d: Dictionary, err: Dictionary):
-		if not ok:
-			_show_error(err)
-			return
-		action_status.text = "全军推演结算完成！"
-		_refresh_state()
-	)
-
-func _teacher_next() -> void:
-	action_status.text = "开赴下一候..."
-	api.request("POST", "/api/slice/admin/next-turn", null, func(ok: bool, _d: Dictionary, err: Dictionary):
-		if not ok:
-			_show_error(err)
-			return
-		action_status.text = "新一候已开启！"
-		_refresh_state()
-	)
-
-func _teacher_status() -> void:
-	action_status.text = "刷新督军状态中..."
-	api.request("GET", "/api/slice/admin/status", null, func(ok: bool, data: Dictionary, err: Dictionary):
-		if not ok:
-			_show_error(err)
-			return
-		var t: Dictionary = data.get("turn", {})
-		action_status.text = "第 %d 候 · 状态：%s · 军令数：%d" % [
-			int(t.get("turn_no", 0)),
-			str(t.get("status", "")),
-			int(data.get("order_count", 0)),
-		]
-	)
-
-# ---------------------------------------------------------------------------
-# 积分兑换文玉
-# ---------------------------------------------------------------------------
-
-func _open_recharge() -> void:
-	var role := str(me.get("role", "player"))
-	if role != "player":
-		action_status.text = "仅限修习学子兑换文玉。"
-		return
-	recharge_info.text = "可用积分：%d · 当前持有文玉：%d\n今日已兑：%d / 20 积分" % [
-		int(wallet.get("available_points", 0)),
-		int(wallet.get("jade_balance", 0)),
-		int(wallet.get("today_spent_points", 0)),
-	]
-	var max_can: int = min(20 - int(wallet.get("today_spent_points", 0)), int(wallet.get("available_points", 0)))
-	recharge_spin.max_value = max(1, max_can)
-	recharge_spin.value = min(recharge_spin.value, recharge_spin.max_value)
-	recharge_confirm.disabled = (max_can <= 0)
-	recharge_dialog.popup_centered()
-
-func _do_recharge() -> void:
-	var pts := int(recharge_spin.value)
-	action_status.text = "文玉结转中..."
-	recharge_confirm.disabled = true
-	api.request("POST", "/api/slice/points/recharge", {
-		"request_key": _new_key("rcg"),
-		"points": pts,
-	}, func(ok: bool, data: Dictionary, err: Dictionary):
-		recharge_confirm.disabled = false
-		if not ok:
-			_show_error(err)
-			return
-		recharge_dialog.hide()
-		action_status.text = "成功兑换 %d 文玉！" % int(data.get("jade_granted", 0))
-		_refresh_state()
-	)
+func _save_config() -> void:
+	var cfg := ConfigFile.new()
+	cfg.set_value("net", "url", url_edit.text.strip_edges())
+	cfg.set_value("auth", "name", name_edit.text.strip_edges())
+	cfg.save("user://slice.cfg")

@@ -19,10 +19,22 @@ var selected_code := ""
 var my_order: Variant = null
 var pulse := 0.0
 var font: Font
+var zoom_level: float = 1.0
 
-# 地图主卷轴绘制区域（全屏自适应，留出顶部状态栏与底部操作区空间）
+func set_zoom_level(z: float) -> void:
+	zoom_level = z
+	queue_redraw()
+
+# 地图主卷轴绘制区域（全屏自适应，留出左右侧栏与上下导航空间）
 func _map_rect() -> Rect2:
-	return Rect2(30, 84, size.x - 60, size.y - 120)
+	var w := size.x
+	var h := size.y
+	if w >= 900.0 and h >= 650.0:
+		return Rect2(160.0, 80.0, maxf(w - 320.0, 300.0), maxf(h - 160.0, 200.0))
+	elif h < 650.0:
+		return Rect2(52.0, 56.0, maxf(w - 104.0, 260.0), maxf(h - 108.0, 180.0))
+	else:
+		return Rect2(52.0, 70.0, maxf(w - 104.0, 260.0), maxf(h - 140.0, 200.0))
 
 func _ready() -> void:
 	font = load(FONT_PATH)
@@ -46,9 +58,11 @@ func node_position(code: String) -> Vector2:
 		if str(n.get("code", "")) == code:
 			var nx := clampf((float(n.get("x", 500)) - 100.0) / 800.0, 0.0, 1.0)
 			var ny := clampf((float(n.get("y", 240)) - 100.0) / 300.0, 0.0, 1.0)
-			# 更加舒展的黄金排布比例，居中向两翼延展
-			var px := mr.position.x + 80.0 + nx * (mr.size.x - 160.0)
-			var py := mr.position.y + 60.0 + ny * (mr.size.y - 190.0)
+			var pad_x := clampf(mr.size.x * 0.08, 30.0, 80.0)
+			var pad_y_top := clampf(mr.size.y * 0.12, 30.0, 60.0)
+			var pad_y_bottom := clampf(mr.size.y * 0.16, 40.0, 100.0)
+			var px := mr.position.x + pad_x + nx * (mr.size.x - pad_x * 2.0)
+			var py := mr.position.y + pad_y_top + ny * (mr.size.y - pad_y_top - pad_y_bottom)
 			return Vector2(px, py)
 	return mr.get_center()
 
@@ -220,31 +234,133 @@ func _draw_node(n: Dictionary) -> void:
 	draw_colored_polygon(flag, faction_color)
 	draw_polyline(flag, Color("#2b1e13"), 2.0, true)
 
-	# 5. 精致木质城池匾额
-	var label := str(n.get("name", code))
-	var fsize := 16
-	var tw := 110.0
-	if font != null:
-		tw = font.get_string_size(label, HORIZONTAL_ALIGNMENT_CENTER, -1, fsize).x + 30.0
-	
-	var tag_rect := Rect2(pos + Vector2(-tw / 2.0, 40), Vector2(tw, 28))
-	draw_rect(tag_rect.grow(2), Color(0, 0, 0, 0.15)) # 阴影
-	draw_rect(tag_rect, CREAM) # 白玉底
-	draw_rect(tag_rect, faction_color, false, 2.5) # 阵营边
-	draw_rect(tag_rect.grow(-3), Color("#cfbfa6"), false, 1.0)
-	
-	if font != null:
-		draw_string(font, tag_rect.position + Vector2(0, 20), label, HORIZONTAL_ALIGNMENT_CENTER, tag_rect.size.x, fsize, INK_DARK)
+	# 5. 精致木质城池匾额与阵营归属（LOD: zoom_level >= 0.9）
+	if zoom_level >= 0.9:
+		var label := str(n.get("name", code))
+		var fsize := 16
+		var tw := 110.0
+		if font != null:
+			tw = font.get_string_size(label, HORIZONTAL_ALIGNMENT_CENTER, -1, fsize).x + 30.0
+		
+		var tag_rect := Rect2(pos + Vector2(-tw / 2.0, 40), Vector2(tw, 28))
+		draw_rect(tag_rect.grow(2), Color(0, 0, 0, 0.15)) # 阴影
+		draw_rect(tag_rect, CREAM) # 白玉底
+		draw_rect(tag_rect, faction_color, false, 2.5) # 阵营边
+		draw_rect(tag_rect.grow(-3), Color("#cfbfa6"), false, 1.0)
+		
+		if font != null:
+			draw_string(font, tag_rect.position + Vector2(0, 20), label, HORIZONTAL_ALIGNMENT_CENTER, tag_rect.size.x, fsize, INK_DARK)
 
-	# 6. 阵营归属小印章（城名下方）
-	if font != null:
-		var owner_name := "中立关隘"
-		if typeof(owner) == TYPE_DICTIONARY:
-			owner_name = str(owner.get("name", "中立")) + "阵营"
-		if is_start:
-			owner_name += " [大营]"
-		var sub_color := Color("#8c3a32") if is_mine else Color("#6b5a45")
-		draw_string(font, pos + Vector2(-65, 84), owner_name, HORIZONTAL_ALIGNMENT_CENTER, 130, 12, sub_color)
+		# 6. 阵营归属小印章（城名下方）
+		if font != null:
+			var owner_name := "中立关隘"
+			if typeof(owner) == TYPE_DICTIONARY:
+				owner_name = str(owner.get("name", "中立")) + "阵营"
+			if is_start:
+				owner_name += " [大营]"
+			var sub_color := Color("#8c3a32") if is_mine else Color("#6b5a45")
+			draw_string(font, pos + Vector2(-65, 84), owner_name, HORIZONTAL_ALIGNMENT_CENTER, 130, 12, sub_color)
+
+	# 7. 地标建筑剪影与文化标签（LOD: zoom_level >= 1.35）
+	if zoom_level >= 1.35:
+		_draw_landmark_silhouette(pos, code, faction_color)
+		_draw_cultural_tag(pos, code)
+
+	# 8. 文脉诗词名篇（LOD: zoom_level >= 1.7）
+	if zoom_level >= 1.7:
+		_draw_cultural_verse(pos, code)
+
+func _draw_landmark_silhouette(pos: Vector2, code: String, _color: Color) -> void:
+	match code:
+		"A_START": # 云麓关：关隘 / 烽火台
+			var tower := Rect2(pos + Vector2(24, -38), Vector2(16, 26))
+			draw_rect(tower, Color("#3a2a1a"))
+			draw_rect(tower.grow(1), GOLD, false, 1.0)
+			for i in range(3):
+				var smoke_y := pos.y - 44.0 - float(i) * 9.0
+				var smoke_x := pos.x + 32.0 + sin(pulse * 2.5 + float(i) * 1.2) * 5.0
+				draw_circle(Vector2(smoke_x, smoke_y), 4.0 + float(i) * 1.5, Color(0.7, 0.65, 0.6, 0.4 - float(i) * 0.1))
+		"N1": # 松风渡：渡口 / 乌篷船
+			var pier := PackedVector2Array([
+				pos + Vector2(20, -8),
+				pos + Vector2(50, -8),
+				pos + Vector2(46, -4),
+				pos + Vector2(18, -4),
+			])
+			draw_colored_polygon(pier, Color("#4a3728"))
+			draw_arc(pos + Vector2(36, -12), 10.0, PI, TAU, 16, Color("#2b1e13"), 3.5)
+			draw_line(pos + Vector2(24, -10), pos + Vector2(48, -10), Color("#2b1e13"), 2.0)
+			draw_line(pos + Vector2(16, 0), pos + Vector2(48, 0), Color("#4a708b", 0.45), 1.5)
+		"N2": # 落霞原：草庐 / 田野
+			var roof := PackedVector2Array([
+				pos + Vector2(20, -10),
+				pos + Vector2(46, -10),
+				pos + Vector2(33, -28),
+			])
+			draw_colored_polygon(roof, Color("#7a613d"))
+			draw_polyline(roof, Color("#3b2a1a"), 1.5, true)
+			draw_rect(Rect2(pos + Vector2(25, -10), Vector2(16, 10)), Color("#dfd2ba"))
+			draw_line(pos + Vector2(16, -2), pos + Vector2(48, -2), Color("#6d5843"), 1.5)
+		"N3": # 听雨台：亭台 / 竹林
+			var pavilion := PackedVector2Array([
+				pos + Vector2(20, -12),
+				pos + Vector2(46, -12),
+				pos + Vector2(33, -28),
+			])
+			draw_colored_polygon(pavilion, BAMBOO.darkened(0.2))
+			draw_polyline(pavilion, GOLD, 1.5, true)
+			draw_line(pos + Vector2(50, 4), pos + Vector2(50, -22), Color("#2d5a3f"), 2.0)
+			draw_line(pos + Vector2(54, 4), pos + Vector2(54, -18), Color("#3d6a4f"), 1.5)
+		"B_START": # 雁回关：关楼 / 雁塔
+			var pagoda := PackedVector2Array([
+				pos + Vector2(22, -10),
+				pos + Vector2(44, -10),
+				pos + Vector2(40, -38),
+				pos + Vector2(33, -48),
+				pos + Vector2(26, -38),
+			])
+			draw_colored_polygon(pagoda, Color("#2e2118"))
+			draw_polyline(pagoda, GOLD, 1.5, true)
+			var gy := pos.y - 42.0 + sin(pulse * 3.0) * 3.0
+			draw_arc(Vector2(pos.x + 48, gy), 4.0, PI * 1.1, PI * 1.9, 6, Color("#1a1410"), 1.5)
+			draw_arc(Vector2(pos.x + 56, gy - 6), 3.5, PI * 1.1, PI * 1.9, 6, Color("#1a1410"), 1.5)
+
+func _draw_cultural_tag(pos: Vector2, code: String) -> void:
+	if font == null:
+		return
+	var tag_text := ""
+	match code:
+		"A_START": tag_text = "【关】唐风边塞"
+		"N1": tag_text = "【渡】兰舟晚渡"
+		"N2": tag_text = "【庐】耕读传家"
+		"N3": tag_text = "【台】琴心竹韵"
+		"B_START": tag_text = "【关】鸿雁关山"
+	if tag_text == "":
+		return
+	var rect := Rect2(pos + Vector2(-60, 102), Vector2(120, 22))
+	draw_rect(rect.grow(1), Color(0, 0, 0, 0.18))
+	draw_rect(rect, Color("#261c16"))
+	draw_rect(rect, GOLD, false, 1.0)
+	draw_string(font, rect.position + Vector2(0, 16), tag_text, HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 11, GOLD_LIGHT)
+
+func _draw_cultural_verse(pos: Vector2, code: String) -> void:
+	if font == null:
+		return
+	var verse := ""
+	match code:
+		"A_START": verse = "连峰去天不盈尺，枯松倒挂倚绝壁"
+		"N1": verse = "风鸣两岸叶，月照一孤舟"
+		"N2": verse = "开轩面场圃，把酒话桑麻"
+		"N3": verse = "竹杖芒鞋轻胜马，一蓑烟雨任平生"
+		"B_START": verse = "塞下秋来风景异，衡阳雁去无留意"
+	if verse == "":
+		return
+	var v_width := 240.0
+	var rect := Rect2(pos + Vector2(-v_width / 2.0, 128), Vector2(v_width, 24))
+	draw_rect(rect.grow(2), Color(0, 0, 0, 0.22))
+	draw_rect(rect, Color("#fffdf8")) # 宣纸底色
+	draw_rect(rect, Color("#c4a77d"), false, 1.0)
+	draw_string(font, rect.position + Vector2(0, 17), "“%s”" % verse, HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 11, INK_DARK)
 
 # 绘制国风古城楼/关隘立体图形
 func _draw_castle_icon(pos: Vector2, color: Color, is_capital: bool) -> void:
