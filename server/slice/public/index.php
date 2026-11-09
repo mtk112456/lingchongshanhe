@@ -3,16 +3,6 @@ declare(strict_types=1);
 
 require_once dirname(__DIR__) . '/bootstrap.php';
 
-header('Content-Type: application/json; charset=utf-8');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Auth-Token, X-Request-Id');
-header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-
-if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
-    http_response_code(204);
-    exit;
-}
-
 $started = microtime(true);
 $requestId = $_SERVER['HTTP_X_REQUEST_ID'] ?? bin2hex(random_bytes(6));
 $method = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET'));
@@ -20,6 +10,23 @@ $path = (string)parse_url((string)($_SERVER['REQUEST_URI'] ?? '/'), PHP_URL_PATH
 $path = '/' . trim($path, '/');
 if ($path === '/index.php') {
     $path = '/';
+}
+
+// 教师控制台：独立 Web 页面，学生 App 不提供教师登录。
+if ($method === 'GET' && ($path === '/teacher' || $path === '/teacher.html')) {
+    header('Content-Type: text/html; charset=utf-8');
+    readfile(__DIR__ . '/teacher.html');
+    exit;
+}
+
+header('Content-Type: application/json; charset=utf-8');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Auth-Token, X-Request-Id');
+header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
+
+if ($method === 'OPTIONS') {
+    http_response_code(204);
+    exit;
 }
 
 function respond(int $status, array $payload): never

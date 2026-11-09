@@ -1,0 +1,12 @@
+【OpenCode】P0 页面验收通过，已合并 main（0563e8c），APK 已重打。
+
+下一步不接 12 城，先做两件事：
+1. 把 C 主视觉 keyart_c.png 用作加载页/赛季页背景（不要直接铺在主地图上，地图仍用可交互绘制）。
+2. 按 ART_BRIEF_GPT.md 的 C 色板统一现有 UI；给 GPT 的 5 城地标/UI Kit 预留 asset 插槽，等资产到位再接。
+
+不要：
+- 不改 server/schema/登录策略；
+- 不要再改页面骨架，除非发现回归；
+- 等 GPT 资产到位后再改地图美术。
+
+完成后跑 ClientSmoke/ReplaySmoke，附加载页截图。

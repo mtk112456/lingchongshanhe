@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>灵宠山河 · 教师控制台</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px; background: #151b21; color: #f3ead8; font-family: "Microsoft YaHei", sans-serif; }
+  h1 { font-size: 26px; margin: 0 0 6px; font-family: "Songti SC", serif; }
+  p { color: #b9ad99; margin: 0 0 20px; font-size: 14px; }
+  .grid { display: grid; grid-template-columns: 360px 1fr; gap: 18px; }
+  .card { background: #1f262e; border: 1px solid #3a4550; border-radius: 12px; padding: 16px; }
+  label { display: block; color: #c9bda9; font-size: 13px; margin: 10px 0 4px; }
+  input { width: 100%; padding: 10px; border-radius: 7px; border: 1px solid #4b5865; background: #12181e; color: #fff; }
+  button { margin: 10px 6px 0 0; padding: 10px 14px; border: 0; border-radius: 7px; background: #b83b32; color: #fff; cursor: pointer; }
+  button.secondary { background: #334454; }
+  button.green { background: #276f57; }
+  button:disabled { background: #555; color: #aaa; cursor: wait; }
+  pre { white-space: pre-wrap; word-break: break-word; font-size: 12px; color: #cfe3d6; background: #12181e; border-radius: 8px; padding: 12px; min-height: 260px; }
+  .status { color: #cf8325; font-size: 13px; margin-top: 8px; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+  <h1>灵宠山河 · 教师控制台</h1>
+  <p>独立 Web 控制台。学生 App 不提供教师登录；这里用于锁令、结算、下一回合。</p>
+  <div class="grid">
+    <div class="card">
+      <label>API 地址</label>
+      <input id="base" placeholder="http://127.0.0.1:8080">
+      <label>管理员账号</label>
+      <input id="username" value="teacher">
+      <label>密码</label>
+      <input id="password" type="password" placeholder="teacher2026">
+      <label>回合 ID</label>
+      <input id="turn" type="number" value="1">
+      <div>
+        <button id="login">登录</button>
+        <button id="lock" class="secondary">锁定本回合</button>
+        <button id="settle" class="green">结算</button>
+        <button id="next" class="secondary">下一回合</button>
+        <button id="status" class="secondary">查看状态</button>
+      </div>
+      <div id="msg" class="status"></div>
+    </div>
+    <div class="card">
+      <pre id="out">等待登录…</pre>
+    </div>
+  </div>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const base = $('base');
+  base.value = location.origin.startsWith('http') ? location.origin : 'http://127.0.0.1:8080';
+  let token = '';
+
+  async function api(path, method = 'GET', body = null) {
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers.Authorization = 'Bearer ' + token;
+    const res = await fetch(base.value.replace(/\/$/, '') + path, {
+      method, headers, body: body ? JSON.stringify(body) : undefined
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error((data.error && data.error.message) || ('HTTP ' + res.status));
+    return data.data;
+  }
+
+  function setMsg(text) { $('msg').textContent = text; }
+  function show(data) { $('out').textContent = JSON.stringify(data, null, 2); }
+
+  $('login').onclick = async () => {
+    try {
+      setMsg('登录中…');
+      const data = await api('/api/auth/admin-login', 'POST', {
+        username: $('username').value.trim(),
+        password: $('password').value
+      });
+      token = data.token;
+      setMsg('登录成功：' + data.player.nickname);
+      show(data.player);
+    } catch (e) { setMsg(e.message); }
+  };
+
+  $('lock').onclick = async () => {
+    try {
+      setMsg('锁定中…');
+      show(await api('/api/slice/admin/lock', 'POST', { turn_id: Number($('turn').value), force: true }));
+      setMsg('已锁定并生成快照');
+    } catch (e) { setMsg(e.message); }
+  };
+
+  $('settle').onclick = async () => {
+    try {
+      setMsg('结算中…');
+      show(await api('/api/slice/admin/settle', 'POST', { turn_id: Number($('turn').value) }));
+      setMsg('结算完成');
+    } catch (e) { setMsg(e.message); }
+  };
+
+  $('next').onclick = async () => {
+    try {
+      setMsg('创建下一回合…');
+      show(await api('/api/slice/admin/next-turn', 'POST', { from_turn_id: Number($('turn').value) }));
+      setMsg('下一回合已开启');
+    } catch (e) { setMsg(e.message); }
+  };
+
+  $('status').onclick = async () => {
+    try {
+      setMsg('读取状态…');
+      show(await api('/api/slice/admin/status'));
+      setMsg('状态已更新');
+    } catch (e) { setMsg(e.message); }
+  };
+})();
+</script>
+</body>
+</html>

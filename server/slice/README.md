@@ -30,7 +30,8 @@ pwsh server/slice/setup.ps1
 pwsh server/slice/start_api.ps1
 ```
 
-API：`http://127.0.0.1:8080/api/health`
+API：`http://127.0.0.1:8080/api/health`  
+教师控制台：`http://127.0.0.1:8080/teacher`（独立 Web，学生 App 不提供教师登录）
 
 测试账号：
 
