@@ -32,8 +32,15 @@ var countdown_seconds := 0
 var countdown_last_msec := 0
 var polling := false
 var api_epoch := 0
+var order_submitting := false
+
+# 全局悬浮提示 Toast
+var toast_panel: PanelContainer
+var toast_label: Label
+var toast_timer := 0.0
 
 # 登录相关节点
+var login_panel: Panel
 var url_edit: LineEdit
 var name_edit: LineEdit
 var pass_edit: LineEdit
@@ -42,6 +49,10 @@ var login_student_btn: Button
 var dev_settings_dialog: AcceptDialog
 
 # 顶栏 HUD 节点
+var top_bar: Panel
+var gold_line: ColorRect
+var center_box: HBoxContainer
+var right_box: HBoxContainer
 var title_label: Label
 var faction_label: Label
 var wallet_label: Label
@@ -101,7 +112,9 @@ func _ready() -> void:
 	_setup_theme()
 	_build_login()
 	_build_game()
+	_build_toast_banner()
 	_load_config()
+	_layout_responsive()
 
 func _setup_theme() -> void:
 	var t := Theme.new()
@@ -154,6 +167,58 @@ func _line_edit(placeholder: String) -> LineEdit:
 	e.add_theme_stylebox_override("focus", _style(Color("#fffefb"), GOLD, 2, 8, 10))
 	return e
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_RESIZED:
+		_layout_responsive()
+
+func _build_toast_banner() -> void:
+	toast_panel = PanelContainer.new()
+	toast_panel.visible = false
+	toast_panel.custom_minimum_size = Vector2(480, 46)
+	toast_panel.position = Vector2((size.x - 480) / 2.0, 78)
+	toast_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	toast_panel.add_theme_stylebox_override("panel", _style(Color("#241c16", 0.96), GOLD, 2, 8, 10))
+	toast_label = Label.new()
+	toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	toast_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	toast_label.add_theme_font_size_override("font_size", 15)
+	toast_label.add_theme_color_override("font_color", GOLD_LIGHT)
+	toast_panel.add_child(toast_label)
+	add_child(toast_panel)
+
+func _toast(msg: String, is_error: bool = false) -> void:
+	if toast_label == null or toast_panel == null:
+		return
+	toast_label.text = msg
+	var border_color := CORAL if is_error else GOLD
+	var text_color := Color("#ff8a80") if is_error else GOLD_LIGHT
+	toast_panel.add_theme_stylebox_override("panel", _style(Color("#241c16", 0.96), border_color, 2, 8, 10))
+	toast_label.add_theme_color_override("font_color", text_color)
+	toast_panel.visible = true
+	toast_timer = 3.2
+
+func _layout_responsive() -> void:
+	if map != null:
+		map.size = size
+	if top_bar != null:
+		top_bar.size = Vector2(size.x, 74)
+		if gold_line != null:
+			gold_line.size = Vector2(size.x, 2)
+		if center_box != null:
+			center_box.position = Vector2((size.x - center_box.size.x) / 2.0, 14)
+		if right_box != null:
+			right_box.position = Vector2(size.x - right_box.size.x - 20, 16)
+	if player_box != null:
+		var bw := minf(size.x - 40.0, 920.0)
+		player_box.size = Vector2(bw, 144.0)
+		player_box.position = Vector2((size.x - bw) / 2.0, size.y - 160.0)
+	if login_panel != null:
+		login_panel.position = Vector2((size.x - login_panel.size.x) / 2.0, (size.y - login_panel.size.y) / 2.0)
+	if toast_panel != null:
+		var tw := minf(size.x - 40.0, 480.0)
+		toast_panel.size = Vector2(tw, 46.0)
+		toast_panel.position = Vector2((size.x - tw) / 2.0, 78.0)
+
 # ---------------------------------------------------------------------------
 # 登录界面（大厂游戏画卷风，剔除调试杂质）
 # ---------------------------------------------------------------------------
@@ -177,11 +242,12 @@ func _build_login() -> void:
 	login_layer.add_child(stripe)
 
 	# 2. 居中主画卷卡片
-	var panel := Panel.new()
-	panel.position = Vector2(440, 180)
-	panel.size = Vector2(520, 620)
-	panel.add_theme_stylebox_override("panel", _style(CREAM, Color("#a8864b"), 3, 16))
-	login_layer.add_child(panel)
+	login_panel = Panel.new()
+	login_panel.position = Vector2((size.x - 520) / 2.0, (size.y - 620) / 2.0)
+	login_panel.size = Vector2(520, 620)
+	login_panel.add_theme_stylebox_override("panel", _style(CREAM, Color("#a8864b"), 3, 16))
+	login_layer.add_child(login_panel)
+	var panel := login_panel
 
 	# 卡片内金线装饰框
 	var inner_box := Panel.new()
@@ -315,13 +381,14 @@ func _build_game() -> void:
 	game_layer.add_child(map)
 
 	# 2. 沉浸式顶栏 HUD
-	var top := Panel.new()
-	top.position = Vector2(0, 0)
-	top.size = Vector2(1400, 74)
-	top.add_theme_stylebox_override("panel", _style(INK, GOLD, 0, 0))
-	game_layer.add_child(top)
+	top_bar = Panel.new()
+	top_bar.position = Vector2(0, 0)
+	top_bar.size = Vector2(1400, 74)
+	top_bar.add_theme_stylebox_override("panel", _style(INK, GOLD, 0, 0))
+	game_layer.add_child(top_bar)
+	var top := top_bar
 
-	var gold_line := ColorRect.new()
+	gold_line = ColorRect.new()
 	gold_line.color = GOLD
 	gold_line.position = Vector2(0, 72)
 	gold_line.size = Vector2(1400, 2)
@@ -348,7 +415,7 @@ func _build_game() -> void:
 	top.add_child(faction_label)
 
 	# 中间：战局回合与倒计时药丸
-	var center_box := HBoxContainer.new()
+	center_box = HBoxContainer.new()
 	center_box.position = Vector2(460, 14)
 	center_box.size = Vector2(480, 46)
 	center_box.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -365,7 +432,7 @@ func _build_game() -> void:
 	center_box.add_child(timer_pill)
 
 	# 右侧：资产与快捷功能按键
-	var right_box := HBoxContainer.new()
+	right_box = HBoxContainer.new()
 	right_box.position = Vector2(980, 16)
 	right_box.size = Vector2(400, 42)
 	right_box.alignment = BoxContainer.ALIGNMENT_END
@@ -379,24 +446,24 @@ func _build_game() -> void:
 	wallet_pill.add_child(wallet_label)
 	right_box.add_child(wallet_pill)
 
-	recharge_btn = _button("+", GOLD, 36)
-	recharge_btn.custom_minimum_size = Vector2(36, 36)
+	recharge_btn = _button("+", GOLD, 42)
+	recharge_btn.custom_minimum_size = Vector2(44, 42)
 	recharge_btn.tooltip_text = "积分兑换文玉"
 	recharge_btn.pressed.connect(_open_recharge)
 	right_box.add_child(recharge_btn)
 
-	report_btn = _button("📜 战报", Color("#8f3229"), 36)
-	report_btn.custom_minimum_size = Vector2(80, 36)
+	report_btn = _button("📜 战报", Color("#8f3229"), 42)
+	report_btn.custom_minimum_size = Vector2(88, 42)
 	report_btn.pressed.connect(_open_report)
 	right_box.add_child(report_btn)
 
-	replay_btn = _button("🔄 回放", Color("#33485c"), 36)
-	replay_btn.custom_minimum_size = Vector2(80, 36)
+	replay_btn = _button("🔄 回放", Color("#33485c"), 42)
+	replay_btn.custom_minimum_size = Vector2(88, 42)
 	replay_btn.pressed.connect(_open_replay)
 	right_box.add_child(replay_btn)
 
-	var logout_btn := _button("🚪", Color("#3d2f26"), 36)
-	logout_btn.custom_minimum_size = Vector2(44, 36)
+	var logout_btn := _button("🚪", Color("#3d2f26"), 42)
+	logout_btn.custom_minimum_size = Vector2(44, 42)
 	logout_btn.tooltip_text = "退出登录"
 	logout_btn.pressed.connect(_on_logout)
 	right_box.add_child(logout_btn)
@@ -564,35 +631,36 @@ func _build_report_dialog() -> void:
 func _build_replay_dialog() -> void:
 	replay_dialog = AcceptDialog.new()
 	replay_dialog.title = "🔄 沙盘战况复盘"
-	replay_dialog.ok_button_text = "关闭"
-	replay_dialog.min_size = Vector2i(940, 760)
+	replay_dialog.ok_button_text = "知悉关闭"
+	replay_dialog.min_size = Vector2i(920, 720)
 
 	var v := VBoxContainer.new()
-	v.custom_minimum_size = Vector2(900, 700)
+	v.custom_minimum_size = Vector2(880, 650)
 	v.add_theme_constant_override("separation", 8)
 	replay_dialog.add_child(v)
 
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
+	row.add_theme_constant_override("separation", 10)
 	row.add_child(_label("回合：", 15, INK))
 	replay_turn_select = OptionButton.new()
-	replay_turn_select.custom_minimum_size = Vector2(200, 38)
+	replay_turn_select.custom_minimum_size = Vector2(180, 42)
 	replay_turn_select.add_theme_stylebox_override("normal", _style(Color("#fffdf8"), Color("#c9b99a"), 1, 7, 6))
 	replay_turn_select.item_selected.connect(_render_replay_turn)
 	row.add_child(replay_turn_select)
-	var prev_btn := _button("◀ 上一候", Color("#55493b"), 36)
+	var prev_btn := _button("◀ 上一候", Color("#55493b"), 42)
 	prev_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	prev_btn.pressed.connect(_step_replay.bind(-1))
 	row.add_child(prev_btn)
-	var next_btn_rep := _button("下一候 ▶", Color("#55493b"), 36)
+	var next_btn_rep := _button("下一候 ▶", Color("#55493b"), 42)
 	next_btn_rep.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	next_btn_rep.pressed.connect(_step_replay.bind(1))
 	row.add_child(next_btn_rep)
 	v.add_child(row)
 
 	replay_map = ReplayMapScript.new()
-	replay_map.custom_minimum_size = Vector2(880, 420)
+	replay_map.custom_minimum_size = Vector2(880, 390)
 	replay_map.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	replay_map.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	v.add_child(replay_map)
 
 	replay_text = RichTextLabel.new()
@@ -752,6 +820,7 @@ func _refresh_state() -> void:
 				_logout_local("登录已过期，请重新登堂")
 				return
 			action_status.text = str(err.get("message", "获取战局失败"))
+			_toast(str(err.get("message", "获取战局失败")), true)
 			return
 		state = data
 		_render_state(data)
@@ -963,7 +1032,7 @@ func _neighbors(code: String) -> Array:
 
 func _update_order_ui() -> void:
 	var role := str(me.get("role", "player"))
-	var can_edit := bool(state.get("can_edit", false)) and role == "player"
+	var can_edit := bool(state.get("can_edit", false)) and role == "player" and not order_submitting
 	origin_select.disabled = not can_edit
 	target_select.disabled = not can_edit
 	advance_btn.disabled = not can_edit or origin_select.item_count == 0 or target_select.item_count == 0
@@ -995,8 +1064,12 @@ func _on_countdown_tick() -> void:
 	else:
 		countdown_label.text = "⏳ 距 21:00 锁令: %02d:%02d" % [int(left / 60), left % 60]
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	_on_countdown_tick()
+	if toast_timer > 0.0:
+		toast_timer -= delta
+		if toast_timer <= 0.0 and toast_panel != null:
+			toast_panel.visible = false
 
 # ---------------------------------------------------------------------------
 # 军令提交与回写
@@ -1009,6 +1082,8 @@ func _turn_id() -> int:
 	return int(state.get("turn", {}).get("id", 0))
 
 func _submit_advance() -> void:
+	if order_submitting:
+		return
 	if origin_select.item_count > 0 and (origin_select.selected < 0 or _selected_meta(origin_select) == ""):
 		origin_select.select(0)
 		_update_targets()
@@ -1018,7 +1093,10 @@ func _submit_advance() -> void:
 	var target := _selected_meta(target_select)
 	if origin == "" or target == "":
 		action_status.text = "请先选择出发据点与进军目标。"
+		_toast("请先选择出发据点与进军目标。", true)
 		return
+	order_submitting = true
+	_update_order_ui()
 	action_status.text = "传达军令中..."
 	api.request("POST", "/api/slice/orders", {
 		"request_key": _new_key("adv"),
@@ -1027,15 +1105,20 @@ func _submit_advance() -> void:
 		"origin_node": origin,
 		"target_node": target,
 	}, func(ok: bool, data: Dictionary, err: Dictionary):
+		order_submitting = false
 		if not ok:
 			_show_error(err)
+			_update_order_ui()
 			return
 		action_status.text = "军令已盖印！"
+		_toast("进军军令已加盖军印！")
 		state["my_order"] = data.get("order", {})
 		_update_order_ui()
 	)
 
 func _submit_defend() -> void:
+	if order_submitting:
+		return
 	if origin_select.item_count > 0 and (origin_select.selected < 0 or _selected_meta(origin_select) == ""):
 		origin_select.select(0)
 	var origin := _selected_meta(origin_select)
@@ -1051,7 +1134,10 @@ func _submit_defend() -> void:
 					break
 	if origin == "":
 		action_status.text = "请先选择驻守城池。"
+		_toast("请先选择驻守城池。", true)
 		return
+	order_submitting = true
+	_update_order_ui()
 	action_status.text = "传达军令中..."
 	api.request("POST", "/api/slice/orders", {
 		"request_key": _new_key("def"),
@@ -1060,38 +1146,65 @@ func _submit_defend() -> void:
 		"origin_node": origin,
 		"target_node": origin,
 	}, func(ok: bool, data: Dictionary, err: Dictionary):
+		order_submitting = false
 		if not ok:
 			_show_error(err)
+			_update_order_ui()
 			return
 		action_status.text = "坚守军令已定！"
+		_toast("守备军令已加盖军印！")
 		state["my_order"] = data.get("order", {})
 		_update_order_ui()
 	)
 
 func _withdraw_order() -> void:
+	if order_submitting:
+		return
+	order_submitting = true
+	_update_order_ui()
 	action_status.text = "撤销中..."
 	api.request("POST", "/api/slice/orders/withdraw", {
 		"turn_id": _turn_id(),
 	}, func(ok: bool, _data: Dictionary, err: Dictionary):
+		order_submitting = false
 		if not ok:
 			_show_error(err)
+			_update_order_ui()
 			return
 		action_status.text = "军令已撤回。"
+		_toast("军令已成功撤回。")
 		state.erase("my_order")
 		_update_order_ui()
 	)
 
 func _show_error(error: Dictionary) -> void:
+	var code := str(error.get("code", ""))
 	var msg := str(error.get("message", "请求失败"))
 	action_status.text = msg
+	_toast(msg, true)
+	if code == "UNAUTHORIZED" or code == "SESSION_EXPIRED":
+		_logout_local("凭据已失效，请重新登录")
 
 # ---------------------------------------------------------------------------
 # 战报与回放
 # ---------------------------------------------------------------------------
 
 func _open_report() -> void:
-	action_status.text = "正在展开战事日报..."
-	api.request("GET", "/api/slice/report", null, func(ok: bool, data: Dictionary, err: Dictionary):
+	var last_rep: Variant = state.get("last_report", null)
+	var target_turn_id := 0
+	if typeof(last_rep) == TYPE_DICTIONARY:
+		target_turn_id = int(last_rep.get("turn_id", 0))
+	if target_turn_id <= 0:
+		if str(state.get("turn", {}).get("status", "")) == "settled":
+			target_turn_id = int(state.get("turn", {}).get("id", 0))
+	
+	if target_turn_id <= 0:
+		action_status.text = "暂无已结算回合，暂无战事日报。"
+		_toast("暂无已结算回合，暂无战事日报。")
+		return
+
+	action_status.text = "正在展开第 %d 候战事日报..." % target_turn_id
+	api.request("GET", "/api/slice/report?turn_id=%d" % target_turn_id, null, func(ok: bool, data: Dictionary, err: Dictionary):
 		if not ok:
 			_show_error(err)
 			return
@@ -1100,20 +1213,24 @@ func _open_report() -> void:
 
 func _show_report(data: Dictionary) -> void:
 	var turn: Dictionary = data.get("turn", {})
-	var summary: Dictionary = data.get("summary", {})
-	var changes: Array = data.get("node_changes", [])
-	var my_rep: Dictionary = data.get("my_report", {})
-	var reports: Array = data.get("reports", [])
+	var rep: Dictionary = data.get("report", {})
+	var summary: Dictionary = rep.get("summary", {})
+	var changes: Array = rep.get("node_changes", [])
+	var my_rep: Variant = data.get("my_report", null)
+	var reports: Array = rep.get("reports", [])
 
-	var b := "[font_size=24][color=#1e3a5f]📜 九州战报 · 第 %d 候[/color][/font_size]\n" % int(turn.get("turn_no", 0))
+	var b := "[font_size=22][color=#1e3a5f]📜 九州战报 · 第 %d 候[/color][/font_size]\n" % int(turn.get("turn_no", 0))
 	b += "[color=#6b5b47]结算时点：%s[/color]\n\n" % str(turn.get("settled_at", "—"))
 
-	if not my_rep.is_empty():
-		b += "[font_size=18][color=#b83b32]◆ 本军战况[/color][/font_size]\n"
-		b += "行动：%s\n" % str(my_rep.get("description", ""))
-		b += "结果：%s\n\n" % str(my_rep.get("result_summary", ""))
+	if typeof(my_rep) == TYPE_DICTIONARY and not my_rep.is_empty():
+		b += "[font_size=17][color=#b83b32]◆ 本军战况[/color][/font_size]\n"
+		var desc := str(my_rep.get("readable_text", ""))
+		if desc != "":
+			b += desc + "\n\n"
+		else:
+			b += "行动：%s\n结果：%s\n\n" % [str(my_rep.get("description", "")), str(my_rep.get("result_summary", ""))]
 
-	b += "[font_size=18][color=#1e3a5f]◆ 城池易帜动向[/color][/font_size]\n"
+	b += "[font_size=17][color=#1e3a5f]◆ 城池易帜动向[/color][/font_size]\n"
 	if changes.is_empty():
 		b += "本候四野承平，各处城池归属未变。\n\n"
 	else:
@@ -1126,15 +1243,15 @@ func _show_report(data: Dictionary) -> void:
 			]
 		b += "\n"
 
-	b += "[font_size=18][color=#1e3a5f]◆ 军力部署全览[/color][/font_size]\n"
-	b += "总计参战灵宠：%d 只 | 进军总令：%d | 驻守总令：%d\n\n" % [
+	b += "[font_size=17][color=#1e3a5f]◆ 军力部署全览[/color][/font_size]\n"
+	b += "总计出征灵宠：%d 只 | 进军军令：%d | 驻守军令：%d\n\n" % [
 		int(summary.get("total_orders", 0)),
 		int(summary.get("advances", 0)),
 		int(summary.get("defends", 0)),
 	]
 
 	if not reports.is_empty():
-		b += "[font_size=18][color=#1e3a5f]◆ 诸生出征详情[/color][/font_size]\n"
+		b += "[font_size=17][color=#1e3a5f]◆ 诸生出征详情[/color][/font_size]\n"
 		for r in reports:
 			b += "• %s（灵宠：%s）在 %s %s\n" % [
 				str(r.get("student_name", "")),
@@ -1143,6 +1260,8 @@ func _show_report(data: Dictionary) -> void:
 				str(r.get("result_summary", "")),
 			]
 	report_text.text = b
+	if replay_dialog != null and replay_dialog.visible:
+		replay_dialog.hide()
 	report_dialog.popup_centered()
 
 func _open_replay() -> void:
@@ -1159,6 +1278,7 @@ func _show_replay(data: Dictionary) -> void:
 	var turns: Array = data.get("turns", [])
 	if turns.is_empty():
 		action_status.text = "暂无已结算回合，暂无复盘记录。"
+		_toast("暂无已结算回合，暂无战局复盘。")
 		return
 	replay_turn_select.clear()
 	for i in range(turns.size()):

@@ -38,6 +38,9 @@ reference/Unciv/
 handover/
 Qingzhu_*.zip
 
+# Agent 运行日志（只保留交付文件）
+art_src/gpt/codex_*.log
+
 # 系统文件
 Thumbs.db
 .DS_Store

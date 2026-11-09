@@ -61,9 +61,14 @@ func _pump() -> void:
 func _on_completed(result: int, code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
 	_busy = false
 	if result != HTTPRequest.RESULT_SUCCESS:
+		var msg := "网络请求失败，请检查服务器地址与网络。"
+		if result == HTTPRequest.RESULT_TIMEOUT:
+			msg = "请求超时，无法连接服务器。"
+		elif result == HTTPRequest.RESULT_CANT_CONNECT:
+			msg = "无法连接服务器（%s），请检查网络连接。" % base_url
 		_finish(false, {}, {
 			"code": "NETWORK_ERROR",
-			"message": "网络请求失败，请检查服务器地址与网络。",
+			"message": msg,
 		})
 		return
 

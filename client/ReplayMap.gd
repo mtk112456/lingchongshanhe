@@ -4,11 +4,14 @@ extends Control
 ## 参考 Unciv 的 ReplayMap：只画每一回合的状态，不重算战斗。
 
 const FONT_PATH := "res://fonts/NotoSerifCJKsc-Regular.otf"
-const MAP_RECT := Rect2(24, 20, 820, 390)
-const INK := Color("#3a2e24")
-const CREAM := Color("#fff8e8")
-const GOLD := Color("#cf8325")
-const NEUTRAL := Color("#8b7d68")
+
+const INK := Color("#201a15")
+const CREAM := Color("#fffaf0")
+const GOLD := Color("#d4af37")
+const GOLD_LIGHT := Color("#fae19c")
+const CORAL := Color("#b83b32")
+const BAMBOO := Color("#276f57")
+const NEUTRAL := Color("#7e7263")
 
 var nodes: Array = []
 var edges: Array = []
@@ -19,6 +22,12 @@ var font: Font
 func _ready() -> void:
 	font = load(FONT_PATH)
 
+# 自适应绘制矩形（留出边距，适配平板与多种分辨率）
+func _map_rect() -> Rect2:
+	var pad_x := clampf(size.x * 0.03, 16.0, 32.0)
+	var pad_y := clampf(size.y * 0.04, 16.0, 26.0)
+	return Rect2(pad_x, pad_y, maxf(size.x - pad_x * 2.0, 200.0), maxf(size.y - pad_y * 2.0, 150.0))
+
 func setup(p_nodes: Array, p_edges: Array, p_owners: Dictionary, p_changed: Dictionary) -> void:
 	nodes = p_nodes
 	edges = p_edges
@@ -27,30 +36,55 @@ func setup(p_nodes: Array, p_edges: Array, p_owners: Dictionary, p_changed: Dict
 	queue_redraw()
 
 func node_position(code: String) -> Vector2:
+	var mr := _map_rect()
 	for n in nodes:
 		if str(n.get("code", "")) == code:
 			var nx := clampf((float(n.get("x", 500)) - 100.0) / 800.0, 0.0, 1.0)
 			var ny := clampf((float(n.get("y", 240)) - 100.0) / 300.0, 0.0, 1.0)
-			return MAP_RECT.position + Vector2(nx * MAP_RECT.size.x, ny * MAP_RECT.size.y)
-	return MAP_RECT.get_center()
+			var pad_inner_x := clampf(mr.size.x * 0.08, 36.0, 70.0)
+			var pad_inner_y := clampf(mr.size.y * 0.12, 32.0, 60.0)
+			var px := mr.position.x + pad_inner_x + nx * (mr.size.x - pad_inner_x * 2.0)
+			var py := mr.position.y + pad_inner_y + ny * (mr.size.y - pad_inner_y * 2.0)
+			return Vector2(px, py)
+	return mr.get_center()
 
 func _draw() -> void:
-	draw_rect(Rect2(Vector2.ZERO, size), Color("#2f2721"))
-	draw_rect(MAP_RECT, Color("#f3ead8"))
-	draw_rect(MAP_RECT, Color("#8a6a42"), false, 5.0)
-	draw_rect(MAP_RECT.grow(5), Color("#c9a45c"), false, 2.0)
+	var mr := _map_rect()
+	# 案台底木
+	draw_rect(Rect2(Vector2.ZERO, size), Color("#1e1712"))
+	
+	# 绢布卷轴
+	draw_rect(mr, Color("#f3ebd8"))
+	draw_rect(mr.grow(-6), Color("#ebe0c7"))
+	draw_rect(mr, Color("#5a4533"), false, 4.0)
+	draw_rect(mr.grow(4), Color("#c9a45c"), false, 1.5)
+	_draw_corners(mr)
+
 	if font != null:
-		draw_string(font, MAP_RECT.position + Vector2(20, 34), "战局回放 · 5 节点", HORIZONTAL_ALIGNMENT_LEFT, -1, 22, INK)
+		draw_string(font, mr.position + Vector2(20, 32), "沙盘战局复盘 · 节点归属演化", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, INK)
 
 	for e in edges:
 		if typeof(e) != TYPE_ARRAY or e.size() < 2:
 			continue
 		var a := node_position(str(e[0]))
 		var b := node_position(str(e[1]))
-		_draw_dashed(a, b, Color("#8a7a63"), 2.0, 9.0, 7.0)
+		# 驰道虚线
+		_draw_dashed(a, b, Color("#9b8870"), 2.5, 9.0, 7.0)
 
 	for n in nodes:
 		_draw_node(n)
+
+func _draw_corners(r: Rect2) -> void:
+	var clen := 14.0
+	var ccol := Color("#c9a45c")
+	draw_line(r.position, r.position + Vector2(clen, 0), ccol, 2.0)
+	draw_line(r.position, r.position + Vector2(0, clen), ccol, 2.0)
+	draw_line(Vector2(r.end.x, r.position.y), Vector2(r.end.x - clen, r.position.y), ccol, 2.0)
+	draw_line(Vector2(r.end.x, r.position.y), Vector2(r.end.x, r.position.y + clen), ccol, 2.0)
+	draw_line(Vector2(r.position.x, r.end.y), Vector2(r.position.x + clen, r.end.y), ccol, 2.0)
+	draw_line(Vector2(r.position.x, r.end.y), Vector2(r.position.x, r.end.y - clen), ccol, 2.0)
+	draw_line(r.end, r.end - Vector2(clen, 0), ccol, 2.0)
+	draw_line(r.end, r.end - Vector2(0, clen), ccol, 2.0)
 
 func _draw_node(n: Dictionary) -> void:
 	var code := str(n.get("code", ""))
@@ -58,34 +92,41 @@ func _draw_node(n: Dictionary) -> void:
 	var owner: Variant = owners.get(code, null)
 	var color := NEUTRAL
 	if typeof(owner) == TYPE_DICTIONARY:
-		color = Color(str(owner.get("color", "#8b7d68")))
+		color = Color(str(owner.get("color", "#7e7263")))
 	var changed := bool(changed_codes.get(code, false))
+
+	# 1. 变化城池高亮：双环柔和金色光芒，半径 32，醒目且不遮挡上方旗标（-44）与下方城名（+30）
 	if changed:
-		draw_circle(pos, 38.0, Color(GOLD.r, GOLD.g, GOLD.b, 0.20))
-		draw_arc(pos, 38.0, 0.0, TAU, 48, GOLD, 3.0, true)
+		draw_circle(pos, 32.0, Color(GOLD.r, GOLD.g, GOLD.b, 0.22))
+		draw_arc(pos, 32.0, 0.0, TAU, 48, GOLD, 2.5, true)
+		draw_arc(pos, 36.0, 0.0, TAU, 48, Color(GOLD_LIGHT.r, GOLD_LIGHT.g, GOLD_LIGHT.b, 0.7), 1.2, true)
 
 	if bool(n.get("is_start", false)) or str(n.get("type", "")) == "start":
-		draw_arc(pos, 29.0, 0.0, TAU, 48, Color("#c9a45c"), 4.0, true)
+		draw_arc(pos, 25.0, 0.0, TAU, 48, Color("#c9a45c"), 3.5, true)
 
-	draw_line(pos + Vector2(0, -12), pos + Vector2(0, -50), Color("#4b3a2a"), 3.0)
+	# 2. 旗杆与旌旗（垂直向上）
+	draw_line(pos + Vector2(0, -10), pos + Vector2(0, -46), Color("#4b3a2a"), 3.0)
 	var flag := PackedVector2Array([
-		pos + Vector2(1, -48),
-		pos + Vector2(30, -43),
-		pos + Vector2(1, -34),
+		pos + Vector2(1, -44),
+		pos + Vector2(28, -39),
+		pos + Vector2(1, -30),
 	])
 	draw_colored_polygon(flag, color)
-	draw_polyline(flag, Color("#3a2e24"), 2.0, true)
-	draw_circle(pos, 20.0, CREAM)
-	draw_circle(pos, 20.0, color, false, 4.0)
-	draw_circle(pos, 6.0, color)
+	draw_polyline(flag, Color("#3a2e24"), 1.8, true)
 
+	# 3. 城池基座与圆台
+	draw_circle(pos, 17.0, CREAM)
+	draw_circle(pos, 17.0, color, false, 3.5)
+	draw_circle(pos, 5.0, color)
+
+	# 4. 城名底牌（位于圆心下方 30 像素处，高度 24，内含城名）
 	if font != null:
 		var label := str(n.get("name", code))
-		var tw := font.get_string_size(label, HORIZONTAL_ALIGNMENT_CENTER, -1, 15).x + 22.0
-		var box := Rect2(pos + Vector2(-tw / 2.0, 30), Vector2(tw, 26))
+		var tw := font.get_string_size(label, HORIZONTAL_ALIGNMENT_CENTER, -1, 14).x + 18.0
+		var box := Rect2(pos + Vector2(-tw / 2.0, 30), Vector2(tw, 24))
 		draw_rect(box, CREAM)
-		draw_rect(box, color if typeof(owner) == TYPE_DICTIONARY else Color("#9b8b73"), false, 2.0)
-		draw_string(font, box.position + Vector2(0, 18), label, HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 15, INK)
+		draw_rect(box, color if typeof(owner) == TYPE_DICTIONARY else Color("#9b8b73"), false, 1.8)
+		draw_string(font, box.position + Vector2(0, 17), label, HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 14, INK)
 
 func _draw_dashed(a: Vector2, b: Vector2, color: Color, width: float, dash: float, gap: float) -> void:
 	var length := a.distance_to(b)
