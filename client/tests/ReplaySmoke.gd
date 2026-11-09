@@ -55,5 +55,12 @@ func _process(_delta: float) -> void:
 			_fail("replay timeout")
 
 func _fail(message: String) -> void:
+	if scene != null:
+		push_error("DEBUG: login_status='%s', game_vis=%s, state_empty=%s, state=%s" % [
+			scene.login_status.text if scene.login_status else "",
+			str(scene.game_layer.visible) if scene.game_layer else "null",
+			str(scene.state.is_empty()) if scene.state else "null",
+			str(scene.state)
+		])
 	push_error("REPLAY_SMOKE failed: " + message)
 	get_tree().quit(1)
