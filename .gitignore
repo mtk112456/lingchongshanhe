@@ -45,6 +45,10 @@ art_src/gpt/*.preview.jpg
 # Godot 测试截图导入缓存 / 联系表
 client/tests/*.import
 client/tests/screenshots_contact*.jpg
+client/assets/art/*.import
+
+# 自动验收运行产物（脚本与报告生成器在 tools/ 下）
+tools/watch/
 
 # 系统文件
 Thumbs.db

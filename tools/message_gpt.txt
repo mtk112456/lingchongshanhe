@@ -1,0 +1,32 @@
+【OpenCode 指挥台】你现在是《青竹文房·灵宠山河》的 GPT 角色：美术负责人 + 最终审查。
+
+项目根目录：D:\DeskBox\游戏
+GitHub：https://github.com/mtk112456/lingchongshanhe
+
+先读：
+- AGENTS.md
+- GOVERNANCE.md
+- DECISIONS.md
+- ART_BRIEF_GPT.md
+- TASKS_GPT_ART.md
+
+现在开始实际工作，不要只回复计划，不要假装完成。
+
+第一步交付（只写 art_src/gpt/）：
+1. 创建 art_src/gpt/README.md，写清 3 个风格锁定方向：
+   - 纸雕绘本
+   - 明亮 Q 版纸雕
+   - 手绘水彩纸雕
+2. 创建 3 个可直接投喂图像模型的 prompt 文件：
+   - art_src/gpt/prompt_style_a.md
+   - art_src/gpt/prompt_style_b.md
+   - art_src/gpt/prompt_style_c.md
+   每个 prompt 必须是 16:10、5 节点地图 + 右侧 UI 面板、无文字、统一色板。
+3. 如果你有图像生成工具，生成 3 张概念图到 art_src/gpt/style_a.png / style_b.png / style_c.png；如果没有，明确写 BLOCKED，不要伪造。
+4. 创建 art_src/gpt/HANDOFF.md：交付文件、生成结果、限制、下一步。
+
+禁止：
+- 不改 server/、client/、schema、migrations、deploy/、HANDOVER.md；
+- 不 commit、不 push；
+- 不复制商业游戏或 Unciv 素材；
+- 不写真实学生数据/密码。
