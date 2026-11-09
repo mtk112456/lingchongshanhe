@@ -1,0 +1,9 @@
+# 替换成实际 GitHub 用户名后启用。
+# 目的：让后端和客户端 Agent 不互相覆盖。
+#
+# /server/slice/   @backend-owner
+# /client/         @client-owner
+# /deploy/         @deploy-owner
+# /HANDOVER.md     @handover-owner
+# /handover/       @handover-owner
+# /server/slice/tests/ @gpt-reviewer

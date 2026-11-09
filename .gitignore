@@ -1,0 +1,38 @@
+# 本机配置 / 凭据
+server/slice/config.local.php
+.env
+.env.*
+!.env.example
+
+# 测试数据库与运行日志
+server/testdb/
+server/slice/testdb/
+server/slice/logs/
+*.log
+*.err
+*.pid
+
+# Godot 构建与缓存
+client/.godot/
+client/build/
+*.apk
+*.idsig
+
+# 本地工具（体积大，不提交）
+tools/mariadb/
+tools/mariadb.zip
+tools/Godot_v4.7.2-stable/
+tools/CocosDashboard/
+tools/_templates_extract/
+
+# 开源参考克隆（只保留分析文档）
+reference/Unciv/
+
+# 交接包产物（源文件在仓库内）
+handover/
+Qingzhu_*.zip
+
+# 系统文件
+Thumbs.db
+.DS_Store
+desktop.ini

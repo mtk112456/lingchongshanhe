@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>青竹文房·灵宠山河 — 风格样板</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px; background: #161b21; color: #f3ead8; font-family: "Microsoft YaHei", sans-serif; }
+  h1 { font-family: "Noto Serif SC", "Songti SC", serif; font-size: 28px; margin: 0 0 6px; letter-spacing: 1px; }
+  p { color: #b9ad99; margin: 0 0 22px; font-size: 14px; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  figure { margin: 0; background: #1f262e; border: 1px solid #3a4550; border-radius: 14px; overflow: hidden; }
+  img { width: 100%; display: block; }
+  figcaption { padding: 14px 16px 16px; }
+  b { display: block; font-size: 17px; margin-bottom: 6px; color: #f3ead8; }
+  span { display: block; color: #a99c88; font-size: 13px; line-height: 1.6; }
+  @media (max-width: 1100px) { .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+  <h1>青竹文房·灵宠山河 — 三套风格样板</h1>
+  <p>代码生成的同布局对比稿；地图底图暂用真实省界，最终会重绘为对应风格。文字为示意，正式版用 Godot 真字体。</p>
+  <div class="grid">
+    <figure>
+      <img src="sample_A_papercut.png" alt="纸雕绘本卡通">
+      <figcaption>
+        <b>A. 纸雕绘本卡通（推荐）</b>
+        <span>深色木桌 + 纸片省份 + 厚描边 + 木牌城池。最像“桌游地图”，战略感最强，但需要把底图也改成彩色纸片。</span>
+      </figcaption>
+    </figure>
+    <figure>
+      <img src="sample_B_chibi.png" alt="Q版国风">
+      <figcaption>
+        <b>B. Q版国风</b>
+        <span>明亮天空蓝 + 圆角卡片 + 可爱班宠。最容易让初中生觉得“想点开”，但地图底图还要更卡通、更亮。</span>
+      </figcaption>
+    </figure>
+    <figure>
+      <img src="sample_C_watercolor.png" alt="手绘水彩">
+      <figcaption>
+        <b>C. 手绘水彩卡通</b>
+        <span>柔和、绘本、留白多。气质最好，但战略信息最弱，远看容易糊；适合做剧情/图鉴，不太适合做主战场。</span>
+      </figcaption>
+    </figure>
+  </div>
+</body>
+</html>

@@ -1,0 +1,379 @@
+{
+  "season": {
+    "name": "S1 九州争霸",
+    "week": 1,
+    "max_orders": 3,
+    "ap": 3
+  },
+  "player_faction": "bi",
+  "factions": {
+    "bi": {
+      "name": "笔",
+      "color": "#b83b32",
+      "food": 500,
+      "wood": 500,
+      "iron": 500
+    },
+    "mo": {
+      "name": "墨",
+      "color": "#1e3a5f",
+      "food": 500,
+      "wood": 500,
+      "iron": 500
+    },
+    "zhi": {
+      "name": "纸",
+      "color": "#cf8325",
+      "food": 500,
+      "wood": 500,
+      "iron": 500
+    },
+    "yan": {
+      "name": "砚",
+      "color": "#276f57",
+      "food": 500,
+      "wood": 500,
+      "iron": 500
+    }
+  },
+  "provinces": [
+    {
+      "code": "changan",
+      "name": "长安",
+      "x": 170,
+      "y": 250,
+      "terrain": "平原",
+      "resource": "粮",
+      "vp": 3,
+      "owner": "bi",
+      "capital": true,
+      "wall": 2,
+      "garrison": 0,
+      "adjacency": [
+        "luoyang",
+        "hanzhong",
+        "taiyuan"
+      ],
+      "lon": 108.94,
+      "lat": 34.34,
+      "label_dx": -58,
+      "label_dy": -36
+    },
+    {
+      "code": "luoyang",
+      "name": "洛阳",
+      "x": 360,
+      "y": 300,
+      "terrain": "平原",
+      "resource": "粮",
+      "vp": 2,
+      "owner": "",
+      "capital": false,
+      "wall": 1,
+      "garrison": 800,
+      "adjacency": [
+        "changan",
+        "yecheng",
+        "shouchun",
+        "xiangyang"
+      ],
+      "lon": 112.45,
+      "lat": 34.62,
+      "label_dx": 28,
+      "label_dy": -30
+    },
+    {
+      "code": "chengdu",
+      "name": "成都",
+      "x": 150,
+      "y": 480,
+      "terrain": "山地",
+      "resource": "粮",
+      "vp": 3,
+      "owner": "yan",
+      "capital": true,
+      "wall": 2,
+      "garrison": 0,
+      "adjacency": [
+        "hanzhong",
+        "jiangling"
+      ],
+      "lon": 104.07,
+      "lat": 30.67,
+      "label_dx": -62,
+      "label_dy": 24
+    },
+    {
+      "code": "hanzhong",
+      "name": "汉中",
+      "x": 255,
+      "y": 390,
+      "terrain": "关隘",
+      "resource": "木",
+      "vp": 1,
+      "owner": "",
+      "capital": false,
+      "wall": 2,
+      "garrison": 600,
+      "adjacency": [
+        "changan",
+        "chengdu",
+        "xiangyang"
+      ],
+      "lon": 107.02,
+      "lat": 33.07,
+      "label_dx": -64,
+      "label_dy": -8
+    },
+    {
+      "code": "jiangling",
+      "name": "江陵",
+      "x": 365,
+      "y": 505,
+      "terrain": "河流",
+      "resource": "粮",
+      "vp": 2,
+      "owner": "yan",
+      "capital": false,
+      "wall": 1,
+      "garrison": 0,
+      "adjacency": [
+        "chengdu",
+        "xiangyang",
+        "changsha",
+        "jianye"
+      ],
+      "lon": 112.24,
+      "lat": 30.33,
+      "label_dx": -18,
+      "label_dy": 36
+    },
+    {
+      "code": "xiangyang",
+      "name": "襄阳",
+      "x": 455,
+      "y": 380,
+      "terrain": "关隘",
+      "resource": "铁",
+      "vp": 2,
+      "owner": "",
+      "capital": false,
+      "wall": 2,
+      "garrison": 900,
+      "adjacency": [
+        "luoyang",
+        "hanzhong",
+        "jiangling",
+        "shouchun",
+        "changsha"
+      ],
+      "lon": 112.14,
+      "lat": 32.04,
+      "label_dx": 30,
+      "label_dy": -38
+    },
+    {
+      "code": "jianye",
+      "name": "建业",
+      "x": 690,
+      "y": 445,
+      "terrain": "河流",
+      "resource": "粮",
+      "vp": 3,
+      "owner": "zhi",
+      "capital": true,
+      "wall": 2,
+      "garrison": 0,
+      "adjacency": [
+        "jiangling",
+        "shouchun",
+        "kuaiji"
+      ],
+      "lon": 118.8,
+      "lat": 32.06,
+      "label_dx": 36,
+      "label_dy": 8
+    },
+    {
+      "code": "kuaiji",
+      "name": "会稽",
+      "x": 810,
+      "y": 520,
+      "terrain": "森林",
+      "resource": "木",
+      "vp": 1,
+      "owner": "zhi",
+      "capital": false,
+      "wall": 1,
+      "garrison": 0,
+      "adjacency": [
+        "jianye"
+      ],
+      "lon": 120.58,
+      "lat": 30,
+      "label_dx": 42,
+      "label_dy": 30
+    },
+    {
+      "code": "taiyuan",
+      "name": "太原",
+      "x": 430,
+      "y": 155,
+      "terrain": "山地",
+      "resource": "铁",
+      "vp": 2,
+      "owner": "mo",
+      "capital": true,
+      "wall": 2,
+      "garrison": 0,
+      "adjacency": [
+        "changan",
+        "yecheng"
+      ],
+      "lon": 112.55,
+      "lat": 37.87,
+      "label_dx": 0,
+      "label_dy": -48
+    },
+    {
+      "code": "yecheng",
+      "name": "邺城",
+      "x": 565,
+      "y": 220,
+      "terrain": "平原",
+      "resource": "粮",
+      "vp": 2,
+      "owner": "mo",
+      "capital": false,
+      "wall": 1,
+      "garrison": 0,
+      "adjacency": [
+        "taiyuan",
+        "luoyang",
+        "shouchun"
+      ],
+      "lon": 114.62,
+      "lat": 36.36,
+      "label_dx": 30,
+      "label_dy": -34
+    },
+    {
+      "code": "shouchun",
+      "name": "寿春",
+      "x": 600,
+      "y": 340,
+      "terrain": "平原",
+      "resource": "粮",
+      "vp": 1,
+      "owner": "",
+      "capital": false,
+      "wall": 1,
+      "garrison": 500,
+      "adjacency": [
+        "luoyang",
+        "yecheng",
+        "xiangyang",
+        "jianye"
+      ],
+      "lon": 116.78,
+      "lat": 32.58,
+      "label_dx": 46,
+      "label_dy": 14
+    },
+    {
+      "code": "changsha",
+      "name": "长沙",
+      "x": 500,
+      "y": 585,
+      "terrain": "森林",
+      "resource": "木",
+      "vp": 1,
+      "owner": "",
+      "capital": false,
+      "wall": 1,
+      "garrison": 500,
+      "adjacency": [
+        "jiangling",
+        "xiangyang"
+      ],
+      "lon": 112.94,
+      "lat": 28.23,
+      "label_dx": -66,
+      "label_dy": 26
+    }
+  ],
+  "connections": [
+    [
+      "changan",
+      "luoyang"
+    ],
+    [
+      "changan",
+      "hanzhong"
+    ],
+    [
+      "changan",
+      "taiyuan"
+    ],
+    [
+      "luoyang",
+      "yecheng"
+    ],
+    [
+      "luoyang",
+      "shouchun"
+    ],
+    [
+      "luoyang",
+      "xiangyang"
+    ],
+    [
+      "chengdu",
+      "hanzhong"
+    ],
+    [
+      "chengdu",
+      "jiangling"
+    ],
+    [
+      "hanzhong",
+      "xiangyang"
+    ],
+    [
+      "jiangling",
+      "xiangyang"
+    ],
+    [
+      "jiangling",
+      "changsha"
+    ],
+    [
+      "jiangling",
+      "jianye"
+    ],
+    [
+      "xiangyang",
+      "shouchun"
+    ],
+    [
+      "xiangyang",
+      "changsha"
+    ],
+    [
+      "jianye",
+      "shouchun"
+    ],
+    [
+      "jianye",
+      "kuaiji"
+    ],
+    [
+      "taiyuan",
+      "yecheng"
+    ],
+    [
+      "yecheng",
+      "shouchun"
+    ]
+  ]
+}

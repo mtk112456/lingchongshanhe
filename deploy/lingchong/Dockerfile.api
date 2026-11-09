@@ -1,0 +1,22 @@
+FROM php:8.3-apache
+
+RUN docker-php-ext-install pdo_mysql \
+    && a2enmod rewrite \
+    && printf '%s\n' \
+       '<Directory /var/www/html/public>' \
+       '    AllowOverride All' \
+       '</Directory>' \
+       > /etc/apache2/conf-available/lingchong.conf \
+    && a2enconf lingchong
+
+RUN sed -ri -e 's!/var/www/html!/var/www/html/public!g' \
+    /etc/apache2/sites-available/*.conf \
+    /etc/apache2/apache2.conf \
+    /etc/apache2/conf-available/*.conf
+
+COPY server/slice/ /var/www/html/
+
+RUN mkdir -p /var/www/html/logs \
+    && chown -R www-data:www-data /var/www/html
+
+EXPOSE 80

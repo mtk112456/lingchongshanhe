@@ -1,0 +1,6 @@
+server/slice/config.local.php
+server/slice/testdb/
+server/slice/logs/
+client/build/
+client/.godot/
+.git/

@@ -1,0 +1,68 @@
+name: Agent Task
+description: 给 OpenCode / Antigravity 的可验收任务
+title: "[Agent] "
+labels: ["agent-task"]
+body:
+  - type: dropdown
+    id: owner
+    attributes:
+      label: 负责人
+      options:
+        - OpenCode
+        - Antigravity
+        - GPT / Codex
+        - 人工
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: 区域
+      options:
+        - 后端 / 数据库
+        - Godot 客户端
+        - 部署 / 实时
+        - 验收 / 交接
+        - 美术 / 内容
+    validations:
+      required: true
+
+  - type: textarea
+    id: goal
+    attributes:
+      label: 目标
+      description: 只写这个任务要达成的结果，不要写大而全的规划
+      placeholder: 例如：战局回放在平板比例下不溢出，变化城池高亮可读
+    validations:
+      required: true
+
+  - type: input
+    id: files
+    attributes:
+      label: 允许修改的文件/目录
+      placeholder: client/Slice.gd, client/ReplayMap.gd
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 验收命令/标准
+      placeholder: |
+        godot --headless --path client res://tests/ReplaySmoke.tscn
+        期望：REPLAY_SMOKE PASS
+    validations:
+      required: true
+
+  - type: textarea
+    id: forbidden
+    attributes:
+      label: 禁止事项
+      value: |
+        1. 不改 server/slice/src 或 schema
+        2. 不修改 students.score
+        3. 不提交真实学生数据/密码
+        4. 不覆盖其他 Agent 的未提交改动
+    validations:
+      required: true

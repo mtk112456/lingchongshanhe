@@ -1,0 +1,67 @@
+name: backend-tests
+
+on:
+  push:
+    paths:
+      - 'server/slice/**'
+      - '.github/workflows/backend-tests.yml'
+  pull_request:
+    paths:
+      - 'server/slice/**'
+      - '.github/workflows/backend-tests.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  slice-tests:
+    runs-on: ubuntu-latest
+
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: qingzhu_slice_test
+          MARIADB_USER: qingzhu_test
+          MARIADB_PASSWORD: slice_dev_only_2026
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_mysql, mbstring
+          coverage: none
+
+      - name: Show PHP
+        run: php -v
+
+      - name: Setup test database
+        env:
+          SLICE_CONFIG: ${{ github.workspace }}/server/slice/config.ci.php
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_NAME: qingzhu_slice_test
+          DB_USER: qingzhu_test
+          DB_PASS: slice_dev_only_2026
+        run: php server/slice/scripts/setup_test_db.php
+
+      - name: Run slice tests
+        env:
+          SLICE_CONFIG: ${{ github.workspace }}/server/slice/config.ci.php
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_NAME: qingzhu_slice_test
+          DB_USER: qingzhu_test
+          DB_PASS: slice_dev_only_2026
+        run: php server/slice/tests/run.php
