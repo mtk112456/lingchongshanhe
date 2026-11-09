@@ -1,0 +1,42 @@
+name-template: 'v$RESOLVED_VERSION'
+tag-template: 'v$RESOLVED_VERSION'
+categories:
+  - title: 'Features'
+    labels:
+      - 'feature'
+      - 'area:client'
+      - 'area:server'
+  - title: 'Fixes'
+    labels:
+      - 'fix'
+      - 'bug'
+  - title: 'Art'
+    labels:
+      - 'area:art'
+  - title: 'Documentation'
+    labels:
+      - 'docs'
+  - title: 'Dependencies'
+    labels:
+      - 'dependencies'
+change-template: '- $TITLE @$AUTHOR (#$NUMBER)'
+change-title-escapes: '\<*_&'
+version-resolver:
+  major:
+    labels:
+      - 'major'
+  minor:
+    labels:
+      - 'minor'
+  patch:
+    labels:
+      - 'patch'
+  default: patch
+template: |
+  ## Changes
+
+  $CHANGES
+
+  ## Artifact
+
+  - `build/qingzhu_slice.apk`（如本次包含）

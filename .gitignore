@@ -23,7 +23,13 @@ tools/mariadb/
 tools/mariadb.zip
 tools/Godot_v4.7.2-stable/
 tools/CocosDashboard/
+tools/CocosDashboard*.exe
 tools/_templates_extract/
+tools/Godot_v4.7.2-stable_*.zip
+tools/Godot_v4.7.2-stable_*.tpz
+
+# 外部 Agent 会话 ID（只存本地，不进公开仓库）
+.agents.local.md
 
 # 开源参考克隆（只保留分析文档）
 reference/Unciv/

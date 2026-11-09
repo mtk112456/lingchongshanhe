@@ -39,7 +39,6 @@ var name_edit: LineEdit
 var pass_edit: LineEdit
 var login_status: Label
 var login_student_btn: Button
-var login_teacher_btn: Button
 var dev_settings_dialog: AcceptDialog
 
 # 顶栏 HUD 节点
@@ -223,8 +222,8 @@ func _build_login() -> void:
 	sep.custom_minimum_size = Vector2(0, 10)
 	v.add_child(sep)
 
-	# 登录表单（仅姓名/学号与密码，绝不向学生展示复杂的网络设置）
-	name_edit = _line_edit("学号 / 姓名")
+	# 登录表单：学生只填姓名与密码，不展示学号/网络设置
+	name_edit = _line_edit("姓名")
 	name_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	v.add_child(name_edit)
 
@@ -239,11 +238,7 @@ func _build_login() -> void:
 	login_student_btn.pressed.connect(_on_login.bind(false))
 	v.add_child(login_student_btn)
 
-	login_teacher_btn = _button("师长登堂", Color("#334454"), 38)
-	login_teacher_btn.add_theme_font_size_override("font_size", 14)
-	login_teacher_btn.pressed.connect(_on_login.bind(true))
-	v.add_child(login_teacher_btn)
-
+	# App 只给学生使用；教师入口不放在客户端，后续走 Web 后台。
 	login_status = _label("", 13, CORAL)
 	login_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	login_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -290,11 +285,6 @@ func _build_dev_settings_dialog() -> void:
 	fill_student.custom_minimum_size = Vector2(0, 34)
 	fill_student.pressed.connect(_fill_test_student)
 	quick.add_child(fill_student)
-	var fill_teacher := Button.new()
-	fill_teacher.text = "填入教师账号"
-	fill_teacher.custom_minimum_size = Vector2(0, 34)
-	fill_teacher.pressed.connect(_fill_test_teacher)
-	quick.add_child(fill_teacher)
 	v.add_child(quick)
 
 	var local_btn := Button.new()
@@ -665,10 +655,6 @@ func _fill_test_student() -> void:
 	name_edit.text = "青竹一"
 	pass_edit.text = "slice2026"
 
-func _fill_test_teacher() -> void:
-	name_edit.text = "teacher"
-	pass_edit.text = "teacher2026"
-
 func _use_local_forward() -> void:
 	url_edit.text = "http://127.0.0.1:8080"
 
@@ -677,19 +663,18 @@ func _load_config() -> void:
 	if cfg.load("user://slice.cfg") == OK:
 		url_edit.text = cfg.get_value("net", "url", "http://127.0.0.1:8080")
 		name_edit.text = cfg.get_value("auth", "name", "")
-		pass_edit.text = cfg.get_value("auth", "pass", "")
+		# 不持久化密码：只保存服务器和姓名。
+		pass_edit.text = ""
 	api.set_base_url(url_edit.text)
 
 func _save_config() -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value("net", "url", url_edit.text)
 	cfg.set_value("auth", "name", name_edit.text)
-	cfg.set_value("auth", "pass", pass_edit.text)
 	cfg.save("user://slice.cfg")
 
 func _set_login_busy(busy: bool) -> void:
 	login_student_btn.disabled = busy
-	login_teacher_btn.disabled = busy
 	name_edit.editable = not busy
 	pass_edit.editable = not busy
 	login_status.text = "正在推开山河画卷..." if busy else ""
@@ -702,7 +687,7 @@ func _on_login(as_teacher: bool) -> void:
 	var name_val := name_edit.text.strip_edges()
 	var pass_val := pass_edit.text.strip_edges()
 	if name_val == "" or pass_val == "":
-		login_status.text = "请填写学号/姓名与密码。"
+		login_status.text = "请填写姓名与密码。"
 		return
 	api.set_base_url(url_edit.text)
 	_save_config()

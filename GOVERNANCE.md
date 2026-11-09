@@ -27,6 +27,26 @@
 
 ---
 
+## 1.5 外部 Agent 会话怎么桥接
+
+OpenCode、Antigravity、GPT/Codex 的对话上下文**不互通**，也不能靠互相 @ 来同步。
+
+做法：
+
+1. 你保存三个会话 ID（只放本地 `.agents.local.md`，不要提交公开仓库）；
+2. 每次切换 Agent 时，让它先读：
+   - `AGENTS.md`
+   - `GOVERNANCE.md`
+   - `DECISIONS.md`
+   - 当前 Issue/PR
+3. 所有结论写回 GitHub Issue/PR，不写在聊天里；
+4. 合并/发布只由技术主心骨做；
+5. 需要跨 Agent 决策时，由你把问题贴到对应会话，再把结论写进 Issue。
+
+**会话 ID 属于本地协作信息，不进入公开仓库。**
+
+---
+
 ## 2. 单一主干
 
 ```text
