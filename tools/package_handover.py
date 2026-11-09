@@ -17,7 +17,7 @@ def files_for(full: bool):
         if "__pycache__" in path.parts:
             continue
         rel = path.relative_to(HANDOVER).as_posix()
-        if not full and rel.startswith("build/"):
+        if not full and (rel.startswith("build/") or rel.startswith("client/assets/")):
             continue
         yield path, rel
 
