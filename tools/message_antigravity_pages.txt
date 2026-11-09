@@ -1,0 +1,38 @@
+【OpenCode / 技术主心骨】页面设计任务
+
+仓库最新 main：https://github.com/mtk112456/lingchongshanhe
+
+先读：
+- AGENTS.md
+- GOVERNANCE.md
+- SCREEN_SPEC.md（逐页施工图）
+- PAGE_DESIGN.md（热门游戏页面参考）
+- UI_STRUCTURE.md（导航骨架）
+- TASKS_ANTIGRAVITY.md
+
+产品策略不变：
+- App 只给学生用，不提供教师登录；
+- 学生登录只填姓名 + 密码，对应现有 students.name/show_name + students.password；
+- 密码不得写入 user://slice.cfg；
+- 不改 server/、schema、migrations、deploy/、HANDOVER.md。
+
+本轮先做 P0 页面骨架（不要等 GPT 美术）：
+1. S01 主地图：顶部 HUD + 左侧栏 + 右侧栏 + 底部导航；
+2. S02 城池底部抽屉；
+3. S03 军令确认浮层；
+4. S04 战报独立全屏页；
+5. S05 战局回放独立全屏页；
+6. 其他页面先做入口占位，不要把所有功能塞回主地图。
+
+设计要求：
+- 手机：侧栏收成悬浮图标，底部导航 5 项；
+- 平板：侧栏展开，地图更大；
+- 不暴露教师入口/服务器地址在主界面；
+- 不用 Godot 默认按钮/下拉框；
+- GPT 资产未到前用统一占位色块，不要把代码画的圆点当最终美术。
+
+完成后：
+- 跑 ClientSmoke / ReplaySmoke；
+- 附手机/平板截图；
+- 写清改了哪些文件、哪些页面完成、哪些还是占位；
+- 不要直接 push main，等我验收合并。

@@ -1,0 +1,20 @@
+【OpenCode 指令】现在进入画图阶段，不要只交 prompt。
+
+项目：D:\DeskBox\游戏
+先读：
+- ART_BRIEF_GPT.md
+- TASKS_GPT_ART.md
+- art_src/gpt/README.md
+- art_src/gpt/prompt_style_a.md / prompt_style_b.md / prompt_style_c.md
+
+本轮任务：
+1. 用你的图像生成能力画 3 张 16:10 风格锁定概念图：
+   - art_src/gpt/style_a.png（纸雕绘本）
+   - art_src/gpt/style_b.png（明亮 Q 版纸雕）
+   - art_src/gpt/style_c.png（手绘水彩纸雕）
+2. 三张必须同一构图：左侧 70% 五节点地图，右侧 30% 奶油纸卡 UI 面板；无文字/字母/数字；统一色板。
+3. 如果你没有图像生成工具，立即写 art_src/gpt/HANDOFF.md，明确写 BLOCKED，不许伪造图片，不许只交 prompt 当完成。
+4. 完成后写 HANDOFF.md：文件列表、生成结果、限制、下一步。
+5. 只写 art_src/gpt/，不改 server/、client/、schema、deploy、HANDOVER；不 commit、不 push。
+
+先回复：你是否真的能生成图片；能就出 3 张，不能就写 BLOCKED。
