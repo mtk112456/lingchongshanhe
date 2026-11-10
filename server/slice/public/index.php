@@ -24,6 +24,25 @@ if ($method === 'GET' && ($path === '/teacher' || $path === '/teacher.html')) {
     exit;
 }
 
+// 根路径说明页：浏览器直接打开 8081 时不要返回 NOT_FOUND。
+if ($method === 'GET' && $path === '/') {
+    header('Content-Type: text/html; charset=utf-8');
+    echo '<!doctype html><html lang="zh-CN"><meta charset="utf-8">'
+        . '<title>青竹文房 · 试跑 API</title>'
+        . '<style>body{font-family:system-ui,sans-serif;background:#f6efe2;color:#2f2721;padding:40px;line-height:1.8}'
+        . 'code{background:#eee3cf;padding:2px 6px;border-radius:4px}a{color:#8a3b2e}</style>'
+        . '<h1>青竹文房 · 试跑 API</h1>'
+        . '<p>服务正在运行。学生 App 请填：</p>'
+        . '<p><code>http://' . htmlspecialchars((string)($_SERVER['HTTP_HOST'] ?? '127.0.0.1:8081'), ENT_QUOTES, 'UTF-8') . '</code></p>'
+        . '<ul>'
+        . '<li><a href="/api/health">/api/health</a> — 健康检查</li>'
+        . '<li><a href="/teacher">/teacher</a> — 教师控制台</li>'
+        . '</ul>'
+        . '<p>学生账号：青竹一~六、墨点一~六 / <code>slice2026</code></p>'
+        . '</html>';
+    exit;
+}
+
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Auth-Token, X-Request-Id');
