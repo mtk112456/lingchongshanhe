@@ -1,0 +1,77 @@
+【12 城叠层原型 · 13 节点】
+
+GPT 已交付 `MAP12_LAYOUT_CONCEPT_V2.png` 和 `MAP12_ANCHORS_V2.md`。请做 13 节点叠层原型，不要替换现有 5 节点主场景。
+
+先读：
+
+```text
+art_src/gpt/ai_pipeline_v1/MAP12_LAYOUT_CONCEPT_V2.png
+art_src/gpt/ai_pipeline_v1/MAP12_ANCHORS_V2.md
+art_src/gpt/ai_pipeline_v1/city_changan.png
+art_src/gpt/ai_pipeline_v1/city_liangzhou.png
+client/MAP12_REVIEW_ANTIGRAVITY.md
+MAP_SPEC.md 第 8 节
+DETAIL_CHECKLIST.md
+```
+
+## 1. 原型范围
+
+- 背景：`MAP12_LAYOUT_CONCEPT_V2.png` 2560×1920；
+- 13 节点：
+  - 西北笔：凉州、汉中、襄阳
+  - 东北墨：邺城、太原、洛阳
+  - 西南砚：成都、江陵、长沙
+  - 东南纸：建业、会稽、寿春
+  - 中心中立：长安
+- 锚点严格用 `MAP12_ANCHORS_V2.md` 的归一化坐标；
+- 现有 5 个切片城 Sprite + 长安 + 凉州可复用；其余 10 城原型阶段可复用现有 Sprite 并加不同阵营色/旗帜，标注为临时；
+- 长安用 `city_changan.png`，特殊金环 + 更大尺寸；凉州用 `city_liangzhou.png`。
+
+## 2. 路线拓扑（原型）
+
+- 每区 3 城内部三角互联（3 条/区，共 12 条）；
+- 每区选 1 座主城通向长安（4 条主干道）；
+- 共 16 条边；以真实 `edges` 数据驱动，不画死线；
+- 选中节点时高亮其所有相邻边，沿用现有三层金色流光。
+
+## 3. LOD / 相机
+
+- 缩放范围 0.35x–2.5x；
+- 0.35x：隐藏城名/归属纸签，只显示阵营光环、城池 Sprite、旗帜、路线；
+- 0.50x：手机横屏显示精简单行城名，隐藏归属副签；
+- 0.80x+：完整城名/归属；
+- 1.4x+：地标/文化标签；
+- 长安王城在 0.35x 用更大金环，不能和普通城混。
+
+## 4. 验收截图
+
+平板 1400×1000：
+
+```text
+screenshot_tablet_map12_zoom_035.png
+screenshot_tablet_map12_selected_changan.png
+```
+
+手机横屏 720×514：
+
+```text
+screenshot_phone_landscape_map12_zoom_050.png
+screenshot_phone_landscape_map12_water.png
+```
+
+检查：
+
+- 0.35x 能数清 12 个外围城 + 长安王城；
+- 0.50x 东南水网三城不混、路线不被水面高光吞；
+- 长安王城不被误认成普通城；
+- 最低城不被抽屉/底部 Dock 挡；
+- 城名/归属纸签不互相骑跨。
+
+## 5. 交付
+
+- 新增 `client/tests/Map12Prototype.tscn` / `.gd` 或独立测试场景；
+- 不替换 `Slice.tscn`，不影响 5 节点主流程；
+- 重跑 ClientSmoke / ReplaySmoke，确认无回归；
+- 写 `client/MAP12_PROTOTYPE_REPORT.md`：改了什么、锚点、拓扑、截图、没做/阻塞。
+
+不要改 server/API；不要复制商业素材；图中不出现可读文字。
