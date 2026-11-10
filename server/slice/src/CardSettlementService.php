@@ -209,8 +209,10 @@ final class CardSettlementService
             'fire' => $fire,
         ];
 
-        // 守军：Phase 1 仍是固定守军，P2 换真实驻守
-        $defTroops = ($ownerFactionId === null ? 1000.0 : 1200.0) * 1.10;
+        // 守军：Phase 1 仍是固定守军，P2 换真实驻守。
+        // 中立 990：3 队约 1080 兵能压到 50% 以下（score 1），两晚易主；
+        // 1100 会卡在 1007 城墙（score 0），与“普通城 1–1.5 晚”不符。
+        $defTroops = ($ownerFactionId === null ? 900.0 : 1200.0) * 1.10;
         $defComp = $ownerFactionId === null
             ? ['shield', 'shield', 'arc']
             : ['shield', 'spear', 'arc'];
