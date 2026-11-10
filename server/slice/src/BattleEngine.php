@@ -162,7 +162,7 @@ final class BattleEngine
         }
         unset($u);
 
-        $initialUnits = array_map(fn($u) => [
+        $initialUnits = array_values(array_map(fn($u) => [
             'id' => $u['id'],
             'side' => $u['side'],
             'lane' => $u['lane'],
@@ -170,7 +170,7 @@ final class BattleEngine
             'type' => $u['type'],
             'troops' => round($u['troops'], 1),
             'max_troops' => round($u['max_troops'], 1),
-        ], $units);
+        ], $units));
 
         $wall = (float)self::WALL_BASE;
         $events = [];

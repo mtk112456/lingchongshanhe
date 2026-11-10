@@ -1,0 +1,248 @@
+# Phase 1 客户端接入对照表
+
+> 给 Antigravity。后端已全部就绪，客户端只需接这 8 个调用。  
+> 先接 `state`，再接编成/手牌，最后接战斗回放。
+
+---
+
+## 1. GET /api/slice/state
+
+一次拿到地图、民心、手牌、编成、已出令。
+
+```json
+{
+  "map": {
+    "nodes": [
+      {"code": "N2", "name": "听雨台", "morale": 1, "morale_cap": 2, "owner": null}
+    ]
+  },
+  "hand": {
+    "cards": ["night_raid", "fortify", "scout", "supply"],
+    "redraw_used": false
+  },
+  "composition": {
+    "types": ["cav", "shield", "arc"],
+    "changed_once": false
+  },
+  "card_orders": [
+    {"slot": 0, "card_code": "night_raid", "target_node_code": "N2", "lane": 1, "row_pos": "front"}
+  ]
+}
+```
+
+客户端渲染：
+
+- 每座城画 `morale / morale_cap` 小格；
+- 底部 4 张手牌；
+- 编成面板 3 个兵种；
+- 已出令显示在槽位里。
+
+---
+
+## 2. POST /api/slice/composition
+
+```json
+{"week_no": 1, "types": ["cav", "cav", "shield"]}
+```
+
+响应：
+
+```json
+{"types": ["cav", "cav", "shield"], "changed_once": false}
+```
+
+- `types` 必须 3 个；
+- 可重复；
+- 第一次设置 `changed_once=false`；
+- 第二次改 `changed_once=true`；
+- 第三次返回 `COMPOSITION_LOCKED`。
+
+---
+
+## 3. POST /api/slice/hand/redraw
+
+```json
+{"turn_id": 1}
+```
+
+响应：
+
+```json
+{"cards": ["fire_attack", "fortify", "feint", "supply"], "redraw_used": true}
+```
+
+- 每天 1 次；
+- 第二次返回 `REDRAW_USED`。
+
+---
+
+## 4. POST /api/slice/order/play
+
+```json
+{
+  "turn_id": 1,
+  "slot": 0,
+  "card_code": "night_raid",
+  "target_node_code": "N2",
+  "lane": 1,
+  "row_pos": "front",
+  "request_key": "p1_t1_s0_001"
+}
+```
+
+响应：
+
+```json
+{"slot": 0, "card_code": "night_raid", "target_node_code": "N2", "lane": 1, "row_pos": "front"}
+```
+
+- `slot` 0/1/2；
+- `lane` 1/2/3；
+- `row_pos` front/back；
+- `request_key` 8–64 位字母数字下划线；
+- 同一张牌不能出两次；
+- 同一槽位可以改目标。
+
+错误码：
+
+```text
+CARD_NOT_IN_HAND
+CARD_ALREADY_PLAYED
+PLAY_LIMIT_REACHED
+BAD_SLOT / BAD_LANE / BAD_ROW / BAD_REQUEST_KEY
+```
+
+---
+
+## 5. POST /api/slice/order/withdraw
+
+```json
+{"turn_id": 1, "slot": 0}
+```
+
+响应：
+
+```json
+{"withdrawn": true}
+```
+
+---
+
+## 6. POST /api/slice/battle/demo
+
+先用演示战斗把回放接通；正式版再换成城防数据。
+
+```json
+{"turn_id": 1, "node_code": "N2", "fire": true}
+```
+
+响应：
+
+```json
+{
+  "battle_id": 3,
+  "attacker": {"general": "def", "troops": 1305, "composition": ["cav","shield","arc"], "fire": true},
+  "defender": {"general": "atk", "troops": 1320, "composition": ["shield","spear","arc"]},
+  "log": {
+    "att_slots": {...},
+    "def_slots": {...},
+    "units": [...],
+    "events": [...],
+    "result": {"wall": 428.5, "score": 1, "ticks": 49, "headline": "撼城"}
+  }
+}
+```
+
+客户端：
+
+```gdscript
+battle_replay.play_data(response.data.log)
+```
+
+`log` 的格式和 `BattleReplay.gd` 现在的样例完全一致。
+
+---
+
+## 7. POST /api/slice/battle/settle
+
+```json
+{"battle_id": 3}
+```
+
+响应：
+
+```json
+{
+  "node_code": "N2",
+  "cap": 2,
+  "morale_before": 0,
+  "morale_after": 1,
+  "owner_before": null,
+  "owner_after": null,
+  "captured": false,
+  "reason": "morale_push"
+}
+```
+
+客户端：
+
+- 更新该城民心；
+- 如果 `captured=true`，换旗、播易主动画；
+- 然后重新 `GET /state`。
+
+---
+
+## 8. GET /api/slice/battle?id=3
+
+读回完整战斗，用于历史回放。
+
+```json
+{
+  "id": 3,
+  "node_code": "N2",
+  "log": {"units": [...], "events": [...], "result": {...}},
+  "result": {"wall": 428.5, "score": 1, "ticks": 49, "headline": "撼城"}
+}
+```
+
+---
+
+## 9. 客户端流程
+
+```text
+登录
+→ GET /state
+→ 渲染地图（民心）、手牌、编成
+→ 改编成 POST /composition
+→ 出牌 POST /order/play × 3
+→ 开战 POST /battle/demo
+→ BattleReplay.play_data(log)
+→ POST /battle/settle
+→ GET /state（刷新民心/归属）
+```
+
+---
+
+## 10. 接入位置
+
+| 文件 | 改什么 |
+|---|---|
+| `client/Api.gd` | 加 `getState` 已有；加 `setComposition`、`redrawHand`、`playCard`、`withdrawCard`、`demoBattle`、`settleBattle`、`getBattle` |
+| `client/Slice.gd` | `_apply_state` 里读 `hand`/`composition`/`card_orders`；底部加手牌条；城池卡加民心格 |
+| `client/CompositionPanel.gd` | 调 `POST /composition` |
+| `client/BattleReplay.gd` | 已经能读 `log`；接 `demoBattle` 的返回即可 |
+
+---
+
+## 11. 验收
+
+```text
+1. 登录后能看到 4 张手牌和 3 个兵种
+2. 改编成后刷新不变
+3. 出 3 张牌后 /state 的 card_orders 有 3 条
+4. 开战能播 60 秒回放，可跳过
+5. 结算后城池民心 +1
+6. 第二场结算后易主
+7. 720×514 手牌不挡城池抽屉
+8. ClientSmoke / ReplaySmoke / BattleReplaySmoke 全过
+```
