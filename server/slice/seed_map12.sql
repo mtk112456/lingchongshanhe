@@ -24,20 +24,20 @@ INSERT INTO slice_nodes
   (game_id, node_code, name, x, y, node_type, owner_faction_id, initial_owner_faction_id, morale, sort_order)
 VALUES
   (@game_id, 'liangzhou', '凉州',   688,  461, 'camp',    @bi,  @bi,  0, 1),
-  (@game_id, 'hanzhong',  '汉中',  1229,  654, 'pass',    @bi,  @bi,  0, 2),
-  (@game_id, 'xiangyang', '襄阳',   946, 1038, 'pass',    @bi,  @bi,  0, 3),
+  (@game_id, 'hanzhong',  '汉中',  1229,  654, 'pass',    NULL, NULL, 0, 2),
+  (@game_id, 'xiangyang', '襄阳',   946, 1038, 'pass',    NULL, NULL, 0, 3),
   (@game_id, 'yecheng',   '邺城',  2679,  488, 'camp',    @mo,  @mo,  0, 4),
-  (@game_id, 'taiyuan',   '太原',  3449,  685, 'culture', @mo,  @mo,  0, 5),
-  (@game_id, 'luoyang',   '洛阳',  3019, 1032, 'culture', @mo,  @mo,  0, 6),
+  (@game_id, 'taiyuan',   '太原',  3449,  685, 'culture', NULL, NULL, 0, 5),
+  (@game_id, 'luoyang',   '洛阳',  3019, 1032, 'culture', NULL, NULL, 0, 6),
   (@game_id, 'chengdu',   '成都',   733, 1908, 'camp',    @yan, @yan, 0, 7),
-  (@game_id, 'jiangling', '江陵',  1094, 2107, 'ferry',   @yan, @yan, 0, 8),
-  (@game_id, 'changsha',  '长沙',   905, 2451, 'culture', @yan, @yan, 0, 9),
+  (@game_id, 'jiangling', '江陵',  1094, 2107, 'ferry',   NULL, NULL, 0, 8),
+  (@game_id, 'changsha',  '长沙',   905, 2451, 'culture', NULL, NULL, 0, 9),
   (@game_id, 'jianye',    '建业',  3285, 1908, 'camp',    @zhi, @zhi, 0, 10),
-  (@game_id, 'kuaiji',    '会稽',  3060, 2239, 'water',   @zhi, @zhi, 0, 11),
-  (@game_id, 'shouchun',  '寿春',  2884, 2559, 'pass',    @zhi, @zhi, 0, 12),
+  (@game_id, 'kuaiji',    '会稽',  3060, 2239, 'water',   NULL, NULL, 0, 11),
+  (@game_id, 'shouchun',  '寿春',  2884, 2559, 'pass',    NULL, NULL, 0, 12),
   (@game_id, 'changan',   '长安',  2048, 1536, 'king',    NULL, NULL, 0, 13);
 
--- 4 个区域三角 + 4 条主城通长安 = 16 条
+-- 4 个区域三角 + 4 条主城通长安 + 3 条跨区边 = 19 条
 INSERT INTO slice_edges (game_id, a_node_code, b_node_code) VALUES
   (@game_id, 'liangzhou', 'hanzhong'),
   (@game_id, 'hanzhong',  'xiangyang'),
@@ -54,7 +54,10 @@ INSERT INTO slice_edges (game_id, a_node_code, b_node_code) VALUES
   (@game_id, 'hanzhong',  'changan'),
   (@game_id, 'luoyang',   'changan'),
   (@game_id, 'jiangling', 'changan'),
-  (@game_id, 'jianye',    'changan');
+  (@game_id, 'jianye',    'changan'),
+  (@game_id, 'liangzhou', 'taiyuan'),
+  (@game_id, 'xiangyang', 'luoyang'),
+  (@game_id, 'jiangling', 'jianye');
 
 SET @stu1 = (SELECT id FROM students WHERE show_name = '青竹一');
 SET @stu2 = (SELECT id FROM students WHERE show_name = '青竹二');
@@ -111,4 +114,4 @@ UPDATE slice_games SET current_turn_id = @turn_id WHERE id = @game_id;
 
 INSERT INTO slice_audit_log (game_id, turn_id, action, detail_json)
 VALUES (@game_id, @turn_id, 'seed',
-  JSON_OBJECT('game', 'MAP12_TEST', 'nodes', 13, 'edges', 16, 'factions', 4, 'players', 8));
+  JSON_OBJECT('game', 'MAP12_TEST', 'nodes', 13, 'edges', 19, 'factions', 4, 'players', 8));

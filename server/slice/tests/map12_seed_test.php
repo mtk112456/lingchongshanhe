@@ -47,7 +47,26 @@ foreach ($nodes as $n) {
 check('长安是中立的王城', $changan !== null && $changan['node_type'] === 'king' && $changan['owner_faction_id'] === null);
 
 $edges = (int)$pdo->query("SELECT COUNT(*) FROM slice_edges WHERE game_id = {$gameId}")->fetchColumn();
-check('16 条边', $edges === 16, 'edges=' . $edges);
+check('19 条边', $edges === 19, 'edges=' . $edges);
+
+$owned = (int)$pdo->query("SELECT COUNT(*) FROM slice_nodes WHERE game_id = {$gameId} AND owner_faction_id IS NOT NULL")->fetchColumn();
+check('4 城归阵营', $owned === 4, 'owned=' . $owned);
+check('9 城中立', (13 - $owned) === 9, 'neutral=' . (13 - $owned));
+
+$crossPairs = [
+    ['liangzhou', 'taiyuan'],
+    ['xiangyang', 'luoyang'],
+    ['jiangling', 'jianye'],
+];
+$edgeStmt = $pdo->prepare(
+    "SELECT COUNT(*) FROM slice_edges
+     WHERE game_id = ?
+       AND ((a_node_code = ? AND b_node_code = ?) OR (a_node_code = ? AND b_node_code = ?))"
+);
+foreach ($crossPairs as [$a, $b]) {
+    $edgeStmt->execute([$gameId, $a, $b, $b, $a]);
+    check("跨区边 {$a}—{$b}", (int)$edgeStmt->fetchColumn() === 1);
+}
 
 $factions = $pdo->query("SELECT code, start_node_code FROM slice_factions WHERE game_id = {$gameId} ORDER BY sort_order")->fetchAll();
 check('4 个阵营', count($factions) === 4, json_encode($factions, JSON_UNESCAPED_UNICODE));
