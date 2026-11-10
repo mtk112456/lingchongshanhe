@@ -247,25 +247,29 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/trial_teacher.ps1 -Bas
 
 ## 7. 数据导出
 
-试跑后导出：
+试跑后一条命令：
 
-```sql
-SELECT * FROM slice_order_slots ORDER BY turn_id, player_id, slot;
-SELECT * FROM slice_battles ORDER BY turn_id, id;
-SELECT * FROM slice_node_changes ORDER BY turn_id, node_code;
-SELECT * FROM slice_turns ORDER BY turn_no;
+```powershell
+$env:SLICE_CONFIG = "$PWD\server\slice\config.trial.php"
+php server/slice/scripts/export_trial.php
 ```
 
-保存为：
+输出：
 
 ```text
-trial_results/YYYYMMDD/
+trial_results/YYYYMMDD_HHMMSS/
   orders.csv
   battles.csv
   changes.csv
   turns.csv
+  nodes.csv
+  compositions.csv
+  summary.json
   observation.md
 ```
+
+`summary.json` 含场次、战斗数、易主数、学生数；
+`observation.md` 已带 8 人观察表，可直接打印或填写。
 
 ---
 
