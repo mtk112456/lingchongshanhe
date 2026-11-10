@@ -99,8 +99,7 @@ try {
         Write-Host ""
         Write-Host "== Turn $turn (id=$turnId) =="
 
-        $cities = @("N1", "N2", "N3")
-        $turnOffset = ($turn - 1) % 3
+        # 主城固定 N2：4 笔 vs 3 墨；墨家第 4 人打 N1 侧城
 
         for ($pi = 0; $pi -lt $players.Count; $pi++) {
             $p = $players[$pi]
@@ -110,7 +109,12 @@ try {
 
             # 第一回合设置编成，之后不再改
             if ($turn -eq 1) {
-                $compTypes = if ($p.faction -eq "bi") { @("cav", "shield", "arc") } else { @("shield", "spear", "arc") }
+                $compTypes = @(
+                    @("cav", "shield", "arc"),
+                    @("shield", "spear", "arc"),
+                    @("arc", "cav", "shield"),
+                    @("spear", "arc", "cav")
+                )[$pi % 4]
                 $compJson = @{ week_no = 1; types = $compTypes } | ConvertTo-Json -Compress
                 try {
                     Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/slice/composition" -Headers $headers `
@@ -124,7 +128,10 @@ try {
                 if ($pi -eq 7 -and $i -eq 2) {
                     continue
                 }
-                $target = $cities[($pi + $i + $turnOffset) % 3]
+                $target = "N2"
+                if ($p.faction -eq "mo" -and $pi -eq 7) {
+                    $target = "N1"
+                }
                 $orderJson = @{
                     turn_id = $tid
                     slot = $i

@@ -233,7 +233,8 @@ final class CardSettlementService
 
         if ($defTeams === []) {
             // 固定守军：中立 990 / 归属城 1320
-            $defTroops = ($ownerFactionId === null ? 900.0 : 1200.0) * 1.10;
+            // 固定守军：中立 803 / 归属城 1320
+            $defTroops = ($ownerFactionId === null ? 730.0 : 1200.0) * 1.10;
             $defComp = $ownerFactionId === null
                 ? ['shield', 'shield', 'arc']
                 : ['shield', 'spear', 'arc'];
