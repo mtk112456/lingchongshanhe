@@ -42,6 +42,34 @@ php server/slice/scripts/setup_test_db.php
 
 试跑用 `qingzhu_slice_trial`，不会和客户端 smoke / E2E 的 `qingzhu_slice_test` 互相重置。
 
+### 1.2.1 切到 12+1 城（正式版地图）
+
+```powershell
+$env:SLICE_CONFIG = "$PWD\server\slice\config.trial.php"
+php server/slice/scripts/setup_trial_map12.php
+```
+
+期望：
+
+```text
+OK MAP12_TRIAL | running | nodes=13 edges=19 players=9
+```
+
+这条命令会：
+
+```text
+1. 在试跑库创建 12+1 城游戏 MAP12_TRIAL
+2. 把 5 节点 SLICE_A 暂停（数据保留，可随时切回）
+3. 学生重新登录后自动进入 13 城地图
+```
+
+切回 5 节点：
+
+```sql
+UPDATE slice_games SET status = 'paused' WHERE code = 'MAP12_TRIAL';
+UPDATE slice_games SET status = 'running' WHERE code = 'SLICE_A';
+```
+
 ### 1.3 启动试跑 API
 
 新开一个 PowerShell：
