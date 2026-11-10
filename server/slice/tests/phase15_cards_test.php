@@ -324,7 +324,7 @@ $moFactionId = (int)$pdo->query("SELECT id FROM slice_factions WHERE game_id = {
 $pdo->prepare("UPDATE slice_nodes SET owner_faction_id = (SELECT id FROM slice_factions WHERE game_id = ? AND code = 'bi'), morale = 0 WHERE game_id = ? AND node_code = 'A_START'")
     ->execute([$gameId, $gameId]);
 for ($slot = 0; $slot < 3; $slot++) {
-    $insertOrder->execute([$gameId, $turnId, $biPlayers[0], $slot, 'fortify', 'A_START', $slot + 1, 'front', 'p15_d1_' . $slot . '_' . bin2hex(random_bytes(3))]);
+    $insertOrder->execute([$gameId, $turnId, $biPlayers[$slot], $slot, 'fortify', 'A_START', $slot + 1, 'front', 'p15_d1_' . $slot . '_' . bin2hex(random_bytes(3))]);
 }
 $insertOrder->execute([$gameId, $turnId, $otherPlayerId, 0, 'night_raid', 'A_START', 1, 'front', 'p15_d2_' . bin2hex(random_bytes(3))]);
 $result = $settler->settle($gameId, $turnId);
@@ -337,6 +337,45 @@ foreach ($result['battles'] as $b) {
 }
 check('守方 3 令不挡攻城', !empty($defendBattle['battle_id']), json_encode($result['battles'], JSON_UNESCAPED_UNICODE));
 check('攻方是墨而不是守方笔', ($defendBattle['attacker_faction_id'] ?? 0) === $moFactionId);
+
+if (!empty($defendBattle['battle_id'])) {
+    $stmt = $pdo->prepare('SELECT defender_json FROM slice_battles WHERE id = ?');
+    $stmt->execute([(int)$defendBattle['battle_id']]);
+    $defJson = json_decode((string)$stmt->fetchColumn(), true);
+    $defTeams = $defJson['teams'] ?? [];
+    check('真实守军 3 队', count($defTeams) === 3, 'def_teams=' . count($defTeams));
+    check('守军带自己的坚壁', in_array('fortify', array_column($defTeams, 'card'), true), json_encode(array_column($defTeams, 'card')));
+    check('守军不再是固定 1320', abs((float)($defJson['troops'] ?? 0) - 1320.0) > 1.0, 'troops=' . ($defJson['troops'] ?? 'null'));
+    check('标记 real_garrison', !empty($defJson['real_garrison']));
+}
+$pdo->prepare("UPDATE slice_nodes SET owner_faction_id = (SELECT id FROM slice_factions WHERE game_id = ? AND code = 'bi'), morale = 0 WHERE game_id = ? AND node_code = 'A_START'")
+    ->execute([$gameId, $gameId]);
+
+// ---- 17. 没有驻守令 → 回落到固定守军 ----
+$cleanup();
+$pdo->prepare("UPDATE slice_turns SET turn_no = 8, status = 'open', settled_at = NULL WHERE id = ?")->execute([$turnId]);
+$pdo->prepare("UPDATE slice_nodes SET owner_faction_id = (SELECT id FROM slice_factions WHERE game_id = ? AND code = 'bi'), morale = 0 WHERE game_id = ? AND node_code = 'A_START'")
+    ->execute([$gameId, $gameId]);
+$insertOrder->execute([$gameId, $turnId, $otherPlayerId, 0, 'night_raid', 'A_START', 1, 'front', 'p15_fb_' . bin2hex(random_bytes(3))]);
+$result = $settler->settle($gameId, $turnId);
+$fallbackBattle = null;
+foreach ($result['battles'] as $b) {
+    if (($b['node_code'] ?? '') === 'A_START') {
+        $fallbackBattle = $b;
+        break;
+    }
+}
+check('无驻守令仍开打', !empty($fallbackBattle['battle_id']), json_encode($result['battles'], JSON_UNESCAPED_UNICODE));
+if (!empty($fallbackBattle['battle_id'])) {
+    $stmt = $pdo->prepare('SELECT defender_json FROM slice_battles WHERE id = ?');
+    $stmt->execute([(int)$fallbackBattle['battle_id']]);
+    $fbJson = json_decode((string)$stmt->fetchColumn(), true);
+    $fbTeams = $fbJson['teams'] ?? [];
+    check('回落固定守军 3 队', count($fbTeams) === 3);
+    check('固定守军无战术牌', array_column($fbTeams, 'card') === [null, null, null]);
+    check('固定守军 1320 兵', abs((float)($fbJson['troops'] ?? 0) - 1320.0) < 1.0, 'troops=' . ($fbJson['troops'] ?? 'null'));
+    check('real_garrison=false', empty($fbJson['real_garrison']));
+}
 $pdo->prepare("UPDATE slice_nodes SET owner_faction_id = (SELECT id FROM slice_factions WHERE game_id = ? AND code = 'bi'), morale = 0 WHERE game_id = ? AND node_code = 'A_START'")
     ->execute([$gameId, $gameId]);
 

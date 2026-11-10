@@ -52,13 +52,15 @@
   LOAD100 PASS（server/slice/tests/load100_test.php）
   HTTP 层 300 令提交：1.4 秒；结算 47 ms
   HTTP100 PASS（server/slice/tests/http100_test.php）
+  真实守军：驻守令优先，固定守军回落
+  PHASE15_CARDS 覆盖真实守军 / 回落
 
 发现：
   25 人支援封顶 +30%，人数优势在战斗里几乎看不见
   8 场中立城战斗只有 4 场推得动民心
 
 待做：
-  真实守军替代固定 1100
+  驻守 UI 文案与入口
   php-fpm 部署后复测
 ```
 

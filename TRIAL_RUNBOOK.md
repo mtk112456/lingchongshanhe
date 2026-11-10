@@ -236,7 +236,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/trial_teacher.ps1 -Bas
 | 手牌只有 3 张 | 刷新 state；服务端发 4 张 |
 | 出令 400 `CARD_NOT_IN_HAND` | 刷新页面重新取手牌 |
 | 结算后民心没变 | 看 `battles` 是否为空；可能双方令数并列 |
-| 第二回合打自己城 | 正常，返回 `already_owned`，不产生战斗 |
+| 打自己城 | 变成驻守：该城守方用你的队伍；没有敌军时不产生进攻战斗 |
 | 教师看不到结算按钮 | 用 `tools/trial_teacher.ps1` |
 | 出了令但没战斗 | 看回执：`standoff`（平票）、`already_owned`（己方城）、`no_vanguard`（无先锋） |
 | 牌好像没生效 | 看战报逐队那一行；确认客户端已接 P1.5（手牌有去向、战报有牌名） |

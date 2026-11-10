@@ -168,27 +168,7 @@ final class CardSettlementService
         $supportMult = BattleService::supportMultiplier($supporters) * 1.20;
 
         // 一令 = 一队：兵种取该玩家本周编成的对应位，位置与牌取该令自己的
-        $teams = [];
-        foreach ($vanguard as $i => $order) {
-            $slot = max(0, min(2, (int)$order['slot']));
-            $composition = $this->compositionOf((int)$order['player_id'], $gameId, $weekNo);
-            $type = $composition[$slot] ?? $composition[$i] ?? 'shield';
-            $lane = $order['lane'] === null ? $i + 1 : (int)$order['lane'];
-            $row = (string)($order['row_pos'] ?? '');
-            if (!in_array($row, ['front', 'back'], true)) {
-                $row = BattleEngine::TYPES[$type]['row'];
-            }
-            if ($type === 'arc') {
-                $row = 'back';
-            }
-            $teams[] = [
-                'type' => $type,
-                'troops' => BattleService::petPower($order) / 3 * $supportMult,
-                'lane' => $lane,
-                'row' => $row,
-                'card' => (string)$order['card_code'],
-            ];
-        }
+        $teams = $this->teamsFromOrders($vanguard, $gameId, $weekNo, $supportMult);
 
         $scouted = false;
         $fire = false;
@@ -209,27 +189,69 @@ final class CardSettlementService
             'fire' => $fire,
         ];
 
-        // 守军：Phase 1 仍是固定守军，P2 换真实驻守。
-        // 中立 990：3 队约 1080 兵能压到 50% 以下（score 1），两晚易主；
-        // 1100 会卡在 1007 城墙（score 0），与“普通城 1–1.5 晚”不符。
-        $defTroops = ($ownerFactionId === null ? 900.0 : 1200.0) * 1.10;
-        $defComp = $ownerFactionId === null
-            ? ['shield', 'shield', 'arc']
-            : ['shield', 'spear', 'arc'];
+        // 守军：城归属方的驻守令（打自己城 = 驻守）优先；没有才用固定守军。
         $defTeams = [];
-        foreach ($defComp as $i => $type) {
-            $defTeams[] = [
-                'type' => $type,
-                'troops' => $defTroops / 3,
-                'lane' => $i + 1,
-                'row' => BattleEngine::TYPES[$type]['row'],
-                'card' => null,
-            ];
+        $defGeneral = 'def';
+        $defTroops = 0.0;
+        $realGarrison = false;
+        if ($ownerFactionId !== null) {
+            $defenderOrders = [];
+            foreach ($orders as $order) {
+                if ((int)($order['faction_id'] ?? 0) === $ownerFactionId
+                    && self::isTeamCard((string)$order['card_code'])) {
+                    $defenderOrders[] = $order;
+                }
+            }
+            usort($defenderOrders, fn($a, $b) => BattleService::petPower($b) <=> BattleService::petPower($a));
+
+            $defVanguard = [];
+            $seenDef = [];
+            foreach ($defenderOrders as $order) {
+                $pid = (int)$order['player_id'];
+                if (isset($seenDef[$pid])) {
+                    continue;
+                }
+                $seenDef[$pid] = true;
+                $defVanguard[] = $order;
+                if (count($defVanguard) >= 3) {
+                    break;
+                }
+            }
+            if ($defVanguard !== []) {
+                $defSupporters = max(0, count(array_unique(array_column($defenderOrders, 'player_id'))) - count($defVanguard));
+                $defTeams = $this->teamsFromOrders(
+                    $defVanguard,
+                    $gameId,
+                    $weekNo,
+                    BattleService::supportMultiplier($defSupporters)
+                );
+                $defGeneral = $this->generalOf((string)($defVanguard[0]['pet_code'] ?? ''));
+                $defTroops = array_sum(array_column($defTeams, 'troops'));
+                $realGarrison = true;
+            }
+        }
+
+        if ($defTeams === []) {
+            // 固定守军：中立 990 / 归属城 1320
+            $defTroops = ($ownerFactionId === null ? 900.0 : 1200.0) * 1.10;
+            $defComp = $ownerFactionId === null
+                ? ['shield', 'shield', 'arc']
+                : ['shield', 'spear', 'arc'];
+            foreach ($defComp as $i => $type) {
+                $defTeams[] = [
+                    'type' => $type,
+                    'troops' => $defTroops / 3,
+                    'lane' => $i + 1,
+                    'row' => BattleEngine::TYPES[$type]['row'],
+                    'card' => null,
+                ];
+            }
         }
         $defender = [
-            'general' => 'def',
+            'general' => $defGeneral,
             'teams' => $defTeams,
             'troops' => $defTroops,
+            'real_garrison' => $realGarrison,
         ];
 
         $result = $this->battleService->resolve($attacker, $defender);
@@ -266,7 +288,41 @@ final class CardSettlementService
             'scouted' => $scouted,
             'fire' => $fire,
             'teams' => $teams,
+            'defender_teams' => $defTeams,
+            'real_garrison' => $realGarrison,
         ];
+    }
+
+    /**
+     * 把 3 个先锋令转成 3 支队伍（攻守共用）。
+     *
+     * @param array<int,array> $vanguard
+     * @return array<int,array{type:string,troops:float,lane:int,row:string,card:string}>
+     */
+    private function teamsFromOrders(array $vanguard, int $gameId, int $weekNo, float $mult): array
+    {
+        $teams = [];
+        foreach ($vanguard as $i => $order) {
+            $slot = max(0, min(2, (int)$order['slot']));
+            $composition = $this->compositionOf((int)$order['player_id'], $gameId, $weekNo);
+            $type = $composition[$slot] ?? $composition[$i] ?? 'shield';
+            $lane = $order['lane'] === null ? $i + 1 : (int)$order['lane'];
+            $row = (string)($order['row_pos'] ?? '');
+            if (!in_array($row, ['front', 'back'], true)) {
+                $row = BattleEngine::TYPES[$type]['row'];
+            }
+            if ($type === 'arc') {
+                $row = 'back';
+            }
+            $teams[] = [
+                'type' => $type,
+                'troops' => BattleService::petPower($order) / 3 * $mult,
+                'lane' => $lane,
+                'row' => $row,
+                'card' => (string)$order['card_code'],
+            ];
+        }
+        return $teams;
     }
 
     /**
