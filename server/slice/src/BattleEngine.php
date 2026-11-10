@@ -48,6 +48,28 @@ final class BattleEngine
         'sup' => ['name' => '运将', 'atk' => 1.00, 'def' => 1.00, 'heal' => 0.05],
     ];
 
+    /**
+     * 阵容羁绊：
+     *   - 3 队不同兵种：混编，攻防 +5%
+     *   - 3 队同兵种：专精，攻击 +8%、防御 -8%
+     *   - 2+1：无加成
+     */
+    public static function formation(array $teams): string
+    {
+        $types = [];
+        foreach ($teams as $t) {
+            $types[(string)($t['type'] ?? '')] = true;
+        }
+        $count = count($types);
+        if ($count >= 3) {
+            return 'mixed';
+        }
+        if ($count === 1) {
+            return 'same';
+        }
+        return 'standard';
+    }
+
     public static function counter(string $attacker, string $defender): float
     {
         $map = [
@@ -126,6 +148,8 @@ final class BattleEngine
     {
         $attTeams = $this->teamsOf($attacker);
         $defTeams = $this->teamsOf($defender);
+        $attFormation = self::formation($attTeams);
+        $defFormation = self::formation($defTeams);
         $attSlots = self::slotsOf($attTeams);
         $defSlots = self::slotsOf($defTeams);
 
@@ -158,6 +182,8 @@ final class BattleEngine
         }
 
         $this->applyCards($units, $attTeams, $defTeams, $attacker, $defender);
+        $this->applyFormation($units, 'att', $attFormation);
+        $this->applyFormation($units, 'def', $defFormation);
 
         $initialUnits = array_values(array_map(fn($u) => [
             'id' => $u['id'],
@@ -255,6 +281,8 @@ final class BattleEngine
             'ticks' => $tick,
             'att_slots' => $attSlots,
             'def_slots' => $defSlots,
+            'att_formation' => $attFormation,
+            'def_formation' => $defFormation,
             'units' => $initialUnits,
             'final_units' => $finalUnits,
             'events' => $events,
@@ -351,6 +379,23 @@ final class BattleEngine
     private static function unitId(string $side, array $team): string
     {
         return ($side === 'att' ? 'A' : 'D') . $team['lane'] . ($team['row'] === 'front' ? 'F' : 'B');
+    }
+
+    private function applyFormation(array &$units, string $side, string $formation): void
+    {
+        foreach ($units as &$u) {
+            if ($u['side'] !== $side) {
+                continue;
+            }
+            if ($formation === 'mixed') {
+                $u['atk'] *= 1.05;
+                $u['def_mult'] *= 1.05;
+            } elseif ($formation === 'same') {
+                $u['atk'] *= 1.08;
+                $u['def_mult'] *= 0.92;
+            }
+        }
+        unset($u);
     }
 
     /**

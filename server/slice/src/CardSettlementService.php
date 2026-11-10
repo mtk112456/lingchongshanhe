@@ -189,6 +189,20 @@ final class CardSettlementService
             'fire' => $fire,
         ];
 
+        // 大营：阵营拥有任意大营，进攻 +5% 兵力
+        $campBonus = $this->factionOwnsNodeType($gameId, $attackerFactionId, 'camp');
+        if ($campBonus) {
+            foreach ($teams as &$t) {
+                $t['troops'] *= 1.05;
+            }
+            unset($t);
+            $attacker['teams'] = $teams;
+            $attacker['troops'] = array_sum(array_column($teams, 'troops'));
+            $attacker['camp_bonus'] = true;
+        } else {
+            $attacker['camp_bonus'] = false;
+        }
+
         // 守军：城归属方的驻守令（打自己城 = 驻守）优先；没有才用固定守军。
         $defTeams = [];
         $defGeneral = 'def';
@@ -248,11 +262,22 @@ final class CardSettlementService
                 ];
             }
         }
+        // 关隘：守方拥有任意关隘，守军 +10%
+        $passBonus = $ownerFactionId !== null && $this->factionOwnsNodeType($gameId, $ownerFactionId, 'pass');
+        if ($passBonus) {
+            foreach ($defTeams as &$dt) {
+                $dt['troops'] *= 1.10;
+            }
+            unset($dt);
+        }
+        $defTroops = array_sum(array_column($defTeams, 'troops'));
+
         $defender = [
             'general' => $defGeneral,
             'teams' => $defTeams,
             'troops' => $defTroops,
             'real_garrison' => $realGarrison,
+            'pass_bonus' => $passBonus,
         ];
 
         $result = $this->battleService->resolve($attacker, $defender);
@@ -292,6 +317,16 @@ final class CardSettlementService
             'defender_teams' => $defTeams,
             'real_garrison' => $realGarrison,
         ];
+    }
+
+    private function factionOwnsNodeType(int $gameId, int $factionId, string $nodeType): bool
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT 1 FROM slice_nodes
+             WHERE game_id = ? AND owner_faction_id = ? AND node_type = ? LIMIT 1'
+        );
+        $stmt->execute([$gameId, $factionId, $nodeType]);
+        return $stmt->fetchColumn() !== false;
     }
 
     /**
