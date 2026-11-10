@@ -4,6 +4,8 @@ declare(strict_types=1);
 require_once __DIR__ . '/ApiException.php';
 require_once __DIR__ . '/Clock.php';
 require_once __DIR__ . '/PointsService.php';
+require_once __DIR__ . '/HandService.php';
+require_once __DIR__ . '/BattleSettlementService.php';
 
 final class SliceService
 {
@@ -458,6 +460,17 @@ final class SliceService
         $myOrderRow = $stmt->fetch();
         $myOrder = $myOrderRow ? $this->orderPublic($myOrderRow, $nodesByCode) : null;
 
+        // Phase 1：学生的手牌 / 编成 / 3 张将令
+        $hand = null;
+        $composition = null;
+        $cardOrders = [];
+        if ((string)$player['role'] === 'player') {
+            $handService = new HandService($this->pdo);
+            $hand = $handService->getOrCreateHand((int)$game['id'], (int)$turn['id'], (int)$player['id']);
+            $composition = $handService->getComposition((int)$game['id'], (int)$player['id'], 1);
+            $cardOrders = $handService->getOrders((int)$turn['id'], (int)$player['id']);
+        }
+
         $canEdit = (string)$turn['status'] === 'open'
             && (string)$game['status'] === 'running'
             && !$this->deadlinePassed($turn);
@@ -503,6 +516,8 @@ final class SliceService
                 'y' => (int)$n['y'],
                 'type' => (string)$n['node_type'],
                 'is_start' => $isStart,
+                'morale' => (int)($n['morale'] ?? 0),
+                'morale_cap' => BattleSettlementService::cap((string)$n['node_type']),
                 'owner' => $this->factionPublic($ownerId, $factionsById),
                 'initial_owner' => $this->factionPublic(
                     $n['initial_owner_faction_id'] === null ? null : (int)$n['initial_owner_faction_id'],
@@ -596,6 +611,9 @@ final class SliceService
                 'edges' => $edges,
             ],
             'my_order' => $myOrder,
+            'hand' => $hand,
+            'composition' => $composition,
+            'card_orders' => $cardOrders,
             'options' => [
                 'advance_from' => $advanceFrom,
                 'defend_targets' => $defendTargets,
