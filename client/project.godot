@@ -18,6 +18,8 @@ config/icon="res://icon.svg"
 [autoload]
 
 Api="*res://Api.gd"
+AudioManager="*res://AudioManager.gd"
+AudioManager="*res://AudioManager.gd"
 
 [display]
 

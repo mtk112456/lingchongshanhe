@@ -1,0 +1,92 @@
+【S1/S2 美术冲刺：战斗 VFX、教学插画、UI 图标】
+
+先读 `QUALITY_BENCHMARK.md`。目标：把静态变成“每一击都有反馈”。
+
+输出根目录：
+
+```text
+art_src/gpt/PHASE3_QUALITY_VFX/
+```
+
+---
+
+## A. 战斗 VFX（最高优先）
+
+透明 PNG 序列，256×256，6 帧，12fps，命名 `_01`–`_06`：
+
+```text
+vfx_slash_01..06.png        刀光/斩击
+vfx_hit_01..06.png          命中火花
+vfx_arrow_01..06.png        箭矢飞行
+vfx_dust_01..06.png         尘土/落地
+vfx_fire_01..06.png         火攻/燃烧
+vfx_wall_crack_01..06.png   城墙裂纹/碎石
+```
+
+风格：水墨 + 金红点缀，边缘干净，不糊，不要白底。
+
+另出：
+
+```text
+seal_victory.png   256×256 RGBA  “破城”印章
+seal_defeat.png    256×256 RGBA  “守住”印章
+banner_capture.png 1024×256 RGBA 城头换旗横幅
+banner_defense.png 1024×256 RGBA 守城成功横幅
+```
+
+## B. 首次教学三格插画
+
+```text
+1024×576 RGBA 或 JPG，无文字
+tutorial_01_choose_city.png   手指点城
+tutorial_02_choose_card.png   手牌展开
+tutorial_03_confirm.png       出令确认
+```
+
+## C. UI 图标（128×128 RGBA）
+
+```text
+icon_sound_on / icon_sound_off
+icon_music_on / icon_music_off
+icon_speed_1x / icon_speed_2x
+icon_skip
+icon_settings
+icon_tutorial
+icon_reduce_motion
+```
+
+## D. 赛季
+
+```text
+medal_bi / medal_mo / medal_yan / medal_zhi  256×256 RGBA
+season_book_frame.png                        1024×1024 RGBA 史书页边框
+```
+
+## E. App 图标 / 启动图
+
+```text
+app_icon.png        1024×1024
+splash_portrait.png 1080×1920
+splash_landscape.png 1920×1080
+```
+
+## F. 终审
+
+看：
+
+```text
+client/tests/screenshot_phone_landscape_p15_hand_cards.png
+client/tests/screenshot_p15_intel_dialog.png
+client/tests/screenshot_p15_battle_result_tactics.png
+client/tests/screenshot_tablet_map12_zoom_035.png
+```
+
+输出：
+
+```text
+art_src/gpt/PHASE3_QUALITY_VFX/QUALITY_REVIEW.md
+```
+
+分：阻断 / 建议 / 通过。对照 `QUALITY_BENCHMARK.md` 十条线打分。
+
+不改 client/server 代码。
