@@ -135,6 +135,9 @@ Authorization: Bearer <token>
 - `slot` 0/1/2；
 - `lane` 1/2/3；
 - `row_pos` front/back；
+- `slot` 同时决定这支队伍用本周编成的第几个兵种；
+- **队伍牌**（夜袭/急行/坚壁/犄角/空城/死守/反间/运粮/断粮）才需要 `lane` / `row_pos`；
+- **非队伍牌**（火攻/哨探/疑兵）的 `lane` / `row_pos` 可传 `null`，结算不占队伍位；
 - `request_key` 8–64 位字母数字下划线；
 - 同一张牌不能出两次；
 - 同一槽位可以改目标。

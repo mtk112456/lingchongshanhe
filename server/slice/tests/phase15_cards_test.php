@@ -198,7 +198,7 @@ $biPlayers = array_map('intval', $pdo->query(
     "SELECT p.id FROM slice_players p
      JOIN slice_factions f ON f.id = p.faction_id
      WHERE p.game_id = {$gameId} AND p.role = 'player' AND f.code = 'bi'
-     ORDER BY p.id LIMIT 3"
+     ORDER BY p.id LIMIT 4"
 )->fetchAll(PDO::FETCH_COLUMN));
 $playerId = $biPlayers[0] ?? 0;
 
@@ -236,7 +236,8 @@ $insertOrder = $pdo->prepare(
 );
 $insertOrder->execute([$gameId, $turnId, $biPlayers[0], 0, 'night_raid', $nodeCode, 1, 'front', 'p15_a_' . bin2hex(random_bytes(3))]);
 $insertOrder->execute([$gameId, $turnId, $biPlayers[1], 1, 'fortify', $nodeCode, 2, 'front', 'p15_b_' . bin2hex(random_bytes(3))]);
-$insertOrder->execute([$gameId, $turnId, $biPlayers[2], 2, 'fire_attack', $nodeCode, 3, 'back', 'p15_c_' . bin2hex(random_bytes(3))]);
+$insertOrder->execute([$gameId, $turnId, $biPlayers[2], 2, 'supply', $nodeCode, 3, 'back', 'p15_c_' . bin2hex(random_bytes(3))]);
+$insertOrder->execute([$gameId, $turnId, $biPlayers[3], 0, 'fire_attack', $nodeCode, null, null, 'p15_f_' . bin2hex(random_bytes(3))]);
 
 $settler = new CardSettlementService($pdo);
 $result = $settler->settle($gameId, $turnId);
@@ -270,7 +271,10 @@ if ($battleEntry !== null) {
     check('每队保留自己的牌',
         ($byType['arc']['card'] ?? '') === 'night_raid'
         && ($byType['spear']['card'] ?? '') === 'fortify'
-        && ($byType['cav']['card'] ?? '') === 'fire_attack',
+        && ($byType['cav']['card'] ?? '') === 'supply',
+        json_encode(array_column($teams, 'card')));
+    check('火攻不占队伍位',
+        !in_array('fire_attack', array_column($teams, 'card'), true) && count($teams) === 3,
         json_encode(array_column($teams, 'card')));
     check('弓兵被放回后排', ($byType['arc']['row'] ?? '') === 'back');
     check('枪兵按出令放前排', ($byType['spear']['row'] ?? '') === 'front');

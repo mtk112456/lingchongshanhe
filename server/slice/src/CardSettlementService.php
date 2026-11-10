@@ -18,6 +18,20 @@ require_once __DIR__ . '/BattleSettlementService.php';
  */
 final class CardSettlementService
 {
+    /**
+     * 只有这些牌会带一支队伍上场。
+     * 火攻挂器械；哨探/疑兵只出情报，都不占队伍位。
+     */
+    public const TEAM_CARDS = [
+        'night_raid', 'forced_march', 'fortify', 'mutual_support', 'empty_fort',
+        'last_stand', 'counter_intel', 'supply', 'cut_supply',
+    ];
+
+    public static function isTeamCard(string $card): bool
+    {
+        return in_array($card, self::TEAM_CARDS, true);
+    }
+
     private PDO $pdo;
     private BattleService $battleService;
     private BattleSettlementService $settlement;
@@ -123,13 +137,19 @@ final class CardSettlementService
             $orders,
             fn($o) => (int)($o['faction_id'] ?? 0) === $attackerFactionId
         ));
-        usort($factionOrders, function ($a, $b) {
+
+        // 只有队伍牌能带兵；火攻/哨探/疑兵不占队伍位
+        $teamOrders = array_values(array_filter(
+            $factionOrders,
+            fn($o) => self::isTeamCard((string)$o['card_code'])
+        ));
+        usort($teamOrders, function ($a, $b) {
             return BattleService::petPower($b) <=> BattleService::petPower($a);
         });
 
         $vanguard = [];
         $seen = [];
-        foreach ($factionOrders as $order) {
+        foreach ($teamOrders as $order) {
             $pid = (int)$order['player_id'];
             if (isset($seen[$pid])) {
                 continue;
