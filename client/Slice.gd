@@ -35,6 +35,26 @@ const DARK := Color("#1c1612")
 const NEUTRAL := Color("#7e7263")
 
 # ---------------------------------------------------------------------------
+# S2 全局错误码人话翻译字典（对标中小学可读性，拒绝甩英文代码）
+# ---------------------------------------------------------------------------
+const ERROR_CODE_TRANSLATION := {
+	"CHANGAN_LOCKED": "王城长安受天子龙气护佑，至第 3 周方可开启征伐！",
+	"SEASON_FINAL_WEEK": "赛季决战周已至，诸军只准进军长安或其接壤邻城！",
+	"SCOUT_REQUIRED": "军机未明！该城设有疑兵或迷雾，须先签发【哨探】将令破除迷雾！",
+	"TURN_LOCKED": "今日军令已提前封印，诸军枕戈待旦，正待 21:00 沙盘推演！",
+	"TURN_DEADLINE_PASSED": "今日 21:00 锁令时刻已过，请待明日晨起新一候方可出征！",
+	"ALREADY_OWNED": "该城已归属我方同门书院，无需攻打，可选择派遣驻守！",
+	"ORDER_SLOT_FULL": "今日 3 队将令已全部签发！可撤回任一已出队伍后重新调度！",
+	"INVALID_ORDER": "军令文书有误，请核验出征路径与编队！",
+	"CANNOT_ATTACK_NON_NEIGHBOR": "关河阻隔！我方行营与目标城池尚未通衢，仅能向接壤城池进军！",
+	"TARGET_NOT_REACHABLE": "关河阻隔！尚未开辟通往该据点的行军驰道！",
+	"INVALID_CREDENTIALS": "名录不合，姓名或密匙有误，请核实后重新踏入山河！",
+	"UNAUTHORIZED": "修习凭据已失效，请重新登录学堂。",
+	"SESSION_EXPIRED": "山河会话已逾时，请重新登录学堂。",
+	"NETWORK_ERROR": "文渊驿报受阻，网络连接异常，请检查学堂通信网络。"
+}
+
+# ---------------------------------------------------------------------------
 # GPT Style C UI Kit Asset 插槽注册表
 # ---------------------------------------------------------------------------
 const UI_ASSET_PATHS := {
@@ -108,6 +128,15 @@ var offline_banner_label: Label
 var offline_retry_btn: Button
 var drawer_tween: Tween
 var is_drawer_open: bool = false
+
+# S2 首次登录 3 步新手教学向导
+var tutorial_overlay: Control
+var tutorial_box: PanelContainer
+var tutorial_title_lbl: Label
+var tutorial_desc_lbl: Label
+var tutorial_action_btn: Button
+var tutorial_skip_btn: Button
+var tutorial_step: int = 0
 
 # S01 左右侧栏与底部导航
 var left_rail: Control
@@ -598,7 +627,9 @@ func _set_offline(is_offline: bool, msg: String = "⚠️ 烽烟信号微弱 · 
 
 func _navigate_to(page_id: String) -> void:
 	current_page = page_id
+	var target_node: Control = null
 	if page_id == "S01_MAP":
+		target_node = map_shell
 		map_shell.visible = true
 		if legend_panel != null and (city_drawer == null or not city_drawer.visible):
 			legend_panel.visible = true
@@ -615,9 +646,17 @@ func _navigate_to(page_id: String) -> void:
 		if order_confirm_overlay != null:
 			order_confirm_overlay.visible = false
 		for k in pages.keys():
-			pages[k].visible = (k == page_id)
+			var is_target: bool = (k == page_id)
+			pages[k].visible = is_target
+			if is_target:
+				target_node = pages[k]
 			
 	_update_dock_highlight(page_id)
+
+	if target_node != null and not AudioManager.is_reduced_motion:
+		target_node.modulate.a = 0.0
+		var tw := create_tween()
+		tw.tween_property(target_node, "modulate:a", 1.0, 0.20).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 func _update_dock_highlight(page_id: String) -> void:
 	for k in dock_tab_buttons.keys():
@@ -862,6 +901,13 @@ func _layout_responsive() -> void:
 			if is_instance_valid(b):
 				b.size = Vector2(140, 140)
 				b.position = map.node_position(code) - Vector2(70, 105)
+
+	# 11. S2 首次新手引导条自适应
+	if tutorial_box != null:
+		var tb_w := minf(w - 24.0, 560.0)
+		var tb_h := 62.0 if is_compact_h else 68.0
+		tutorial_box.size = Vector2(tb_w, tb_h)
+		tutorial_box.position = Vector2((w - tb_w) / 2.0, top_h + 8.0)
 
 # ---------------------------------------------------------------------------
 # MapView 沙盘视口交互控制器（双指缩放、拖拽平移、双击放大、视野聚焦、边界限制）
@@ -1243,6 +1289,7 @@ func _build_game() -> void:
 	_build_teacher_deck()
 	_build_recharge_dialog()
 	_build_legacy_compat_nodes()
+	_init_tutorial_ui()
 
 	poll_timer = Timer.new()
 	poll_timer.wait_time = 5.0
@@ -2013,6 +2060,8 @@ func _open_city_drawer(code: String) -> void:
 	_render_hand_cards()
 	_layout_responsive()
 	focus_city(code)
+	if tutorial_step == 1:
+		_advance_tutorial(2)
 
 func _current_week() -> int:
 	var turn_no := int(state.get("turn", {}).get("turn_no", 1))
@@ -2933,11 +2982,7 @@ func _build_all_placeholder_pages() -> void:
 		{"title": "赛季终章 · 九州问鼎", "desc": "四周推演总战功最高阵营加冕【山河首座】，班宠外观永续珍藏。"}
 	])
 
-	_build_placeholder_page("S11_SETTINGS", "⚙️ 学堂备忘", "音效、网络与账号设置", "⚙️", "就绪", [
-		{"title": "背景韶乐与音效", "desc": "古筝背景韶乐 [开启] | 战阵交互音效 [开启]。"},
-		{"title": "测试与网络配置", "desc": "轻触右上角齿轮或在此处重新设定服务器 API 通信链路。"},
-		{"title": "归隐退堂", "desc": "安全清除当前设备会话凭据，安全返回登录卷轴界面。"}
-	])
+	_build_settings_page()
 
 	_build_placeholder_page("S12_MAIL", "✉️ 军府谕告", "班级通知、战役奖励与书简", "✉️", "2 封未读", [
 		{"title": "【谕告】第一候关隘争霸已打响", "desc": "诸军请于今日 21:00 前完成军令盖印，逾期将依默认驻守。"},
@@ -3045,6 +3090,376 @@ func _build_placeholder_page(page_id: String, title: String, subtitle: String, i
 		cs.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		cv.add_child(cs)
 		grid.add_child(c_panel)
+
+# ---------------------------------------------------------------------------
+# S11 学堂设置页面（音量、动效、教学向导、网络与学籍）
+# ---------------------------------------------------------------------------
+
+func _build_settings_page() -> void:
+	var page_id := "S11_SETTINGS"
+	var p := Control.new()
+	p.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	p.visible = false
+	pages[page_id] = p
+	pages_container.add_child(p)
+
+	var bg := ColorRect.new()
+	bg.color = C_WOOD_DESK.darkened(0.2)
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	p.add_child(bg)
+
+	var header := _create_page_header("⚙️ 学堂备忘与设置", "音效、画面动效与学堂通信链路配置")
+	p.add_child(header)
+
+	var margin := MarginContainer.new()
+	margin.position = Vector2(16, 70)
+	margin.size = Vector2(size.x - 32, size.y - 80)
+	p.add_child(margin)
+
+	var scroll := ScrollContainer.new()
+	scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	margin.add_child(scroll)
+
+	var v := VBoxContainer.new()
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.add_theme_constant_override("separation", 12)
+	scroll.add_child(v)
+
+	# 1. 声音与韶乐卡片
+	var audio_card := PanelContainer.new()
+	audio_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	audio_card.add_theme_stylebox_override("panel", _panel_style(C_XUANZHI, Color("#dfcaa7"), 1, 8, 14))
+	v.add_child(audio_card)
+
+	var av := VBoxContainer.new()
+	av.add_theme_constant_override("separation", 10)
+	audio_card.add_child(av)
+
+	var a_title := _label("🎵 韶乐与战阵音效", 16, C_WOOD_DESK)
+	av.add_child(a_title)
+
+	# 总音量
+	var m_row := HBoxContainer.new()
+	m_row.add_theme_constant_override("separation", 12)
+	av.add_child(m_row)
+	var m_lbl := _label("主音量：", 14, Color("#554433"))
+	m_lbl.custom_minimum_size = Vector2(80, 0)
+	m_row.add_child(m_lbl)
+	var m_slider := HSlider.new()
+	m_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	m_slider.min_value = 0.0
+	m_slider.max_value = 100.0
+	m_slider.value = AudioManager.master_volume * 100.0
+	m_row.add_child(m_slider)
+	var m_val_lbl := _label("%d%%" % int(m_slider.value), 14, C_WOOD_DESK)
+	m_val_lbl.custom_minimum_size = Vector2(45, 0)
+	m_row.add_child(m_val_lbl)
+	m_slider.value_changed.connect(func(val: float):
+		m_val_lbl.text = "%d%%" % int(val)
+		AudioManager.set_master_volume(val / 100.0)
+	)
+
+	# 音乐音量
+	var bgm_row := HBoxContainer.new()
+	bgm_row.add_theme_constant_override("separation", 12)
+	av.add_child(bgm_row)
+	var bgm_lbl := _label("背景音乐：", 14, Color("#554433"))
+	bgm_lbl.custom_minimum_size = Vector2(80, 0)
+	bgm_row.add_child(bgm_lbl)
+	var bgm_slider := HSlider.new()
+	bgm_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bgm_slider.min_value = 0.0
+	bgm_slider.max_value = 100.0
+	bgm_slider.value = AudioManager.music_volume * 100.0
+	bgm_row.add_child(bgm_slider)
+	var bgm_val_lbl := _label("%d%%" % int(bgm_slider.value), 14, C_WOOD_DESK)
+	bgm_val_lbl.custom_minimum_size = Vector2(45, 0)
+	bgm_row.add_child(bgm_val_lbl)
+	bgm_slider.value_changed.connect(func(val: float):
+		bgm_val_lbl.text = "%d%%" % int(val)
+		AudioManager.set_music_volume(val / 100.0)
+	)
+
+	# 音效音量
+	var sfx_row := HBoxContainer.new()
+	sfx_row.add_theme_constant_override("separation", 12)
+	av.add_child(sfx_row)
+	var sfx_lbl := _label("交互音效：", 14, Color("#554433"))
+	sfx_lbl.custom_minimum_size = Vector2(80, 0)
+	sfx_row.add_child(sfx_lbl)
+	var sfx_slider := HSlider.new()
+	sfx_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sfx_slider.min_value = 0.0
+	sfx_slider.max_value = 100.0
+	sfx_slider.value = AudioManager.sfx_volume * 100.0
+	sfx_row.add_child(sfx_slider)
+	var sfx_val_lbl := _label("%d%%" % int(sfx_slider.value), 14, C_WOOD_DESK)
+	sfx_val_lbl.custom_minimum_size = Vector2(45, 0)
+	sfx_row.add_child(sfx_val_lbl)
+	sfx_slider.value_changed.connect(func(val: float):
+		sfx_val_lbl.text = "%d%%" % int(val)
+		AudioManager.set_sfx_volume(val / 100.0)
+	)
+	sfx_slider.drag_ended.connect(func(_changed: bool):
+		AudioManager.play_sfx("click")
+	)
+
+	# 2. 视觉表现与动效设置
+	var visual_card := PanelContainer.new()
+	visual_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	visual_card.add_theme_stylebox_override("panel", _panel_style(C_XUANZHI, Color("#dfcaa7"), 1, 8, 14))
+	v.add_child(visual_card)
+
+	var vv := VBoxContainer.new()
+	vv.add_theme_constant_override("separation", 8)
+	visual_card.add_child(vv)
+
+	var v_title := _label("✨ 视觉表现与动效", 16, C_WOOD_DESK)
+	vv.add_child(v_title)
+
+	var motion_row := HBoxContainer.new()
+	motion_row.add_theme_constant_override("separation", 12)
+	vv.add_child(motion_row)
+
+	var motion_lbl := _label("减少动效模式：", 14, Color("#554433"))
+	motion_lbl.custom_minimum_size = Vector2(100, 0)
+	motion_row.add_child(motion_lbl)
+
+	var motion_btn := Button.new()
+	motion_btn.custom_minimum_size = Vector2(110, 36)
+	motion_btn.text = "【已开启】" if AudioManager.is_reduced_motion else "【已关闭】"
+	motion_btn.add_theme_color_override("font_color", C_ZHUQING if AudioManager.is_reduced_motion else Color("#756858"))
+	motion_btn.pressed.connect(func():
+		var new_state: bool = not AudioManager.is_reduced_motion
+		AudioManager.set_reduced_motion(new_state)
+		motion_btn.text = "【已开启】" if new_state else "【已关闭】"
+		motion_btn.add_theme_color_override("font_color", C_ZHUQING if new_state else Color("#756858"))
+		_toast("已%s减少动效模式" % ("开启" if new_state else "关闭"))
+	)
+	motion_row.add_child(motion_btn)
+
+	var motion_tip := _label("开启后跳过战场碎石粒子、镜头微缩放与卡牌翻入，降低性能功耗与眩晕感。", 12, Color("#756858"))
+	motion_tip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	motion_tip.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vv.add_child(motion_tip)
+
+	# 3. 新手教学修习
+	var tut_card := PanelContainer.new()
+	tut_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tut_card.add_theme_stylebox_override("panel", _panel_style(C_XUANZHI, Color("#dfcaa7"), 1, 8, 14))
+	v.add_child(tut_card)
+
+	var tv := VBoxContainer.new()
+	tv.add_theme_constant_override("separation", 8)
+	tut_card.add_child(tv)
+
+	var t_title := _label("📖 新手修习向导", 16, C_WOOD_DESK)
+	tv.add_child(t_title)
+
+	var t_row := HBoxContainer.new()
+	t_row.add_theme_constant_override("separation", 12)
+	tv.add_child(t_row)
+
+	var t_desc := _label("重温三步军令修习：踏勘城池、谋划战策、加盖帅印。", 13, Color("#554433"))
+	t_desc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	t_row.add_child(t_desc)
+
+	var restart_tut_btn := _button("重温新手教学", C_MOLAN, 38)
+	restart_tut_btn.custom_minimum_size = Vector2(130, 38)
+	restart_tut_btn.pressed.connect(func():
+		var cfg := ConfigFile.new()
+		cfg.set_value("tutorial", "completed", false)
+		cfg.save("user://tutorial_completed.cfg")
+		_navigate_to("S01_MAP")
+		_start_tutorial()
+		_toast("已开启新手军令修习向导！")
+	)
+	t_row.add_child(restart_tut_btn)
+
+	# 4. 服务器通信配置
+	var net_card := PanelContainer.new()
+	net_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	net_card.add_theme_stylebox_override("panel", _panel_style(C_XUANZHI, Color("#dfcaa7"), 1, 8, 14))
+	v.add_child(net_card)
+
+	var nv := VBoxContainer.new()
+	nv.add_theme_constant_override("separation", 8)
+	net_card.add_child(nv)
+
+	var n_title := _label("🌐 学堂通信网络", 16, C_WOOD_DESK)
+	nv.add_child(n_title)
+
+	var n_row := HBoxContainer.new()
+	n_row.add_theme_constant_override("separation", 10)
+	nv.add_child(n_row)
+
+	var net_edit := LineEdit.new()
+	net_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	net_edit.text = url_edit.text
+	net_edit.custom_minimum_size = Vector2(0, 38)
+	n_row.add_child(net_edit)
+
+	var net_save_btn := _button("保存通信链路", C_ZHUQING, 38)
+	net_save_btn.custom_minimum_size = Vector2(120, 38)
+	net_save_btn.pressed.connect(func():
+		var new_url := net_edit.text.strip_edges()
+		if new_url != "":
+			url_edit.text = new_url
+			api.set_base_url(new_url)
+			_save_config()
+			_toast("已更新学堂服务器通信地址！")
+	)
+	n_row.add_child(net_save_btn)
+
+	# 5. 账号学籍与版本信息
+	var info_card := PanelContainer.new()
+	info_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	info_card.add_theme_stylebox_override("panel", _panel_style(C_XUANZHI, Color("#dfcaa7"), 1, 8, 14))
+	v.add_child(info_card)
+
+	var iv := VBoxContainer.new()
+	iv.add_theme_constant_override("separation", 10)
+	info_card.add_child(iv)
+
+	var i_title := _label("📜 学籍与版本", 16, C_WOOD_DESK)
+	iv.add_child(i_title)
+
+	var ver_lbl := _label("客户端版本：青竹文房 · 灵宠山河 v1.5.0-alpha (Milestone A)", 13, Color("#685848"))
+	iv.add_child(ver_lbl)
+
+	var logout_btn := _button("🚪 安全归隐退堂 (登出学籍)", C_ZHUSHA, 42)
+	logout_btn.custom_minimum_size = Vector2(0, 42)
+	logout_btn.pressed.connect(_on_logout)
+	iv.add_child(logout_btn)
+
+# ---------------------------------------------------------------------------
+# S2 新手 3 步修习向导与界面抖动交互
+# ---------------------------------------------------------------------------
+
+func _init_tutorial_ui() -> void:
+	tutorial_overlay = Control.new()
+	tutorial_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	tutorial_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tutorial_overlay.visible = false
+	game_layer.add_child(tutorial_overlay)
+
+	tutorial_box = PanelContainer.new()
+	tutorial_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tutorial_box.add_theme_stylebox_override("panel", _panel_style(Color("#fffdf8"), C_ZHUSHA, 2, 8, 8))
+	tutorial_overlay.add_child(tutorial_box)
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tutorial_box.add_child(row)
+
+	var icon_badge := _label("🏮", 22, C_ZHUSHA)
+	icon_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(icon_badge)
+
+	var text_col := VBoxContainer.new()
+	text_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	text_col.add_theme_constant_override("separation", 2)
+	text_col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(text_col)
+
+	tutorial_title_lbl = _label("【第一步 · 踏勘城池】", 13, C_ZHUSHA)
+	tutorial_title_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	text_col.add_child(tutorial_title_lbl)
+
+	tutorial_desc_lbl = _label("轻触地图上的任意城池，开启前线行营部署。", 12, Color("#3a2d24"))
+	tutorial_desc_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	text_col.add_child(tutorial_desc_lbl)
+
+	var btn_col := HBoxContainer.new()
+	btn_col.add_theme_constant_override("separation", 6)
+	row.add_child(btn_col)
+
+	tutorial_action_btn = Button.new()
+	tutorial_action_btn.text = "✓ 我已通晓"
+	tutorial_action_btn.custom_minimum_size = Vector2(80, 32)
+	tutorial_action_btn.add_theme_font_size_override("font_size", 12)
+	tutorial_action_btn.add_theme_color_override("font_color", Color("#fae19c"))
+	tutorial_action_btn.add_theme_stylebox_override("normal", _style(C_ZHUQING, C_BORDER_GOLD, 1, 4, 4))
+	tutorial_action_btn.visible = false
+	tutorial_action_btn.pressed.connect(_complete_tutorial)
+	btn_col.add_child(tutorial_action_btn)
+
+	tutorial_skip_btn = Button.new()
+	tutorial_skip_btn.text = "⏩ 跳过"
+	tutorial_skip_btn.custom_minimum_size = Vector2(60, 32)
+	tutorial_skip_btn.add_theme_font_size_override("font_size", 12)
+	tutorial_skip_btn.add_theme_color_override("font_color", Color("#8a7c6c"))
+	tutorial_skip_btn.add_theme_stylebox_override("normal", _style(Color("#30241b"), Color("#5a4838"), 1, 4, 4))
+	tutorial_skip_btn.pressed.connect(_complete_tutorial)
+	btn_col.add_child(tutorial_skip_btn)
+
+func _is_tutorial_completed() -> bool:
+	var cfg := ConfigFile.new()
+	if cfg.load("user://tutorial_completed.cfg") == OK:
+		return bool(cfg.get_value("tutorial", "completed", false))
+	return false
+
+func _check_and_trigger_tutorial() -> void:
+	# 无头模式自动化测试不启动交互引导，保证测试纯净
+	if DisplayServer.get_name() == "headless" or "--headless" in OS.get_cmdline_args():
+		return
+	if not _is_tutorial_completed():
+		_start_tutorial()
+
+func _start_tutorial() -> void:
+	if tutorial_overlay == null:
+		return
+	tutorial_step = 1
+	tutorial_overlay.visible = true
+	tutorial_action_btn.visible = false
+	tutorial_skip_btn.visible = true
+	tutorial_title_lbl.text = "【第一步 · 踏勘城池】"
+	tutorial_desc_lbl.text = "轻触沙盘上的任意一座城池（如松风渡、听雨台），开启前线行营。"
+	_layout_responsive()
+	if not AudioManager.is_reduced_motion:
+		tutorial_box.modulate.a = 0.0
+		var tw := create_tween()
+		tw.tween_property(tutorial_box, "modulate:a", 1.0, 0.25)
+
+func _advance_tutorial(next_step: int) -> void:
+	if tutorial_step <= 0 or tutorial_overlay == null or not tutorial_overlay.visible:
+		return
+	tutorial_step = next_step
+	if tutorial_step == 2:
+		tutorial_title_lbl.text = "【第二步 · 谋定战策】"
+		tutorial_desc_lbl.text = "已锁定据点！在下方【每日战策】手牌中，轻触一张可用战策签发出令。"
+		tutorial_action_btn.visible = false
+	elif tutorial_step == 3:
+		tutorial_title_lbl.text = "【第三步 · 帅印盖定】"
+		tutorial_desc_lbl.text = "将令已加盖帅印！每日 21:00 锁令前可随时调整或撤回；三军将依阵位决胜。"
+		tutorial_action_btn.visible = true
+	if not AudioManager.is_reduced_motion:
+		_shake_node(tutorial_box)
+
+func _complete_tutorial() -> void:
+	tutorial_step = 0
+	if tutorial_overlay != null:
+		if AudioManager.is_reduced_motion:
+			tutorial_overlay.visible = false
+		else:
+			var tw := create_tween()
+			tw.tween_property(tutorial_box, "modulate:a", 0.0, 0.20)
+			tw.tween_callback(func(): tutorial_overlay.visible = false)
+	var cfg := ConfigFile.new()
+	cfg.set_value("tutorial", "completed", true)
+	cfg.save("user://tutorial_completed.cfg")
+
+func _shake_node(node: Control) -> void:
+	if not is_instance_valid(node) or AudioManager.is_reduced_motion:
+		return
+	var orig_x := node.position.x
+	var tw := create_tween()
+	tw.tween_property(node, "position:x", orig_x - 5.0, 0.03)
+	tw.tween_property(node, "position:x", orig_x + 5.0, 0.03)
+	tw.tween_property(node, "position:x", orig_x - 3.0, 0.03)
+	tw.tween_property(node, "position:x", orig_x + 3.0, 0.03)
+	tw.tween_property(node, "position:x", orig_x, 0.03)
 
 # ---------------------------------------------------------------------------
 # Phase 1: S03 每周军团编成页面
@@ -3276,6 +3691,14 @@ func _render_hand_cards() -> void:
 		hand_cards_container.add_child(card)
 		hand_card_views.append(card)
 
+		if not AudioManager.is_reduced_motion:
+			card.modulate.a = 0.0
+			card.position.y += 16.0
+			var tw := create_tween().set_parallel(true)
+			tw.tween_interval(i * 0.05)
+			tw.chain().tween_property(card, "modulate:a", 1.0, 0.20)
+			tw.parallel().tween_property(card, "position:y", 0.0, 0.20).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
 func _create_single_hand_card(idx: int, cdata: Dictionary) -> PanelContainer:
 	var card := PanelContainer.new()
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -3400,13 +3823,13 @@ func _create_single_hand_card(idx: int, cdata: Dictionary) -> PanelContainer:
 		assign_btn.text = "↩️ 撤回"
 		assign_btn.add_theme_color_override("font_color", Color("#fae19c"))
 		assign_btn.add_theme_stylebox_override("normal", _style(Color("#3f3328"), Color("#dfb557"), 1, 4, 2))
-		assign_btn.tooltip_text = "点击撤回该槽位军令，重新谋划出征"
+		assign_btn.tooltip_text = "点击撤回该队将令，重新谋划出征"
 		assign_btn.disabled = false
 	elif is_discarded:
 		assign_btn.text = "今日不用"
 		assign_btn.add_theme_color_override("font_color", Color("#6e5d50"))
 		assign_btn.add_theme_stylebox_override("disabled", _style(Color("#181412"), Color("#352c26"), 1, 4, 2))
-		assign_btn.tooltip_text = "今日 3 道将令槽位已满，此牌今日不用。撤回任一已出牌后可恢复使用！"
+		assign_btn.tooltip_text = "今日 3 队将令已满，此牌今日不用。撤回任一已出牌后可恢复使用！"
 		assign_btn.disabled = true
 	else:
 		if selected_code != "":
@@ -3419,7 +3842,7 @@ func _create_single_hand_card(idx: int, cdata: Dictionary) -> PanelContainer:
 			assign_btn.text = "点城出令"
 			assign_btn.add_theme_color_override("font_color", Color("#a89684"))
 			assign_btn.add_theme_stylebox_override("normal", _style(Color("#2b211a"), Color("#5a4838"), 1, 4, 2))
-			assign_btn.tooltip_text = "请先在地图上点击选择目标据点，再点击出令"
+			assign_btn.tooltip_text = "请先在地图上点击选择目标城池，再点击出令"
 		assign_btn.disabled = false
 
 	assign_btn.pressed.connect(func(): _on_hand_card_clicked(idx))
@@ -3445,11 +3868,17 @@ func _on_hand_card_clicked(idx: int) -> void:
 		return
 
 	if is_discarded:
-		_toast("今日 3 道将令槽位已满，此牌为今日弃牌。请先撤回已出的手牌！", true)
+		if idx >= 0 and idx < hand_card_views.size():
+			_shake_node(hand_card_views[idx])
+		AudioManager.play_sfx("click")
+		_toast("今日 3 队将令已满，此牌为今日弃牌。请先撤回已出的手牌！", true)
 		return
 
 	var target_code := selected_code
 	if target_code == "":
+		if idx >= 0 and idx < hand_card_views.size():
+			_shake_node(hand_card_views[idx])
+		AudioManager.play_sfx("click")
 		_toast("请先在地图上点击选择目标据点，再点击手牌出令！", true)
 		return
 
@@ -3464,7 +3893,10 @@ func _on_hand_card_clicked(idx: int) -> void:
 			chosen_slot = s
 			break
 	if chosen_slot == -1:
-		_toast("今日 3 道将令槽位已满，可点击已出的手牌撤回！", true)
+		if idx >= 0 and idx < hand_card_views.size():
+			_shake_node(hand_card_views[idx])
+		AudioManager.play_sfx("click")
+		_toast("今日 3 队将令已满，可点击已出的手牌撤回！", true)
 		return
 
 	_play_card_order(chosen_slot, c_code, target_code)
@@ -3483,9 +3915,12 @@ func _play_card_order(slot: int, card_code: String, target_code: String) -> void
 		if not ok:
 			_show_error(err)
 			return
+		AudioManager.play_sfx("stamp")
 		var card_name := str(_get_tactical_card_meta(card_code).get("name", card_code))
 		var target_name := str(map.node_by_code(target_code).get("name", target_code))
-		_toast("【%s】将令已加盖帅印，下达至【%s】(队%d)！" % [card_name, target_name, lane])
+		_toast("【%s】将令已加盖帅印，下达至【%s】(第%d队)！" % [card_name, target_name, lane])
+		if tutorial_step == 2:
+			_advance_tutorial(3)
 		_refresh_state()
 	)
 
@@ -3495,6 +3930,7 @@ func _withdraw_card_order(slot: int) -> void:
 		if not ok:
 			_show_error(err)
 			return
+		AudioManager.play_sfx("card_withdraw")
 		_toast("第 %d 队将令已成功撤回！" % (slot + 1))
 		_refresh_state()
 	)
@@ -3503,6 +3939,12 @@ func _on_hand_redraw_pressed() -> void:
 	if hand_redraw_used:
 		_toast("今日重抽机会已用尽！", true)
 		return
+	if not AudioManager.is_reduced_motion and not hand_card_views.is_empty():
+		var fly_tw := create_tween().set_parallel(true)
+		for c in hand_card_views:
+			if is_instance_valid(c):
+				fly_tw.tween_property(c, "position:y", -20.0, 0.15).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+				fly_tw.tween_property(c, "modulate:a", 0.0, 0.15)
 	action_status.text = "请求重新抽取手牌..."
 	api.redraw_hand(_turn_id(), func(ok: bool, _data: Dictionary, err: Dictionary):
 		if not ok:
@@ -3889,9 +4331,32 @@ func _on_login(as_teacher: bool) -> void:
 			return
 		api.token = str(data.get("token", ""))
 		login_status.text = ""
+		_transition_login_to_game()
+		_refresh_state()
+	)
+
+func _transition_login_to_game() -> void:
+	if AudioManager.is_reduced_motion:
 		login_layer.visible = false
 		game_layer.visible = true
-		_refresh_state()
+		game_layer.modulate.a = 1.0
+		game_layer.scale = Vector2.ONE
+		_check_and_trigger_tutorial()
+		return
+
+	game_layer.visible = true
+	game_layer.modulate.a = 0.0
+	game_layer.pivot_offset = size / 2.0
+	game_layer.scale = Vector2(0.98, 0.98)
+
+	var tw := create_tween().set_parallel(true)
+	tw.tween_property(login_layer, "modulate:a", 0.0, 0.20)
+	tw.tween_property(game_layer, "modulate:a", 1.0, 0.35).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tw.tween_property(game_layer, "scale", Vector2.ONE, 0.35).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tw.chain().tween_callback(func():
+		login_layer.visible = false
+		login_layer.modulate.a = 1.0
+		_check_and_trigger_tutorial()
 	)
 
 func _set_login_busy(busy: bool) -> void:
@@ -4146,9 +4611,10 @@ func _withdraw_order() -> void:
 func _show_error(error: Dictionary) -> void:
 	print("API ERROR: ", error)
 	var code := str(error.get("code", ""))
-	var msg := str(error.get("message", "请求失败"))
-	action_status.text = msg
-	_toast(msg, true)
+	var raw_msg := str(error.get("message", "请求失败"))
+	var friendly_msg: String = str(ERROR_CODE_TRANSLATION.get(code, raw_msg))
+	action_status.text = friendly_msg
+	_toast(friendly_msg, true)
 	if code == "UNAUTHORIZED" or code == "SESSION_EXPIRED":
 		_logout_local("凭据已失效，请重新登录")
 

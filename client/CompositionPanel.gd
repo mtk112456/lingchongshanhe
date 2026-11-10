@@ -121,7 +121,7 @@ func _layout_responsive() -> void:
 		confirm_btn.add_theme_font_size_override("font_size", 11 if is_phone else 12)
 		
 	if quick_tip_label:
-		quick_tip_label.text = "克制: 骑>盾>弓>枪>骑 (x1.2/x0.85) · 点击槽位替换" if is_phone else "克制环: 骑>盾>弓>枪>骑 (x1.2 / x0.85) · 点击槽位再选兵种即可替换 (可重复编成)"
+		quick_tip_label.text = "克制: 骑>盾>弓>枪>骑 (x1.2/x0.85) · 点击队伍位置替换" if is_phone else "克制环: 骑>盾>弓>枪>骑 (x1.2 / x0.85) · 点击队伍位置再选兵种即可替换 (可重复编成)"
 
 func setup_data(pet_level: int = 10, source_city: String = "凉州", source_type: String = "cav") -> void:
 	base_power = int((1000 + 200 + 200 + 100) / 2.0 * (1.0 + 0.05 * (pet_level - 1)))
@@ -209,7 +209,7 @@ func _build_ui() -> void:
 	root_vbox.add_child(footer_hbox)
 	
 	quick_tip_label = Label.new()
-	quick_tip_label.text = "克制环: 骑>盾>弓>枪>骑 (x1.2 / x0.85) · 点击槽位再选兵种即可替换 (可重复编成)"
+	quick_tip_label.text = "克制环: 骑>盾>弓>枪>骑 (x1.2 / x0.85) · 点击队伍位置再选兵种即可替换 (可重复编成)"
 	quick_tip_label.add_theme_color_override("font_color", Color("#a69985"))
 	quick_tip_label.add_theme_font_size_override("font_size", 10)
 	footer_hbox.add_child(quick_tip_label)

@@ -89,6 +89,7 @@ var wall_view: Control
 
 # 结束折页与印章
 var result_overlay: Control
+var result_card_center: PanelContainer
 var seal_label: Label
 var page_frame_1: Control
 var page_frame_2: Control
@@ -259,74 +260,213 @@ func _set_unit_sprite_state(uid: String, state_suffix: String) -> void:
 func _play_attack_anim(src_id: String, tgt_id: String, dmg: int, killed: bool) -> void:
 	var src_view: Control = unit_views.get(src_id, null)
 	var tgt_view: Control = unit_views.get(tgt_id, null)
-	if src_view and tgt_view:
-		# 切换为攻击与受击姿态
-		_set_unit_sprite_state(src_id, "attack")
-		_set_unit_sprite_state(tgt_id, "hit")
+	if not src_view or not tgt_view:
+		return
 
-		# 攻击方微向前冲刺再回弹
-		var orig_pos := src_view.position
-		var dir := (tgt_view.position - src_view.position).normalized()
+	var src_type: String = str(units_data.get(src_id, {}).get("type", "cav"))
+	var is_archer := (src_type == "arc" or src_type == "archer")
+	var orig_pos := src_view.position
+	var dir := (tgt_view.position - src_view.position).normalized()
+
+	_set_unit_sprite_state(src_id, "attack")
+
+	if is_archer:
+		# 弓兵远程射击：发射一支水墨金羽箭，120ms 命中目标
+		var start_p := src_view.position + Vector2(src_view.size.x * 0.5, src_view.size.y * 0.5)
+		var end_p := tgt_view.position + Vector2(tgt_view.size.x * 0.5, tgt_view.size.y * 0.5)
+		_spawn_flying_arrow(start_p, end_p, func():
+			_execute_hit_impact(src_id, tgt_id, dmg, killed, dir)
+		)
+		var recoil_tw := create_tween()
+		recoil_tw.tween_property(src_view, "position", orig_pos - dir * 4.0, 0.06)
+		recoil_tw.tween_property(src_view, "position", orig_pos, 0.08)
+		recoil_tw.finished.connect(func():
+			_set_unit_sprite_state(src_id, "idle")
+		)
+	else:
+		# 近战单位冲锋：向前 12–18px，80ms 回弹
 		var tw := create_tween()
-		tw.tween_property(src_view, "position", orig_pos + dir * 14.0, 0.08)
-		tw.tween_property(src_view, "position", orig_pos, 0.12)
+		tw.tween_property(src_view, "position", orig_pos + dir * 16.0, 0.08)
+		tw.tween_property(src_view, "position", orig_pos, 0.08)
 		tw.finished.connect(func():
 			_set_unit_sprite_state(src_id, "idle")
 		)
-		
-		# 目标方受击震颤与掉血浮字
-		_spawn_floating_text(tgt_view.position + Vector2(20, -10), "-%d" % dmg, Color("#ff5544"))
-		_shake_node(tgt_view)
-		_update_unit_card(tgt_id)
-		
-		get_tree().create_timer(0.22).timeout.connect(func():
+		# 80ms 冲锋接触点触发打击命中
+		get_tree().create_timer(0.07).timeout.connect(func():
+			_execute_hit_impact(src_id, tgt_id, dmg, killed, dir)
+		)
+
+func _execute_hit_impact(src_id: String, tgt_id: String, dmg: int, killed: bool, dir: Vector2) -> void:
+	var tgt_view: Control = unit_views.get(tgt_id, null)
+	if not tgt_view or not is_instance_valid(tgt_view):
+		return
+
+	# 音效钩子：打击音效
+	if has_node("/root/AudioManager"):
+		AudioManager.play_sfx("hit")
+
+	_set_unit_sprite_state(tgt_id, "hit")
+	_play_hit_reaction(tgt_view, dir)
+	_spawn_floating_text(tgt_view.position + Vector2(16, -14), "-%d" % dmg, Color("#ff5544"))
+	_update_unit_card(tgt_id)
+
+	if killed:
+		# 死亡：倒下 + 渐隐淡出
+		var kill_tw := create_tween().set_parallel(true)
+		var rot := deg_to_rad(85.0 if dir.x > 0 else -85.0)
+		kill_tw.tween_property(tgt_view, "rotation", rot, 0.28).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		kill_tw.tween_property(tgt_view, "position:y", tgt_view.position.y + 10.0, 0.28)
+		kill_tw.tween_property(tgt_view, "modulate", Color(0.35, 0.35, 0.35, 0.25), 0.30)
+	else:
+		get_tree().create_timer(0.20).timeout.connect(func():
 			if units_data.has(tgt_id) and units_data[tgt_id].get("is_alive", true):
 				_set_unit_sprite_state(tgt_id, "idle")
 		)
-		
-		if killed:
-			var fade_tw := create_tween()
-			fade_tw.tween_property(tgt_view, "modulate:a", 0.35, 0.25)
+
+## 受击：闪白 60ms + 轻微后仰
+func _play_hit_reaction(tgt_view: Control, dir: Vector2) -> void:
+	if not tgt_view or not is_instance_valid(tgt_view):
+		return
+	var orig_pos := tgt_view.position
+
+	# 1. 闪白 60ms
+	var flash := ColorRect.new()
+	flash.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	flash.color = Color(1.0, 1.0, 1.0, 0.85)
+	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tgt_view.add_child(flash)
+
+	var flash_tw := create_tween()
+	flash_tw.tween_property(flash, "color:a", 0.0, 0.06)
+	flash_tw.finished.connect(func():
+		if is_instance_valid(flash): flash.queue_free()
+	)
+
+	# 2. 轻微后仰 80ms 回弹
+	if not AudioManager.is_reduced_motion:
+		var push_dir := dir * 8.0
+		var tw := create_tween()
+		tw.tween_property(tgt_view, "position", orig_pos + push_dir, 0.04)
+		tw.tween_property(tgt_view, "position", orig_pos, 0.08)
+
+## 弓兵箭矢：飞一支水墨金羽箭，120ms 到达
+func _spawn_flying_arrow(from_pos: Vector2, to_pos: Vector2, on_hit: Callable) -> void:
+	var arrow := Node2D.new()
+	arrow.position = from_pos
+	var diff := to_pos - from_pos
+	arrow.rotation = diff.angle()
+
+	var body := Line2D.new()
+	body.width = 2.5
+	body.default_color = Color("#2b2118") # 水墨箭杆
+	body.points = PackedVector2Array([Vector2(-12, 0), Vector2(10, 0)])
+	arrow.add_child(body)
+
+	var head := Polygon2D.new()
+	head.polygon = PackedVector2Array([Vector2(14, 0), Vector2(8, -3.5), Vector2(8, 3.5)])
+	head.color = Color("#d4af37") # 金镞
+	arrow.add_child(head)
+
+	var feather := Polygon2D.new()
+	feather.polygon = PackedVector2Array([Vector2(-12, 0), Vector2(-15, -3), Vector2(-9, 0), Vector2(-15, 3)])
+	feather.color = Color("#276f57") # 翠羽
+	arrow.add_child(feather)
+
+	battlefield_rect.add_child(arrow)
+	if has_node("/root/AudioManager"):
+		AudioManager.play_sfx("arrow")
+
+	var tw := create_tween()
+	tw.tween_property(arrow, "position", to_pos, 0.12)
+	tw.finished.connect(func():
+		if is_instance_valid(arrow):
+			arrow.queue_free()
+		on_hit.call()
+	)
 
 func _play_siege_anim(dmg: int) -> void:
 	if siege_view and wall_view:
-		# 切换器械为攻墙撞击姿态
 		var siege_sprite: TextureRect = siege_view.find_child("SiegeSprite", true, false)
 		if siege_sprite and ResourceLoader.exists("res://assets/art/battle/siege_ram_wall_attack.png"):
 			siege_sprite.texture = load("res://assets/art/battle/siege_ram_wall_attack.png")
-		
-		# 器械冲刺动画
+
+		# 冲锋：向前 16px，80ms 回弹
 		var tw := create_tween()
-		tw.tween_property(siege_view, "position:x", siege_view.position.x + 16.0, 0.10)
-		tw.tween_property(siege_view, "position:x", siege_view.position.x, 0.15)
+		tw.tween_property(siege_view, "position:x", siege_view.position.x + 16.0, 0.08)
+		tw.tween_property(siege_view, "position:x", siege_view.position.x, 0.10)
 		tw.finished.connect(func():
 			if siege_sprite and ResourceLoader.exists("res://assets/art/battle/siege_ram_idle.png"):
 				siege_sprite.texture = load("res://assets/art/battle/siege_ram_idle.png")
 		)
-		
-		# 城墙受创爆裂与浮字
-		_spawn_floating_text(wall_view.position + Vector2(10, 40), "轰! -%d" % dmg, Color("#ffaa33"))
-		_shake_node(wall_view)
 
+		# 破墙：城墙抖动 + 碎石粒子 + 重震
+		if has_node("/root/AudioManager"):
+			AudioManager.play_sfx("wall_break")
+
+		_spawn_floating_text(wall_view.position + Vector2(10, 40), "轰! -%d" % dmg, Color("#ffaa33"))
+		_heavy_shake_node(wall_view, 8.0, 0.25)
+		_heavy_shake_node(battlefield_rect, 3.0, 0.18)
+		_spawn_debris_particles(wall_view.position + Vector2(20, 60))
+
+## 破墙碎石粒子
+func _spawn_debris_particles(center_pos: Vector2) -> void:
+	if AudioManager.is_reduced_motion:
+		return
+	for i in range(8):
+		var stone := ColorRect.new()
+		var sz := randf_range(3.5, 7.5)
+		stone.size = Vector2(sz, sz)
+		stone.color = Color(randf_range(0.35, 0.55), randf_range(0.3, 0.45), randf_range(0.25, 0.4), 1.0)
+		stone.position = center_pos
+		battlefield_rect.add_child(stone)
+
+		var angle := randf_range(-PI * 0.8, PI * 0.8)
+		var dist := randf_range(24.0, 56.0)
+		var target := center_pos + Vector2(cos(angle) * dist, sin(angle) * dist + randf_range(12, 28))
+		var stw := create_tween().set_parallel(true)
+		stw.tween_property(stone, "position", target, 0.30).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		stw.tween_property(stone, "modulate:a", 0.0, 0.30)
+		stw.tween_property(stone, "scale", Vector2(0.2, 0.2), 0.30)
+		stw.chain().tween_callback(func():
+			if is_instance_valid(stone): stone.queue_free()
+		)
+
+## 飘字：伤害数字上浮 24px，300ms 淡出
 func _spawn_floating_text(pos: Vector2, text: String, col: Color) -> void:
 	var lbl := Label.new()
 	lbl.text = text
 	lbl.add_theme_color_override("font_color", col)
-	lbl.add_theme_font_size_override("font_size", 13)
+	lbl.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.85))
+	lbl.add_theme_constant_override("shadow_offset_x", 1)
+	lbl.add_theme_constant_override("shadow_offset_y", 1)
+	lbl.add_theme_font_size_override("font_size", 14)
 	lbl.position = pos
 	battlefield_rect.add_child(lbl)
-	
+
 	var tw := create_tween().set_parallel(true)
-	tw.tween_property(lbl, "position:y", pos.y - 24.0, 0.45)
-	tw.tween_property(lbl, "modulate:a", 0.0, 0.45)
-	tw.finished.connect(func(): if is_instance_valid(lbl): lbl.queue_free())
+	tw.tween_property(lbl, "position:y", pos.y - 24.0, 0.30)
+	tw.tween_property(lbl, "modulate:a", 0.0, 0.30)
+	tw.finished.connect(func():
+		if is_instance_valid(lbl): lbl.queue_free()
+	)
 
 func _shake_node(node: Control) -> void:
-	if not node: return
+	if not node or AudioManager.is_reduced_motion: return
 	var orig := node.position
 	var tw := create_tween()
-	tw.tween_property(node, "position", orig + Vector2(randf_range(-3, 3), randf_range(-3, 3)), 0.05)
-	tw.tween_property(node, "position", orig, 0.05)
+	tw.tween_property(node, "position", orig + Vector2(randf_range(-3, 3), randf_range(-3, 3)), 0.04)
+	tw.tween_property(node, "position", orig, 0.04)
+
+func _heavy_shake_node(node: Control, intensity: float = 6.0, duration: float = 0.2) -> void:
+	if not node or AudioManager.is_reduced_motion: return
+	var orig := node.position
+	var tw := create_tween()
+	var steps := int(duration / 0.04)
+	for i in range(steps):
+		var decay := 1.0 - float(i) / float(steps)
+		var offset := Vector2(randf_range(-intensity, intensity) * decay, randf_range(-intensity, intensity) * decay)
+		tw.tween_property(node, "position", orig + offset, 0.04)
+	tw.tween_property(node, "position", orig, 0.04)
 
 func _finish_replay() -> void:
 	is_playing = false
@@ -397,6 +537,21 @@ func _show_result_overlay() -> void:
 	
 	seal_label.text = "【%s】" % seal_text
 	seal_label.add_theme_color_override("font_color", seal_col)
+
+	# 胜负：破城/守住印章重击砸落动效
+	if not AudioManager.is_reduced_motion:
+		seal_label.pivot_offset = Vector2(seal_label.size.x * 0.5, seal_label.size.y * 0.5)
+		seal_label.scale = Vector2(2.5, 2.5)
+		seal_label.modulate.a = 0.0
+		var stamp_tw := create_tween().set_parallel(true)
+		stamp_tw.tween_property(seal_label, "scale", Vector2(1.0, 1.0), 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
+		stamp_tw.tween_property(seal_label, "modulate:a", 1.0, 0.18)
+		stamp_tw.chain().tween_callback(func():
+			if has_node("/root/AudioManager"):
+				AudioManager.play_sfx("stamp")
+			if result_card_center:
+				_heavy_shake_node(result_card_center, 6.0, 0.18)
+		)
 	
 	# 更新第一折战果信息
 	if page_frame_1 and page_frame_1.get_child_count() >= 2:
@@ -1027,9 +1182,9 @@ func _build_result_overlay() -> void:
 	result_overlay.add_child(mask)
 	
 	# 中央水墨折页纸卡
-	var card_center := PanelContainer.new()
-	card_center.custom_minimum_size = Vector2(460, 320)
-	card_center.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	result_card_center = PanelContainer.new()
+	result_card_center.custom_minimum_size = Vector2(460, 320)
+	result_card_center.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	var patch_path := "res://assets/art/ui/card_frame_ninepatch.png"
 	if ResourceLoader.exists(patch_path):
 		var nine_sb := StyleBoxTexture.new()
@@ -1039,14 +1194,14 @@ func _build_result_overlay() -> void:
 		nine_sb.texture_margin_right = 32
 		nine_sb.texture_margin_bottom = 32
 		nine_sb.set_content_margin_all(16)
-		card_center.add_theme_stylebox_override("panel", nine_sb)
+		result_card_center.add_theme_stylebox_override("panel", nine_sb)
 	else:
-		card_center.add_theme_stylebox_override("panel", _make_style(C_XUANZHI, C_BORDER_GOLD, 3, 10, 16))
-	result_overlay.add_child(card_center)
+		result_card_center.add_theme_stylebox_override("panel", _make_style(C_XUANZHI, C_BORDER_GOLD, 3, 10, 16))
+	result_overlay.add_child(result_card_center)
 	
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 8)
-	card_center.add_child(vbox)
+	result_card_center.add_child(vbox)
 	
 	# 朱砂大印章居中
 	seal_label = Label.new()
