@@ -67,7 +67,7 @@ CREATE TABLE slice_nodes (
   name VARCHAR(32) NOT NULL,
   x INT NOT NULL DEFAULT 0,
   y INT NOT NULL DEFAULT 0,
-  node_type ENUM('start','neutral') NOT NULL DEFAULT 'neutral',
+  node_type ENUM('start','neutral','king','camp','pass','ferry','culture','water') NOT NULL DEFAULT 'neutral',
   owner_faction_id BIGINT UNSIGNED NULL,
   initial_owner_faction_id BIGINT UNSIGNED NULL,
   morale TINYINT UNSIGNED NOT NULL DEFAULT 0,
