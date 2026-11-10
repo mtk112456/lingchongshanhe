@@ -276,6 +276,8 @@ if ($battleEntry !== null) {
     check('火攻不占队伍位',
         !in_array('fire_attack', array_column($teams, 'card'), true) && count($teams) === 3,
         json_encode(array_column($teams, 'card')));
+    check('支援人数 = 1', ($attacker['supporters'] ?? 0) === 1, 'supporters=' . ($attacker['supporters'] ?? 'null'));
+    check('支援倍率 = 1.224', abs((float)($attacker['support_mult'] ?? 0) - 1.224) < 0.01, 'mult=' . ($attacker['support_mult'] ?? 'null'));
     check('弓兵被放回后排', ($byType['arc']['row'] ?? '') === 'back');
     check('枪兵按出令放前排', ($byType['spear']['row'] ?? '') === 'front');
     check('火攻进入器械结算', !empty($attacker['fire']));

@@ -194,6 +194,8 @@ final class CardSettlementService
             'troops' => array_sum(array_column($teams, 'troops')),
             'scouted' => $scouted,
             'fire' => $fire,
+            'supporters' => $supporters,
+            'support_mult' => round($supportMult, 3),
         ];
 
         // 大营：阵营拥有任意大营，进攻 +5% 兵力
@@ -229,6 +231,8 @@ final class CardSettlementService
         $defGeneral = 'def';
         $defTroops = 0.0;
         $realGarrison = false;
+        $defSupporters = 0;
+        $defSupportMult = 1.0;
         if ($ownerFactionId !== null) {
             $defenderOrders = [];
             foreach ($orders as $order) {
@@ -254,11 +258,12 @@ final class CardSettlementService
             }
             if ($defVanguard !== []) {
                 $defSupporters = max(0, count(array_unique(array_column($defenderOrders, 'player_id'))) - count($defVanguard));
+                $defSupportMult = BattleService::supportMultiplier($defSupporters);
                 $defTeams = $this->teamsFromOrders(
                     $defVanguard,
                     $gameId,
                     $weekNo,
-                    BattleService::supportMultiplier($defSupporters)
+                    $defSupportMult
                 );
                 $defGeneral = $this->generalOf((string)($defVanguard[0]['pet_code'] ?? ''));
                 $defTroops = array_sum(array_column($defTeams, 'troops'));
@@ -299,6 +304,8 @@ final class CardSettlementService
             'troops' => $defTroops,
             'real_garrison' => $realGarrison,
             'pass_bonus' => $passBonus,
+            'supporters' => $defSupporters,
+            'support_mult' => round($defSupportMult, 3),
         ];
 
         $result = $this->battleService->resolve($attacker, $defender);
