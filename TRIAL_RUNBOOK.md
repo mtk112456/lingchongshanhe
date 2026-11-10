@@ -273,6 +273,25 @@ trial_results/YYYYMMDD_HHMMSS/
 
 ---
 
+## 7.1 无学生时自测
+
+```powershell
+$env:SLICE_CONFIG = "$PWD\server\slice\config.trial.php"
+php server/slice/scripts/setup_test_db.php
+php server/slice/scripts/setup_trial_12p.php
+powershell -File tools/trial_12p.ps1 -Trial -Turns 3
+```
+
+期望：
+
+```text
+主城两晚易主
+第三晚守方守住
+TRIAL_12P PASS
+```
+
+---
+
 ## 8. 通过 / 失败标准
 
 通过：
