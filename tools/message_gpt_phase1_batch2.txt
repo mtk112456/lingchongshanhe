@@ -1,0 +1,50 @@
+【Phase 1 第二批美术 · 反重力的 brief 已出】
+
+反重力的设计 brief：
+
+```text
+client/ART_BRIEF_PHASE1.md
+```
+
+请严格按 brief 出第二批：
+
+```text
+1. 3 张战场背景
+   bg_battle_plain.png / bg_battle_pass.png / bg_battle_ferry.png
+   1920×1080，PNG/JPG，无透明，无文字
+
+2. 九宫格卡框
+   card_frame_ninepatch.png
+   256×384 RGBA 透明，可九宫格拉伸
+
+3. 12 战术图标
+   tactics_night_raid.png / tactics_forced_march.png / tactics_fire_attack.png
+   tactics_fortify.png / tactics_mutual_support.png / tactics_empty_fort.png
+   tactics_last_stand.png / tactics_scout.png / tactics_counter_intel.png
+   tactics_feint.png / tactics_supply.png / tactics_cut_supply.png
+   128×128 RGBA 透明
+
+4. 4 阵营旗
+   flag_faction_bi.png / flag_faction_mo.png / flag_faction_shuang.png / flag_faction_dan.png
+   128×128 RGBA 透明
+
+5. 如 brief 要求，补 128×128 单位头像
+```
+
+同时做第一批终审：
+
+```text
+64px 可辨
+无文字、无阵营色
+脚底锚点一致
+透明底、无地面阴影
+```
+
+输出：
+
+```text
+art_src/gpt/PHASE1_BATTLE_ASSETS_BATCH2/
+art_src/gpt/PHASE1_ART_REVIEW.md
+```
+
+不要改 client/server 代码。

@@ -163,6 +163,74 @@ func recharge(points: int, request_key: String, callback: Callable) -> void:
 	}, callback)
 
 # ---------------------------------------------------------------------------
+# Phase 1: 兵种编成 / 战术手牌 / 战斗推演回放
+# ---------------------------------------------------------------------------
+
+func set_composition(week_no: int, types: Array, callback: Callable) -> void:
+	request("POST", "/api/slice/composition", {
+		"week_no": week_no,
+		"types": types,
+	}, callback)
+
+func setComposition(week_no: int, types: Array, callback: Callable) -> void:
+	set_composition(week_no, types, callback)
+
+func redraw_hand(turn_id: int, callback: Callable) -> void:
+	request("POST", "/api/slice/hand/redraw", {
+		"turn_id": turn_id,
+	}, callback)
+
+func redrawHand(turn_id: int, callback: Callable) -> void:
+	redraw_hand(turn_id, callback)
+
+func play_card_order(turn_id: int, slot: int, card_code: String, target_node_code: String, lane: int, row_pos: String, request_key: String, callback: Callable) -> void:
+	request("POST", "/api/slice/order/play", {
+		"turn_id": turn_id,
+		"slot": slot,
+		"card_code": card_code,
+		"target_node_code": target_node_code,
+		"lane": lane,
+		"row_pos": row_pos,
+		"request_key": request_key,
+	}, callback)
+
+func playCard(turn_id: int, slot: int, card_code: String, target_node_code: String, lane: int, row_pos: String, request_key: String, callback: Callable) -> void:
+	play_card_order(turn_id, slot, card_code, target_node_code, lane, row_pos, request_key, callback)
+
+func withdraw_card_order(turn_id: int, slot: int, callback: Callable) -> void:
+	request("POST", "/api/slice/order/withdraw", {
+		"turn_id": turn_id,
+		"slot": slot,
+	}, callback)
+
+func withdrawCard(turn_id: int, slot: int, callback: Callable) -> void:
+	withdraw_card_order(turn_id, slot, callback)
+
+func demo_battle(turn_id: int, node_code: String, fire: bool, callback: Callable) -> void:
+	request("POST", "/api/slice/battle/demo", {
+		"turn_id": turn_id,
+		"node_code": node_code,
+		"fire": fire,
+	}, callback)
+
+func demoBattle(turn_id: int, node_code: String, fire: bool, callback: Callable) -> void:
+	demo_battle(turn_id, node_code, fire, callback)
+
+func settle_battle(battle_id: int, callback: Callable) -> void:
+	request("POST", "/api/slice/battle/settle", {
+		"battle_id": battle_id,
+	}, callback)
+
+func settleBattle(battle_id: int, callback: Callable) -> void:
+	settle_battle(battle_id, callback)
+
+func get_battle(battle_id: int, callback: Callable) -> void:
+	request("GET", "/api/slice/battle?id=" + str(battle_id), null, callback)
+
+func getBattle(battle_id: int, callback: Callable) -> void:
+	get_battle(battle_id, callback)
+
+# ---------------------------------------------------------------------------
 # 教师
 # ---------------------------------------------------------------------------
 
@@ -174,6 +242,12 @@ func lock_turn(turn_id: int, force: bool, callback: Callable) -> void:
 
 func settle_turn(turn_id: int, callback: Callable) -> void:
 	request("POST", "/api/slice/admin/settle", {"turn_id": turn_id}, callback)
+
+func card_settle(turn_id: int, callback: Callable) -> void:
+	request("POST", "/api/slice/admin/card-settle", {"turn_id": turn_id}, callback)
+
+func cardSettle(turn_id: int, callback: Callable) -> void:
+	card_settle(turn_id, callback)
 
 func next_turn(from_turn_id: int, callback: Callable) -> void:
 	request("POST", "/api/slice/admin/next-turn", {"from_turn_id": from_turn_id}, callback)

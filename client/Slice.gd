@@ -18,6 +18,7 @@ const C_TENGHUANG := Color("#cf8325")   # 藤黄（烫金线条、高亮标识�
 const C_TIANQING := Color("#a9d6e5")    # 天青（水域微光、信息标签、清雅蓝）
 const C_WOOD_DESK := Color("#2f2721")   # 深墨木桌（案台底色、深木色面板封边）
 const C_SHADOW_WARM := Color(0.24, 0.20, 0.17, 0.35) # 暖灰纸片投影（杜绝死黑）
+const C_BORDER_GOLD := Color("#c9a227") # 烫金描边与高亮线
 
 # 兼容与别名常量映射
 const INK_DARK := C_WOOD_DESK
@@ -106,6 +107,7 @@ var offline_banner: PanelContainer
 var offline_banner_label: Label
 var offline_retry_btn: Button
 var drawer_tween: Tween
+var is_drawer_open: bool = false
 
 # S01 左右侧栏与底部导航
 var left_rail: Control
@@ -123,6 +125,7 @@ var city_title_label: Label
 var city_type_badge: Label
 var city_faction_badge: Label
 var city_def_badge: Label
+var city_morale_badge: Label
 var city_garrison_label: Label
 var city_routes_label: Label
 var city_tactical_label: Label
@@ -135,6 +138,27 @@ var city_action_defend_btn: Button
 var city_action_scout_btn: Button
 var city_action_supply_btn: Button
 var city_action_withdraw_btn: Button
+var city_action_battle_btn: Button
+var current_battle_id: int = 0
+
+# Phase 1: 军团编成、每日战术手牌与 3x2 战斗回放
+const CompositionPanelScript = preload("res://CompositionPanel.gd")
+const BattleReplayScene = preload("res://BattleReplay.tscn")
+var composition_panel: PanelContainer
+var army_margin: MarginContainer
+var hand_cards_bar: PanelContainer
+var hand_cards_container: HBoxContainer
+var hand_card_views: Array = []
+var hand_redraw_btn: Button
+var hand_collapse_btn: Button
+var hand_cards_data: Array = []
+var hand_redraw_used: bool = false
+var hand_bar_collapsed: bool = false
+var battle_replay_overlay: Control
+var battle_replay_instance: Control
+var card_tooltip_panel: PanelContainer
+var card_tooltip_title: Label
+var card_tooltip_desc: Label
 
 # S03 军令确认浮层
 var order_confirm_overlay: Control
@@ -571,10 +595,14 @@ func _navigate_to(page_id: String) -> void:
 		map_shell.visible = true
 		if legend_panel != null and (city_drawer == null or not city_drawer.visible):
 			legend_panel.visible = true
+		if hand_cards_bar != null and (city_drawer == null or not city_drawer.visible):
+			hand_cards_bar.visible = true
 		for p in pages.values():
 			p.visible = false
 	else:
 		map_shell.visible = false
+		if hand_cards_bar != null:
+			hand_cards_bar.visible = false
 		if city_drawer != null:
 			_toggle_city_drawer(false)
 		if order_confirm_overlay != null:
@@ -731,6 +759,18 @@ func _layout_responsive() -> void:
 			var btn: Button = dock_tab_buttons[tab_id]
 			btn.add_theme_font_size_override("font_size", 12 if is_compact_h else 14)
 
+	# 5.1 每日战术手牌栏（悬浮贴于底部导航栏上方，抽屉打开时避让）
+	if hand_cards_bar != null:
+		var dock_h := 46.0 if is_compact_h else (56.0 if is_phone else 60.0)
+		var bar_w := minf(w - 16.0, 720.0)
+		var actual_bar_h := 28.0 if hand_bar_collapsed else (92.0 if is_compact_h else 98.0)
+		hand_cards_bar.size = Vector2(bar_w, actual_bar_h)
+		if is_drawer_open:
+			hand_cards_bar.visible = false
+		elif current_page == "S01_MAP":
+			hand_cards_bar.visible = true
+			hand_cards_bar.position = Vector2((w - bar_w) / 2.0, h - dock_h - actual_bar_h - 2.0)
+
 	# 6. S02 城池底部抽屉（P1: 高度压到紧凑战术条 ≤28–32%，杜绝大块黑白空卡）
 	if city_drawer != null:
 		var drawer_w := w if (is_phone or is_portrait) else minf(w - 40.0, 840.0)
@@ -785,6 +825,10 @@ func _layout_responsive() -> void:
 		faction_margin.size = Vector2(w - 32, h - 80)
 		if faction_cards_container != null:
 			faction_cards_container.columns = 1 if is_phone else 2
+
+	if army_margin != null:
+		army_margin.position = Vector2(10.0 if is_compact_h else 16.0, 50.0 if is_compact_h else 70.0)
+		army_margin.size = Vector2(w - (20.0 if is_compact_h else 32.0), h - (58.0 if is_compact_h else 80.0))
 
 	# 9. Toast 通知条
 	if toast_panel != null:
@@ -1166,8 +1210,11 @@ func _build_game() -> void:
 	_build_side_rails()
 	_build_map_legend()
 	_build_bottom_dock()
+	_build_hand_cards_bar()
 	_build_city_drawer()
 	_build_order_confirm_modal()
+	_build_card_tooltip()
+	_build_battle_replay_overlay()
 
 	# 2. 独立全屏页面容器（S04 战报、S05 回放、S06-S13 等）
 	pages_container = Control.new()
@@ -1392,6 +1439,7 @@ func _add_dock_tab(parent: Control, page_id: String, icon: String, title: String
 
 # 抽屉显示状态与底部 Dock 避让让位联动（设计系统动效：220ms TRANS_CUBIC EASE_OUT）
 func _toggle_city_drawer(is_show: bool) -> void:
+	is_drawer_open = is_show
 	if city_drawer == null:
 		return
 	var is_compact_h := size.y < 650.0
@@ -1406,6 +1454,8 @@ func _toggle_city_drawer(is_show: bool) -> void:
 		city_drawer.position.y = size.y
 		if legend_panel != null:
 			legend_panel.visible = false
+		if hand_cards_bar != null:
+			hand_cards_bar.visible = false
 		drawer_tween = create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 		drawer_tween.tween_property(city_drawer, "position:y", size.y - drawer_h, 0.22)
 		if bottom_dock != null:
@@ -1413,6 +1463,8 @@ func _toggle_city_drawer(is_show: bool) -> void:
 	else:
 		if legend_panel != null:
 			legend_panel.visible = true
+		if hand_cards_bar != null and current_page == "S01_MAP":
+			hand_cards_bar.visible = true
 		drawer_tween = create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 		drawer_tween.tween_property(city_drawer, "position:y", size.y, 0.18)
 		if bottom_dock != null:
@@ -1523,6 +1575,8 @@ func _build_city_drawer() -> void:
 	def_box.add_child(def_v)
 	city_def_badge = _label("🛡️ 城防守备：3 / 3 点 · 坚固", 13, C_ZHUSHA)
 	def_v.add_child(city_def_badge)
+	city_morale_badge = _label("❤️ 城池民心：0 / 2 格", 12, C_TENGHUANG)
+	def_v.add_child(city_morale_badge)
 	city_power_diff_label = _label("⚔️ 战意差：我方 0 vs 敌方 0", 12, Color("#554433"))
 	def_v.add_child(city_power_diff_label)
 	city_garrison_label = _label("👥 驻防状态：守备严整", 11, Color("#665544"))
@@ -1558,6 +1612,12 @@ func _build_city_drawer() -> void:
 	city_action_defend_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	city_action_defend_btn.pressed.connect(_on_city_defend_pressed)
 	h_act.add_child(city_action_defend_btn)
+
+	city_action_battle_btn = _button("⚔️ 演武决战", Color("#8c3a32"), 42)
+	city_action_battle_btn.custom_minimum_size = Vector2(88, 42)
+	city_action_battle_btn.add_theme_font_size_override("font_size", 13)
+	city_action_battle_btn.pressed.connect(func(): _start_demo_battle(selected_code))
+	h_act.add_child(city_action_battle_btn)
 
 	# 次级动作：斥候、补给、撤销
 	city_action_scout_btn = _button("🔍 斥候", Color("#33485c"), 42)
@@ -1660,6 +1720,16 @@ func _open_city_drawer(code: String) -> void:
 	
 	var def_points := int(n.get("defense", 3))
 	city_def_badge.text = "🛡️ 城防守备：%d / 3 点" % def_points
+	if n.has("morale") and n.has("morale_cap"):
+		var m_cur := int(n.get("morale", 0))
+		var m_cap := int(n.get("morale_cap", 2))
+		var m_boxes := ""
+		for i in range(m_cap):
+			m_boxes += "■ " if i < m_cur else "□ "
+		city_morale_badge.text = "❤️ 民心所向：%s(%d/%d格·满格易主)" % [m_boxes, m_cur, m_cap]
+		city_morale_badge.visible = true
+	else:
+		city_morale_badge.visible = false
 	if is_mine:
 		city_garrison_label.text = "👥 驻防状态：我方据点 · 守备严整"
 	elif typeof(owner) == TYPE_DICTIONARY and str(owner.get("code", "")) != "" and str(owner.get("code", "")) != "neutral":
@@ -1715,6 +1785,7 @@ func _open_city_drawer(code: String) -> void:
 		city_order_hint.text = "今日军令：待命中 · 请选择下方军略指令"
 
 	_toggle_city_drawer(true)
+	_render_hand_cards()
 	_layout_responsive()
 	focus_city(code)
 
@@ -2471,11 +2542,7 @@ func _build_all_placeholder_pages() -> void:
 		{"title": "粮饷辎重仓", "desc": "储备战备军粮，支撑大军远征要害关塞。"}
 	])
 
-	_build_placeholder_page("S03_ARMY", "⚔️ 军团编组", "班宠协同战阵编排", "⚔️", "编组中", [
-		{"title": "先锋出战位", "desc": "当前领衔灵宠：青竹灵猫（战力 120），享有先制冲锋特权。"},
-		{"title": "中军辅佐位", "desc": "协同防守阵位，强化本城防御韧性与守备上限。"},
-		{"title": "后阵军师位", "desc": "运筹帷幄，夜战结算时提供阵营点数加成。"}
-	])
+	_build_army_composition_page()
 
 	_build_placeholder_page("S07_GENERAL", "🐾 班宠将军", "学子灵宠身份、等级与法宝", "🐾", "出战中", [
 		{"title": "出战灵宠：青竹灵猫", "desc": "等级：LV.5 | 四维：攻 35 / 防 40 / 敏 25 / 法 20。"},
@@ -2613,6 +2680,549 @@ func _build_placeholder_page(page_id: String, title: String, subtitle: String, i
 		cs.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		cv.add_child(cs)
 		grid.add_child(c_panel)
+
+# ---------------------------------------------------------------------------
+# Phase 1: S03 每周军团编成页面
+# ---------------------------------------------------------------------------
+
+func _build_army_composition_page() -> void:
+	var army_page := Control.new()
+	army_page.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	army_page.visible = false
+	pages["S03_ARMY"] = army_page
+	pages_container.add_child(army_page)
+
+	var bg := ColorRect.new()
+	bg.color = C_WOOD_DESK.darkened(0.15)
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	army_page.add_child(bg)
+
+	var header := _create_page_header("⚔️ 每周军团编成", "4 兵种三队战阵 · 兵源城加成 · 周中可改 1 次")
+	army_page.add_child(header)
+
+	army_margin = MarginContainer.new()
+	army_margin.position = Vector2(16, 70)
+	army_margin.size = Vector2(size.x - 32, size.y - 80)
+	army_margin.name = "ArmyMargin"
+	army_page.add_child(army_margin)
+
+	var scroll := ScrollContainer.new()
+	scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	army_margin.add_child(scroll)
+
+	var vbox := VBoxContainer.new()
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vbox.add_theme_constant_override("separation", 10)
+	scroll.add_child(vbox)
+
+	composition_panel = CompositionPanelScript.new()
+	composition_panel.name = "CompositionPanel"
+	composition_panel.composition_confirmed.connect(_on_composition_confirmed)
+	vbox.add_child(composition_panel)
+
+	# 兵种克制与兵源加成说明卡
+	var lore_box := PanelContainer.new()
+	lore_box.add_theme_stylebox_override("panel", _panel_style(C_XUANZHI, Color("#c9a227"), 1, 8, 12))
+	vbox.add_child(lore_box)
+	
+	var lv := VBoxContainer.new()
+	lv.add_theme_constant_override("separation", 4)
+	lore_box.add_child(lv)
+
+	var lt := Label.new()
+	lt.text = "📜 九州兵种克制与兵源城法则"
+	lt.add_theme_color_override("font_color", Color("#231c17"))
+	lt.add_theme_font_size_override("font_size", 14)
+	lv.add_child(lt)
+
+	var ld := Label.new()
+	ld.text = "• 克制循环：骑兵 ➔ 盾兵 ➔ 弓兵 ➔ 枪兵 ➔ 骑兵 (强克伤害 x1.2，被克伤害 x0.85)。\n• 队伍布阵：前排近战(骑/盾/枪)，后排弓兵或替补近战；攻方阵后自动配备攻城重械。\n• 兵源重镇：掌控凉州/太原/邺城(骑+15%)、汉中/襄阳/成都(盾+15%)、江陵/会稽/建业(弓+15%)、洛阳/长沙/寿春(枪+15%)、长安(器械攻墙+50%)。"
+	ld.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	ld.add_theme_color_override("font_color", Color("#4a3e35"))
+	ld.add_theme_font_size_override("font_size", 11)
+	lv.add_child(ld)
+
+# ---------------------------------------------------------------------------
+# Phase 1: 每日战术手牌系统 (Daily Tactical Cards)
+# ---------------------------------------------------------------------------
+
+const ALL_TACTICAL_CARDS := [
+	{"code": "night_raid", "aliases": [], "name": "夜袭", "type": "advance", "icon": "🌙", "short_desc": "未侦察伤害+20%", "full_desc": "【朱·夜袭】：若目标城池当晚未被敌方侦察识破，进军伤害额外提升20%。"},
+	{"code": "forced_march", "aliases": ["rapid_march"], "name": "急行", "type": "advance", "icon": "🐎", "short_desc": "先手突袭 无视断连", "full_desc": "【朱·急行】：首轮先制动势，跳过断连惩罚，直击要塞。"},
+	{"code": "fire_attack", "aliases": [], "name": "火攻", "type": "advance", "icon": "🔥", "short_desc": "器械攻墙伤害+50%", "full_desc": "【朱·火攻】：火烧连营摧坚壁，大幅强化阵后器械对城墙的破坏力(+50%)。"},
+	{"code": "fortify", "aliases": ["solid_defense"], "name": "坚壁", "type": "defend", "icon": "🛡️", "short_desc": "本队防御韧性+20%", "full_desc": "【墨·坚壁】：固若金汤，全队护甲提升20%，次日手牌3选2。"},
+	{"code": "mutual_support", "aliases": ["flank_support"], "name": "犄角", "type": "defend", "icon": "🤝", "short_desc": "相邻城池防守+10%", "full_desc": "【墨·犄角】：互为倚仗，相辅相成，若相邻有己方城池则防御共振提升10%。"},
+	{"code": "empty_fort", "aliases": [], "name": "空城", "type": "defend", "icon": "🪈", "short_desc": "敌军攻势削弱10%", "full_desc": "【墨·空城】：大开城门，虚实莫测，来犯敌军攻击点数削减10%。"},
+	{"code": "last_stand", "aliases": ["hold_ground"], "name": "死守", "type": "defend", "icon": "⚔️", "short_desc": "本队免疫一次破城", "full_desc": "【墨·死守】：誓死不退，关键时刻免疫一次城防易主，每赛季限1次。"},
+	{"code": "scout", "aliases": ["scout_probe"], "name": "哨探", "type": "scout", "icon": "👁️", "short_desc": "开战前勘测敌方一路", "full_desc": "【青·哨探】：深入关隘，侦悉目标敌军上一候驻守区间与1路兵力。"},
+	{"code": "counter_intel", "aliases": ["alienation"], "name": "反间", "type": "scout", "icon": "📜", "short_desc": "刺探动向 敌攻-10%", "full_desc": "【青·反间】：离间军心，查探本回合敌方下令阵营，并削弱其10%攻势。"},
+	{"code": "feint", "aliases": ["decoy_troops"], "name": "疑兵", "type": "scout", "icon": "🚩", "short_desc": "制造虚假驻守假象", "full_desc": "【青·疑兵】：故布疑阵，令敌军侦察时虚增3人防守假象。"},
+	{"code": "supply", "aliases": ["grain_transport"], "name": "运粮", "type": "supply", "icon": "🌾", "short_desc": "每15候回复5%兵力", "full_desc": "【黄·运粮】：粮草充盈，持久续航，对战中每15候恢复全队5%兵力。"},
+	{"code": "cut_supply", "aliases": ["cut_supplies"], "name": "断粮", "type": "supply", "icon": "⛓️", "short_desc": "敌军每15候损失3%", "full_desc": "【黄·断粮】：阻截辎重通道，令守方补给瘫痪并持续流失兵力。"}
+]
+
+func _get_tactical_card_meta(code: String) -> Dictionary:
+	var c := code.to_lower().strip_edges()
+	for t in ALL_TACTICAL_CARDS:
+		if str(t.get("code", "")).to_lower() == c:
+			var res = t.duplicate(true)
+			res["code"] = code
+			return res
+		for a in t.get("aliases", []):
+			if str(a).to_lower() == c:
+				var res = t.duplicate(true)
+				res["code"] = code
+				return res
+	return {
+		"code": code,
+		"name": code,
+		"type": "advance",
+		"icon": "📜",
+		"short_desc": "将令秘策",
+		"full_desc": "【九州将令·%s】" % code
+	}
+
+func _sync_hand_and_orders(data: Dictionary) -> void:
+	var hand_val: Variant = data.get("hand", {})
+	var hand_info: Dictionary = hand_val if typeof(hand_val) == TYPE_DICTIONARY else {}
+	var cards_val: Variant = hand_info.get("cards", [])
+	var cards: Array = cards_val if typeof(cards_val) == TYPE_ARRAY else []
+	hand_redraw_used = bool(hand_info.get("redraw_used", false))
+
+	if hand_redraw_btn:
+		hand_redraw_btn.disabled = hand_redraw_used
+		hand_redraw_btn.text = "已重抽(0/1)" if hand_redraw_used else "🔄 重抽(1/1)"
+		hand_redraw_btn.add_theme_color_override("font_color", Color("#7e7263") if hand_redraw_used else Color("#ffffff"))
+
+	var card_orders_val: Variant = data.get("card_orders", [])
+	var card_orders: Array = card_orders_val if typeof(card_orders_val) == TYPE_ARRAY else []
+	var orders_by_card: Dictionary = {}
+	for ord in card_orders:
+		if typeof(ord) == TYPE_DICTIONARY:
+			orders_by_card[str(ord.get("card_code", ""))] = ord
+
+	if not cards.is_empty():
+		hand_cards_data.clear()
+		for code in cards:
+			var c_str := str(code)
+			var cmeta := _get_tactical_card_meta(c_str)
+			if orders_by_card.has(c_str):
+				cmeta["is_played"] = true
+				cmeta["order"] = orders_by_card[c_str]
+				cmeta["assigned_team"] = int(orders_by_card[c_str].get("slot", 0))
+			else:
+				cmeta["is_played"] = false
+				cmeta["order"] = {}
+				cmeta["assigned_team"] = -1
+			hand_cards_data.append(cmeta)
+		_render_hand_cards()
+
+func _init_hand_cards_data() -> void:
+	hand_cards_data.clear()
+	for i in range(min(4, ALL_TACTICAL_CARDS.size())):
+		var card = ALL_TACTICAL_CARDS[i].duplicate(true)
+		card["assigned_team"] = i if i < 3 else -1
+		card["is_played"] = false
+		card["order"] = {}
+		hand_cards_data.append(card)
+
+func _build_hand_cards_bar() -> void:
+	hand_cards_bar = PanelContainer.new()
+	hand_cards_bar.name = "HandCardsBar"
+	hand_cards_bar.add_theme_stylebox_override("panel", _style(Color(0.12, 0.09, 0.07, 0.94), C_BORDER_GOLD, 1, 8, 4))
+	map_shell.add_child(hand_cards_bar)
+	
+	var root_vb := VBoxContainer.new()
+	root_vb.name = "RootVBox"
+	root_vb.add_theme_constant_override("separation", 3)
+	hand_cards_bar.add_child(root_vb)
+
+	var top_hb := HBoxContainer.new()
+	top_hb.add_theme_constant_override("separation", 8)
+	root_vb.add_child(top_hb)
+
+	var tag_lbl := Label.new()
+	tag_lbl.text = "🎴 每日将令手牌"
+	tag_lbl.add_theme_color_override("font_color", Color("#fae19c"))
+	tag_lbl.add_theme_font_size_override("font_size", 11)
+	top_hb.add_child(tag_lbl)
+
+	var sub_tip := Label.new()
+	sub_tip.text = "点击卡牌出令/撤回 · 悬停长按看说明"
+	sub_tip.add_theme_color_override("font_color", Color("#b5a489"))
+	sub_tip.add_theme_font_size_override("font_size", 10)
+	top_hb.add_child(sub_tip)
+
+	var sp := Control.new()
+	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	top_hb.add_child(sp)
+
+	hand_redraw_btn = Button.new()
+	hand_redraw_btn.text = "🔄 重抽(1/1)"
+	hand_redraw_btn.custom_minimum_size = Vector2(74, 22)
+	hand_redraw_btn.add_theme_font_size_override("font_size", 10)
+	hand_redraw_btn.add_theme_color_override("font_color", Color("#ffffff"))
+	hand_redraw_btn.add_theme_stylebox_override("normal", _style(C_ZHUSHA.darkened(0.2), C_BORDER_GOLD, 1, 4, 2))
+	hand_redraw_btn.pressed.connect(_on_hand_redraw_pressed)
+	top_hb.add_child(hand_redraw_btn)
+
+	hand_collapse_btn = Button.new()
+	hand_collapse_btn.text = "▼ 折叠"
+	hand_collapse_btn.custom_minimum_size = Vector2(46, 22)
+	hand_collapse_btn.add_theme_font_size_override("font_size", 10)
+	hand_collapse_btn.pressed.connect(_toggle_hand_bar_collapse)
+	top_hb.add_child(hand_collapse_btn)
+
+	hand_cards_container = HBoxContainer.new()
+	hand_cards_container.name = "CardsRow"
+	hand_cards_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hand_cards_container.add_theme_constant_override("separation", 6)
+	root_vb.add_child(hand_cards_container)
+
+	_init_hand_cards_data()
+	_render_hand_cards()
+
+func _render_hand_cards() -> void:
+	if not hand_cards_container:
+		return
+	for c in hand_cards_container.get_children():
+		c.queue_free()
+	hand_card_views.clear()
+
+	for i in range(hand_cards_data.size()):
+		var cdata: Dictionary = hand_cards_data[i]
+		var card := _create_single_hand_card(i, cdata)
+		hand_cards_container.add_child(card)
+		hand_card_views.append(card)
+
+func _create_single_hand_card(idx: int, cdata: Dictionary) -> PanelContainer:
+	var card := PanelContainer.new()
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	card.custom_minimum_size = Vector2(0, 48)
+	
+	var c_type := str(cdata.get("type", "advance"))
+	var is_played := bool(cdata.get("is_played", false))
+	var border_c := C_BORDER_GOLD
+	if is_played:
+		border_c = Color("#fae19c")
+	elif c_type == "advance":
+		border_c = C_ZHUSHA
+	elif c_type == "defend":
+		border_c = C_MOLAN
+	elif c_type == "scout":
+		border_c = C_ZHUQING
+	elif c_type == "supply":
+		border_c = C_TENGHUANG
+
+	var bg_col := Color("#352418") if is_played else Color("#231c17")
+	card.add_theme_stylebox_override("panel", _style(bg_col, border_c, 2 if is_played else 1, 6, 4))
+
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 1)
+	card.add_child(vb)
+
+	var h_title := HBoxContainer.new()
+	vb.add_child(h_title)
+
+	var name_l := Label.new()
+	name_l.text = "%s %s" % [cdata.get("icon", ""), cdata.get("name", "")]
+	name_l.add_theme_color_override("font_color", Color("#fae19c") if not is_played else Color("#ffffff"))
+	name_l.add_theme_font_size_override("font_size", 11)
+	h_title.add_child(name_l)
+
+	var sp := Control.new()
+	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h_title.add_child(sp)
+
+	var info_btn := Button.new()
+	info_btn.text = "ℹ"
+	info_btn.flat = true
+	info_btn.custom_minimum_size = Vector2(18, 16)
+	info_btn.add_theme_font_size_override("font_size", 10)
+	info_btn.pressed.connect(func(): _show_card_tooltip(cdata, card.global_position))
+	h_title.add_child(info_btn)
+
+	var desc_l := Label.new()
+	desc_l.text = str(cdata.get("short_desc", ""))
+	desc_l.add_theme_color_override("font_color", Color("#d5c4a1"))
+	desc_l.add_theme_font_size_override("font_size", 9)
+	vb.add_child(desc_l)
+
+	var assign_btn := Button.new()
+	if is_played:
+		var order: Dictionary = cdata.get("order", {})
+		var lane: int = int(order.get("lane", int(order.get("slot", 0)) + 1))
+		var tgt: String = str(order.get("target_node_code", ""))
+		var tgt_name: String = str(map.node_by_code(tgt).get("name", tgt))
+		assign_btn.text = "队%d➔%s [撤销]" % [lane, tgt_name]
+		assign_btn.add_theme_color_override("font_color", Color("#fae19c"))
+		assign_btn.tooltip_text = "点击撤回该槽位军令"
+	else:
+		if selected_code != "":
+			var tgt_name: String = str(map.node_by_code(selected_code).get("name", selected_code))
+			assign_btn.text = "出令➔【%s】" % tgt_name
+			assign_btn.add_theme_color_override("font_color", Color("#fae19c"))
+			assign_btn.tooltip_text = "点击下达将令进军【%s】" % tgt_name
+		else:
+			assign_btn.text = "点城出令"
+			assign_btn.add_theme_color_override("font_color", Color("#8a7c6c"))
+			assign_btn.tooltip_text = "请先在地图上点击选择目标据点"
+
+	assign_btn.custom_minimum_size = Vector2(0, 20)
+	assign_btn.add_theme_font_size_override("font_size", 10)
+	assign_btn.pressed.connect(func(): _on_hand_card_clicked(idx))
+	vb.add_child(assign_btn)
+
+	card.mouse_entered.connect(func(): _show_card_tooltip(cdata, card.global_position))
+	card.mouse_exited.connect(_hide_card_tooltip)
+
+	return card
+
+func _on_hand_card_clicked(idx: int) -> void:
+	if idx < 0 or idx >= hand_cards_data.size():
+		return
+	var cdata: Dictionary = hand_cards_data[idx]
+	var c_code: String = str(cdata.get("code", ""))
+	var is_played: bool = bool(cdata.get("is_played", false))
+	var order: Dictionary = cdata.get("order", {})
+
+	if is_played:
+		var slot_to_withdraw: int = int(order.get("slot", 0))
+		_withdraw_card_order(slot_to_withdraw)
+		return
+
+	var target_code := selected_code
+	if target_code == "":
+		_toast("请先在地图上点击选择目标据点，再点击手牌出令！", true)
+		return
+
+	# 找到尚未占用的槽位 (0, 1, 2)
+	var used_slots: Array = []
+	for o in state.get("card_orders", []):
+		if typeof(o) == TYPE_DICTIONARY:
+			used_slots.append(int(o.get("slot", 0)))
+	var chosen_slot := -1
+	for s in range(3):
+		if not used_slots.has(s):
+			chosen_slot = s
+			break
+	if chosen_slot == -1:
+		_toast("今日 3 道将令槽位已满，可点击已出的手牌撤回！", true)
+		return
+
+	_play_card_order(chosen_slot, c_code, target_code)
+
+func _play_card_order(slot: int, card_code: String, target_code: String) -> void:
+	var comp_types: Array = state.get("composition", {}).get("types", ["cav", "shield", "arc"])
+	var unit_type := "cav"
+	if slot >= 0 and slot < comp_types.size():
+		unit_type = str(comp_types[slot])
+	var row_pos := "back" if unit_type == "arc" else "front"
+	var lane := slot + 1
+	var req_key := _new_key("p1_t%d_s%d" % [_turn_id(), slot])
+
+	action_status.text = "将令传达中..."
+	api.play_card_order(_turn_id(), slot, card_code, target_code, lane, row_pos, req_key, func(ok: bool, _data: Dictionary, err: Dictionary):
+		if not ok:
+			_show_error(err)
+			return
+		var card_name := str(_get_tactical_card_meta(card_code).get("name", card_code))
+		var target_name := str(map.node_by_code(target_code).get("name", target_code))
+		_toast("【%s】将令已加盖帅印，下达至【%s】(队%d)！" % [card_name, target_name, lane])
+		_refresh_state()
+	)
+
+func _withdraw_card_order(slot: int) -> void:
+	action_status.text = "撤销将令中..."
+	api.withdraw_card_order(_turn_id(), slot, func(ok: bool, _data: Dictionary, err: Dictionary):
+		if not ok:
+			_show_error(err)
+			return
+		_toast("第 %d 队将令已成功撤回！" % (slot + 1))
+		_refresh_state()
+	)
+
+func _on_hand_redraw_pressed() -> void:
+	if hand_redraw_used:
+		_toast("今日重抽机会已用尽！", true)
+		return
+	action_status.text = "请求重新抽取手牌..."
+	api.redraw_hand(_turn_id(), func(ok: bool, _data: Dictionary, err: Dictionary):
+		if not ok:
+			_show_error(err)
+			return
+		_toast("已消耗重抽机会，生成全新将令手牌！")
+		_refresh_state()
+	)
+
+func _on_composition_confirmed(types: Array) -> void:
+	action_status.text = "提交军团编成中..."
+	api.set_composition(1, types, func(ok: bool, data: Dictionary, err: Dictionary):
+		if not ok:
+			_show_error(err)
+			return
+		_toast("军团编成已成功确认保存！")
+		if composition_panel:
+			composition_panel.set_composition_state(data.get("types", types), bool(data.get("changed_once", false)))
+		_refresh_state()
+	)
+
+func _start_demo_battle(node_code: String = "", fire: bool = true, callback: Callable = Callable()) -> void:
+	if node_code == "":
+		node_code = selected_code if selected_code != "" else "N2"
+	action_status.text = "发起推演对决中..."
+	api.demo_battle(_turn_id(), node_code, fire, func(ok: bool, data: Dictionary, err: Dictionary):
+		if not ok:
+			_show_error(err)
+			if callback.is_valid():
+				callback.call(false, {})
+			return
+		var b_id := int(data.get("battle_id", 0))
+		var log: Dictionary = data.get("log", {})
+		current_battle_id = b_id
+		
+		# 打开回放浮层并启动确定性播放
+		battle_replay_overlay.visible = true
+		battle_replay_instance.play_data(log)
+		_toast("⚔️ 演武决战推演开始！")
+		if callback.is_valid():
+			callback.call(true, data)
+	)
+
+func _on_battle_replay_finished(_result: Dictionary) -> void:
+	if current_battle_id > 0:
+		var b_id := current_battle_id
+		current_battle_id = 0
+		api.settle_battle(b_id, func(ok: bool, data: Dictionary, err: Dictionary):
+			if not ok:
+				push_warning("结算战斗失败: " + str(err))
+				return
+			var captured := bool(data.get("captured", false))
+			var node := str(data.get("node_code", ""))
+			var m_after := int(data.get("morale_after", 0))
+			var cap := int(data.get("cap", 2))
+			if captured:
+				_toast("🎉 破城易主！【%s】据点已成功攻克易帜！" % str(map.node_by_code(node).get("name", node)))
+			else:
+				_toast("⚔️ 演武结算：【%s】民心推进至 %d/%d 格！" % [str(map.node_by_code(node).get("name", node)), m_after, cap])
+			_refresh_state()
+		)
+
+# ---------------------------------------------------------------------------
+# Phase 1 快捷脚本与测试接口 (Public Automation API)
+# ---------------------------------------------------------------------------
+
+func play_card(slot: int, card_code: String, target_node_code: String = "N2", lane: int = -1, row_pos: String = "") -> void:
+	if lane <= 0:
+		lane = slot + 1
+	if row_pos == "":
+		var comp_types: Array = state.get("composition", {}).get("types", ["cav", "shield", "arc"])
+		var u_type := "cav"
+		if slot >= 0 and slot < comp_types.size():
+			u_type = str(comp_types[slot])
+		row_pos = "back" if u_type == "arc" else "front"
+	var req_key := _new_key("p1_t%d_s%d" % [_turn_id(), slot])
+	api.play_card_order(_turn_id(), slot, card_code, target_node_code, lane, row_pos, req_key, func(ok: bool, _data: Dictionary, err: Dictionary):
+		if not ok:
+			_show_error(err)
+		else:
+			_refresh_state()
+	)
+
+func withdraw_card(slot: int) -> void:
+	_withdraw_card_order(slot)
+
+func redraw_hand_cards() -> void:
+	_on_hand_redraw_pressed()
+
+func set_army_composition(types: Array) -> void:
+	_on_composition_confirmed(types)
+
+func start_demo_battle(node_code: String = "N2", fire: bool = true, callback: Callable = Callable()) -> void:
+	_start_demo_battle(node_code, fire, callback)
+
+func settle_demo_battle(battle_id: int = 0, callback: Callable = Callable()) -> void:
+	var b_id := battle_id if battle_id > 0 else current_battle_id
+	if b_id <= 0:
+		return
+	api.settle_battle(b_id, func(ok: bool, data: Dictionary, err: Dictionary):
+		if not ok:
+			_show_error(err)
+			if callback.is_valid():
+				callback.call(false, {})
+		else:
+			_refresh_state()
+			if callback.is_valid():
+				callback.call(true, data)
+	)
+
+func _toggle_hand_bar_collapse() -> void:
+	hand_bar_collapsed = not hand_bar_collapsed
+	if hand_cards_container:
+		hand_cards_container.visible = not hand_bar_collapsed
+	hand_collapse_btn.text = "▲ 展开" if hand_bar_collapsed else "▼ 折叠"
+	_layout_responsive()
+
+func _build_card_tooltip() -> void:
+	card_tooltip_panel = PanelContainer.new()
+	card_tooltip_panel.name = "CardTooltipPanel"
+	card_tooltip_panel.visible = false
+	card_tooltip_panel.custom_minimum_size = Vector2(240, 80)
+	card_tooltip_panel.add_theme_stylebox_override("panel", _style(Color(0.12, 0.09, 0.07, 0.96), C_BORDER_GOLD, 2, 8, 8))
+	map_shell.add_child(card_tooltip_panel)
+
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 4)
+	card_tooltip_panel.add_child(v)
+
+	card_tooltip_title = Label.new()
+	card_tooltip_title.add_theme_color_override("font_color", Color("#fae19c"))
+	card_tooltip_title.add_theme_font_size_override("font_size", 12)
+	v.add_child(card_tooltip_title)
+
+	card_tooltip_desc = Label.new()
+	card_tooltip_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	card_tooltip_desc.add_theme_color_override("font_color", Color("#d5c4a1"))
+	card_tooltip_desc.add_theme_font_size_override("font_size", 11)
+	v.add_child(card_tooltip_desc)
+
+func _show_card_tooltip(cdata: Dictionary, pos: Vector2) -> void:
+	if not card_tooltip_panel:
+		return
+	card_tooltip_title.text = "%s %s 将令说明" % [cdata.get("icon", ""), cdata.get("name", "")]
+	card_tooltip_desc.text = str(cdata.get("full_desc", ""))
+	var tooltip_w := 240.0
+	var tooltip_h := 80.0
+	var px := clampf(pos.x, 10.0, size.x - tooltip_w - 10.0)
+	var py := maxf(pos.y - tooltip_h - 10.0, 60.0)
+	card_tooltip_panel.position = Vector2(px, py)
+	card_tooltip_panel.size = Vector2(tooltip_w, tooltip_h)
+	card_tooltip_panel.visible = true
+
+func _hide_card_tooltip() -> void:
+	if card_tooltip_panel:
+		card_tooltip_panel.visible = false
+
+func _build_battle_replay_overlay() -> void:
+	battle_replay_overlay = Control.new()
+	battle_replay_overlay.name = "BattleReplayOverlay"
+	battle_replay_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	battle_replay_overlay.z_index = 25
+	battle_replay_overlay.visible = false
+	game_layer.add_child(battle_replay_overlay)
+
+	battle_replay_instance = BattleReplayScene.instantiate()
+	battle_replay_instance.name = "BattleReplayInstance"
+	battle_replay_instance.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	battle_replay_instance.closed.connect(func(): battle_replay_overlay.visible = false)
+	battle_replay_instance.replay_finished.connect(_on_battle_replay_finished)
+	battle_replay_overlay.add_child(battle_replay_instance)
+
+func _open_battle_replay_demo() -> void:
+	if battle_replay_overlay and battle_replay_instance:
+		battle_replay_overlay.visible = true
+		battle_replay_overlay.move_to_front()
+		battle_replay_instance.load_sample_data()
 
 # ---------------------------------------------------------------------------
 # 师长督军后台控制（权限隔离）
@@ -2906,6 +3516,18 @@ func _render_state(data: Dictionary) -> void:
 
 	teacher_box.visible = (role == "teacher")
 	_update_order_ui()
+
+	# Phase 1: 同步军团编成 (composition)
+	var comp_val: Variant = data.get("composition", {})
+	var comp_info: Dictionary = comp_val if typeof(comp_val) == TYPE_DICTIONARY else {}
+	var comp_types_val: Variant = comp_info.get("types", [])
+	var comp_types: Array = comp_types_val if typeof(comp_types_val) == TYPE_ARRAY else []
+	var comp_changed_once: bool = bool(comp_info.get("changed_once", false))
+	if composition_panel and not comp_types.is_empty():
+		composition_panel.set_composition_state(comp_types, comp_changed_once)
+
+	# Phase 1: 同步每日手牌 (hand) 与已出令 (card_orders)
+	_sync_hand_and_orders(data)
 
 func _rebuild_node_buttons(nodes: Array) -> void:
 	for b in node_buttons.values():

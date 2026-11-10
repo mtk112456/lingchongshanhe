@@ -78,6 +78,21 @@ func _process(_delta: float) -> void:
 		if frames > 25:
 			_capture("screenshot_tablet_s03_order_confirm.png")
 			scene.order_confirm_overlay.visible = false
+			# 平板阶段：截取 S03 军团编成
+			scene._navigate_to("S03_ARMY")
+			step = 41
+			frames = 0
+	elif step == 41:
+		if frames > 25:
+			_capture("screenshot_tablet_s03_army_composition.png")
+			# 平板阶段：调起 3x2 战斗推演回放
+			scene._open_battle_replay_demo()
+			step = 42
+			frames = 0
+	elif step == 42:
+		if frames > 30:
+			_capture("screenshot_tablet_phase1_battle_replay.png")
+			scene.battle_replay_overlay.visible = false
 			scene._open_report()
 			step = 5
 			frames = 0
@@ -105,8 +120,10 @@ func _process(_delta: float) -> void:
 
 			# 切换到手机横屏 720×514（彻底移除手机竖屏）
 			_set_viewport_size(720, 514)
-			scene._navigate_to("S01_MAP")
+			scene.is_drawer_open = false
 			scene.city_drawer.visible = false
+			scene._navigate_to("S01_MAP")
+			scene._layout_responsive()
 			step = 9
 			frames = 0
 
@@ -162,7 +179,27 @@ func _process(_delta: float) -> void:
 			frames = 0
 	elif step == 16:
 		if frames > 25:
+			scene.is_drawer_open = false
+			scene.city_drawer.visible = false
+			scene._layout_responsive()
+			step = 161
+			frames = 0
+	elif step == 161:
+		if frames > 15:
 			_capture("screenshot_phone_landscape_dock_restored.png")
+			_capture("screenshot_phone_landscape_s01_hand_cards.png")
+			scene._navigate_to("S03_ARMY")
+			step = 17
+			frames = 0
+	elif step == 17:
+		if frames > 25:
+			_capture("screenshot_phone_landscape_s03_army_composition.png")
+			scene._open_battle_replay_demo()
+			step = 18
+			frames = 0
+	elif step == 18:
+		if frames > 30:
+			_capture("screenshot_phone_landscape_phase1_battle_replay.png")
 			print("CAPTURE_SUITE COMPLETE (LANDSCAPE ONLY: TABLET 1400x1000 & PHONE 720x514)")
 			get_tree().quit(0)
 

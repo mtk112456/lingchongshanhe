@@ -413,6 +413,10 @@ func _draw_node(n: Dictionary) -> void:
 			var sub_color := Color("#8c3a32") if is_mine else Color("#6b5a45")
 			draw_string(font, pos + Vector2(-65, 84), owner_name, HORIZONTAL_ALIGNMENT_CENTER, 130, 12, sub_color)
 
+		# 6.1 民心小格 (morale / morale_cap)
+		if n.has("morale") and n.has("morale_cap"):
+			_draw_morale_indicator(pos, int(n.get("morale", 0)), int(n.get("morale_cap", 2)), 96.0, false)
+
 	# 7. 地标建筑剪影与文化标签（LOD: zoom_level >= 1.35）
 	if zoom_level >= 1.35:
 		_draw_landmark_silhouette(pos, code, faction_color)
@@ -509,11 +513,43 @@ func _draw_node_over_art(n: Dictionary, pos: Vector2, faction_color: Color, is_s
 			draw_rect(owner_rect, Color(faction_color.r, faction_color.g, faction_color.b, 0.45), false, 1.0)
 			draw_string(font, owner_rect.position + Vector2(0, owner_h - 4.0), owner_name, HORIZONTAL_ALIGNMENT_CENTER, owner_rect.size.x, 10 if is_compact_screen else 12, sub_color)
 
+		# 5.1 民心小格 (morale / morale_cap)
+		if n.has("morale") and n.has("morale_cap"):
+			var m_y_offset := 48.0 if is_compact_screen else 56.0
+			_draw_morale_indicator(pos, int(n.get("morale", 0)), int(n.get("morale_cap", 2)), m_y_offset, is_compact_screen)
+
 	# 6. 高缩放文化标签/诗词
 	if zoom_level >= 1.35:
 		_draw_cultural_tag(pos, code, 52.0 if is_compact_screen else 62.0)
 	if zoom_level >= 1.7:
 		_draw_cultural_verse(pos, code, 78.0 if is_compact_screen else 88.0)
+
+func _draw_morale_indicator(pos: Vector2, morale: int, cap: int, y_offset: float, is_compact: bool) -> void:
+	if cap <= 0:
+		return
+	var box_w := 14.0 if not is_compact else 11.0
+	var box_h := 6.0 if not is_compact else 5.0
+	var gap := 3.0
+	var total_w := float(cap) * box_w + float(cap - 1) * gap
+	var start_x := pos.x - total_w / 2.0
+	var start_y := pos.y + y_offset
+
+	# 背景底框（微带宣纸暖灰衬垫）
+	var pad_rect := Rect2(start_x - 3.0, start_y - 2.0, total_w + 6.0, box_h + 4.0)
+	draw_rect(pad_rect, Color(0.12, 0.09, 0.06, 0.75))
+	draw_rect(pad_rect, Color("#c9a227"), false, 0.8)
+
+	for i in range(cap):
+		var bx := start_x + float(i) * (box_w + gap)
+		var b_rect := Rect2(bx, start_y, box_w, box_h)
+		if i < morale:
+			# 已占领/激活的民心格：朱砂藤黄金色充盈
+			draw_rect(b_rect, Color("#cf8325"))
+			draw_rect(b_rect, Color("#fae19c"), false, 1.0)
+		else:
+			# 未占领的民心格：暗色虚位
+			draw_rect(b_rect, Color(0.24, 0.20, 0.17, 0.8))
+			draw_rect(b_rect, Color(0.65, 0.58, 0.48, 0.6), false, 0.8)
 
 func _draw_landmark_silhouette(pos: Vector2, code: String, _color: Color) -> void:
 	# 旧版 GPT 地标 PNG 与 C 原画风格不一致，默认不盖到地图上
