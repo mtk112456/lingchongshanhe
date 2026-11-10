@@ -27,35 +27,44 @@ const BAMBOO := C_ZHUQING
 const NEUTRAL := Color("#7e7263")
 
 # ---------------------------------------------------------------------------
-# C 版水彩纸雕地图底图
-# 横向/平板用 keyart_c.png 裁出的 map_c.png；手机竖屏用专门的 9:16 原画。
 # ---------------------------------------------------------------------------
-const ART_MAP_PATH := "res://assets/art/map_c.png"
-const ART_MAP_PORTRAIT_PATH := "res://assets/art/map_c_portrait.png"
+# C 版水彩地图底图 (v4 China 大致方位)
+# 横向/平板用 map_c_v4.png；手机竖屏用 9:16 的 map_c_portrait_v2.png。
+# ---------------------------------------------------------------------------
+const ART_MAP_PATH := "res://assets/art/map_c_v4.png"
+const ART_MAP_PORTRAIT_PATH := "res://assets/art/map_c_portrait_v2.png"
 const ART_MAP_MIN_ASPECT := 1.15
 const ART_MAP_MAX_PORTRAIT_ASPECT := 0.90
 const ART_MAP_INSET := 2.0
 
-# 5 个节点在横向底图中的归一化锚点（按 keyart_c.png 原画位置标定）
+# 5 个节点在横向底图中的归一化锚点（按中国大致方位标定）
 const ART_NODE_POS := {
-	"A_START": Vector2(0.240, 0.265),
-	"N1": Vector2(0.174, 0.766),
-	"N2": Vector2(0.520, 0.500),
-	"N3": Vector2(0.846, 0.208),
-	"B_START": Vector2(0.785, 0.807),
+	"A_START": Vector2(0.22, 0.24),
+	"B_START": Vector2(0.80, 0.22),
+	"N2": Vector2(0.50, 0.50),
+	"N3": Vector2(0.22, 0.78),
+	"N1": Vector2(0.80, 0.78),
 }
 
 # 5 个节点在 9:16 竖屏底图中的归一化锚点
 const ART_NODE_POS_PORTRAIT := {
-	"A_START": Vector2(0.200, 0.270),
-	"N1": Vector2(0.190, 0.670),
-	"N2": Vector2(0.500, 0.520),
-	"N3": Vector2(0.790, 0.340),
-	"B_START": Vector2(0.785, 0.685),
+	"A_START": Vector2(0.20, 0.22),
+	"B_START": Vector2(0.80, 0.22),
+	"N2": Vector2(0.50, 0.50),
+	"N3": Vector2(0.20, 0.78),
+	"N1": Vector2(0.80, 0.78),
 }
 
-# 旧版 GPT 5 城地标 PNG 与 C 原画风格不一致，只保留在 city 资产中，
-# 不再盖到地图上。需要时改为 true 可回退对比。
+# 独立城池 Trim Sprite 资产（底边中心对齐锚点，随 map_world 缩放）
+const CITY_TRIM_ASSET_PATHS := {
+	"A_START": "res://assets/art/city_yunlu_trim.png",
+	"B_START": "res://assets/art/city_yanhui_trim.png",
+	"N2": "res://assets/art/city_luoxia_trim.png",
+	"N3": "res://assets/art/city_tingyu_trim.png",
+	"N1": "res://assets/art/city_songfeng_trim.png",
+}
+
+# 旧版 GPT 5 城地标 PNG（作为 trim 资产缺失时的备用回退）
 const USE_LANDMARK_PNGS := false
 const LANDMARK_ASSET_PATHS := {
 	"A_START": "res://assets/art/city_yunlu.png",
@@ -67,6 +76,7 @@ const LANDMARK_ASSET_PATHS := {
 
 var art_map_texture: Texture2D = null
 var art_map_portrait_texture: Texture2D = null
+var city_trim_textures: Dictionary = {}
 var landmark_textures: Dictionary = {}
 
 var map_data: Dictionary = {}
@@ -83,6 +93,13 @@ func _init_asset_slots() -> void:
 	art_map_portrait_texture = null
 	if ResourceLoader.exists(ART_MAP_PORTRAIT_PATH):
 		art_map_portrait_texture = load(ART_MAP_PORTRAIT_PATH)
+	city_trim_textures.clear()
+	for code in CITY_TRIM_ASSET_PATHS.keys():
+		var path: String = CITY_TRIM_ASSET_PATHS[code]
+		if ResourceLoader.exists(path):
+			var tex: Texture2D = load(path)
+			if tex != null:
+				city_trim_textures[code] = tex
 	landmark_textures.clear()
 	for code in LANDMARK_ASSET_PATHS.keys():
 		var path: String = LANDMARK_ASSET_PATHS[code]
@@ -405,82 +422,98 @@ func _draw_node(n: Dictionary) -> void:
 	if zoom_level >= 1.7:
 		_draw_cultural_verse(pos, code)
 
-# C 版水彩底图上的节点：保留原画建筑，只叠归属光环、旌旗与纸签
+# C 版水彩底图上的节点：叠加独立城池 Trim Sprite，并叠归属光环、旌旗与纸签
 func _draw_node_over_art(n: Dictionary, pos: Vector2, faction_color: Color, is_start: bool, is_mine: bool, owner: Variant) -> void:
 	var code := str(n.get("code", ""))
+	var is_compact_screen := size.y < 650.0
 
-	# 1. 选中/归属光环
+	# 1. 独立城池 Sprite（v4 地形叠加，底边中心对齐锚点，保比例不拉伸）
+	var target_h := 120.0 if is_start else 104.0
+	var target_w := target_h * 1.35
+	var drawn_trim := false
+	if city_trim_textures.has(code) and city_trim_textures[code] != null:
+		var tex: Texture2D = city_trim_textures[code]
+		var tex_sz := tex.get_size()
+		if tex_sz.y > 0.0:
+			target_w = target_h * (tex_sz.x / tex_sz.y)
+			var sprite_rect := Rect2(pos.x - target_w / 2.0, pos.y - target_h, target_w, target_h)
+			draw_texture_rect(tex, sprite_rect, false)
+			drawn_trim = true
+	# 仅在 trim 资产缺失时，才回退到旧矢量图标（杜绝双建筑、双屋顶、双塔）
+	if not drawn_trim:
+		_draw_landmark_silhouette(pos, code, faction_color)
+
+	# 2. 选中/归属光环（位于城池底座锚点地面，高亮战术据点）
 	if code == selected_code:
-		var r := 50.0 + sin(pulse * 3.5) * 4.0
+		var r := 52.0 + sin(pulse * 3.5) * 4.0
 		draw_circle(pos, r, Color(GOLD.r, GOLD.g, GOLD.b, 0.16))
 		draw_arc(pos, r, 0.0, TAU, 48, GOLD, 3.5, true)
 		draw_arc(pos, r + 8.0, 0.0, TAU, 48, Color(CORAL.r, CORAL.g, CORAL.b, 0.55), 1.5, true)
 	else:
-		var r := 42.0 if is_start else 38.0
+		var r := 42.0 if is_start else 36.0
 		draw_circle(pos, r, Color(faction_color.r, faction_color.g, faction_color.b, 0.10))
 		draw_arc(pos, r + 3.0, 0.0, TAU, 40, Color(CREAM.r, CREAM.g, CREAM.b, 0.72), 1.5, true)
 		draw_arc(pos, r, 0.0, TAU, 40, Color(faction_color.r, faction_color.g, faction_color.b, 0.78), 3.0, true)
 		if is_start:
 			draw_arc(pos, r + 6.0, 0.0, TAU, 40, GOLD, 2.0, true)
 
-	# 2. 小旗：放在建筑右侧，避免盖住原画
-	var flag_pole_h := 52.0 if is_start else 44.0
-	var pole_base := pos + Vector2(28, -10)
+	# 3. 阵营旗帜（立于城池建筑右上方城台，迎风招展，不遮挡大门与标签）
+	var flag_pole_h := 44.0 if is_start else 36.0
+	var pole_base := pos + Vector2(target_w * 0.35, -target_h * 0.65)
 	var pole_top := pole_base + Vector2(0, -flag_pole_h)
 	draw_line(pole_base, pole_top, Color("#3a2a1a"), 3.0, true)
 	draw_circle(pole_top, 3.0, GOLD)
 	var wave := sin(pulse * 3.2 + pos.x * 0.05) * 3.0
 	var flag := PackedVector2Array([
 		pole_top,
-		pole_top + Vector2(32, 6 + wave),
-		pole_top + Vector2(22, 18),
-		pole_top + Vector2(34, 28 - wave),
-		pole_top + Vector2(0, 22),
+		pole_top + Vector2(28, 5 + wave),
+		pole_top + Vector2(20, 16),
+		pole_top + Vector2(30, 24 - wave),
+		pole_top + Vector2(0, 19),
 	])
-	# 旗面先描一圈米白边，避免红/蓝旗压在红山蓝山上糊成一团
-	draw_polyline(flag, Color(CREAM.r, CREAM.g, CREAM.b, 0.92), 4.5, true)
+	# 旗面描米白边，避免与红山蓝山背景粘连
+	draw_polyline(flag, Color(CREAM.r, CREAM.g, CREAM.b, 0.92), 4.0, true)
 	draw_colored_polygon(flag, faction_color)
 	draw_polyline(flag, Color("#2b1e13"), 1.6, true)
 
-	# 3. 城名纸签（放在建筑基座下方，小高度设备下最低城上抬至安全区）
-	var is_compact_screen := size.y < 650.0
-	var is_lowest_node := is_compact_screen and pos.y > size.y * 0.70
-	var label := str(n.get("name", code))
-	var fsize := 12 if is_compact_screen else 15
-	var tw := 86.0 if is_compact_screen else 100.0
-	if font != null:
-		tw = font.get_string_size(label, HORIZONTAL_ALIGNMENT_CENTER, -1, fsize).x + (18.0 if is_compact_screen else 28.0)
-	var tag_y_offset := -48.0 if is_lowest_node else (30.0 if is_compact_screen else 46.0)
-	var tag_h := 20.0 if is_compact_screen else 26.0
-	var tag_rect := Rect2(pos + Vector2(-tw / 2.0 - (12.0 if is_lowest_node else 0.0), tag_y_offset), Vector2(tw, tag_h))
-	draw_rect(tag_rect.grow(2), Color(0, 0, 0, 0.18))
-	draw_rect(tag_rect, CREAM)
-	draw_rect(tag_rect, faction_color, false, 2.0)
-	draw_rect(tag_rect.grow(-3), Color("#cfbfa6"), false, 1.0)
-	if font != null:
-		draw_string(font, tag_rect.position + Vector2(0, tag_h - 5.0), label, HORIZONTAL_ALIGNMENT_CENTER, tag_rect.size.x, fsize, INK_DARK)
+	# 4. 城名纸签与归属小签（LOD: zoom_level >= 0.88，小于此级别只显建筑剪影、归属光环与战旗）
+	if zoom_level >= 0.88:
+		var label := str(n.get("name", code))
+		var fsize := 12 if is_compact_screen else 15
+		var tw := 86.0 if is_compact_screen else 100.0
+		if font != null:
+			tw = font.get_string_size(label, HORIZONTAL_ALIGNMENT_CENTER, -1, fsize).x + (18.0 if is_compact_screen else 28.0)
+		var tag_y_offset := 8.0 if is_compact_screen else 10.0
+		var tag_h := 20.0 if is_compact_screen else 24.0
+		var tag_rect := Rect2(pos + Vector2(-tw / 2.0, tag_y_offset), Vector2(tw, tag_h))
+		draw_rect(tag_rect.grow(2), Color(0, 0, 0, 0.18))
+		draw_rect(tag_rect, CREAM)
+		draw_rect(tag_rect, faction_color, false, 2.0)
+		draw_rect(tag_rect.grow(-3), Color("#cfbfa6"), false, 1.0)
+		if font != null:
+			draw_string(font, tag_rect.position + Vector2(0, tag_h - 5.0), label, HORIZONTAL_ALIGNMENT_CENTER, tag_rect.size.x, fsize, INK_DARK)
 
-	# 4. 归属小签
-	if font != null:
-		var owner_name := "中立关隘"
-		if typeof(owner) == TYPE_DICTIONARY:
-			owner_name = str(owner.get("name", "中立")) + "阵营"
-		if is_start:
-			owner_name += " [大营]"
-		var sub_color := Color("#8c3a32") if is_mine else Color("#5f5242")
-		var owner_y_offset := -25.0 if is_lowest_node else (52.0 if is_compact_screen else 74.0)
-		var owner_h := 16.0 if is_compact_screen else 20.0
-		var owner_w := 104.0 if is_compact_screen else 124.0
-		var owner_rect := Rect2(pos + Vector2(-owner_w / 2.0 - (12.0 if is_lowest_node else 0.0), owner_y_offset), Vector2(owner_w, owner_h))
-		draw_rect(owner_rect, Color(CREAM.r, CREAM.g, CREAM.b, 0.90))
-		draw_rect(owner_rect, Color(faction_color.r, faction_color.g, faction_color.b, 0.45), false, 1.0)
-		draw_string(font, owner_rect.position + Vector2(0, owner_h - 4.0), owner_name, HORIZONTAL_ALIGNMENT_CENTER, owner_rect.size.x, 10 if is_compact_screen else 12, sub_color)
+		# 5. 归属小签（纸签正下方）
+		if font != null:
+			var owner_name := "中立关隘"
+			if typeof(owner) == TYPE_DICTIONARY:
+				owner_name = str(owner.get("name", "中立")) + "阵营"
+			if is_start:
+				owner_name += " [大营]"
+			var sub_color := Color("#8c3a32") if is_mine else Color("#5f5242")
+			var owner_y_offset := 30.0 if is_compact_screen else 36.0
+			var owner_h := 16.0 if is_compact_screen else 18.0
+			var owner_w := 104.0 if is_compact_screen else 120.0
+			var owner_rect := Rect2(pos + Vector2(-owner_w / 2.0, owner_y_offset), Vector2(owner_w, owner_h))
+			draw_rect(owner_rect, Color(CREAM.r, CREAM.g, CREAM.b, 0.90))
+			draw_rect(owner_rect, Color(faction_color.r, faction_color.g, faction_color.b, 0.45), false, 1.0)
+			draw_string(font, owner_rect.position + Vector2(0, owner_h - 4.0), owner_name, HORIZONTAL_ALIGNMENT_CENTER, owner_rect.size.x, 10 if is_compact_screen else 12, sub_color)
 
-	# 5. 高缩放文化标签/诗词
+	# 6. 高缩放文化标签/诗词
 	if zoom_level >= 1.35:
-		_draw_cultural_tag(pos, code, 108.0)
+		_draw_cultural_tag(pos, code, 52.0 if is_compact_screen else 62.0)
 	if zoom_level >= 1.7:
-		_draw_cultural_verse(pos, code, 134.0)
+		_draw_cultural_verse(pos, code, 78.0 if is_compact_screen else 88.0)
 
 func _draw_landmark_silhouette(pos: Vector2, code: String, _color: Color) -> void:
 	# 旧版 GPT 地标 PNG 与 C 原画风格不一致，默认不盖到地图上
@@ -656,12 +689,21 @@ func _draw_landscape_accents(mr: Rect2) -> void:
 	])
 	draw_polyline(pts2, m_color, 4.0, true)
 
-# 精致半透明图例（放置于左侧空白山峦区，彻底避开听雨台屋顶与侧栏悬浮图标）
+# 精致半透明图例（放置于左侧空白山峦区，彻底避开城池建筑、纸签与侧栏悬浮图标）
 func _draw_mini_legend(mr: Rect2) -> void:
 	if font == null:
 		return
 	var lx := 14.0
-	var ly := 235.0 if mr.size.y < 650.0 else 315.0
+	var ly := 315.0
+	if mr.size.x < mr.size.y:
+		# 手机竖屏（720×1280）：放置于西北云麓关与中央落霞原之间的开阔远山留白带 (y=470)
+		ly = 470.0
+	elif mr.size.y < 650.0:
+		# 手机横屏（720×514）：放置于左侧悬浮图标下方与西南听雨台之间的纯净山水区 (y=248)
+		ly = 248.0
+	else:
+		# 平板大屏（1400×1000）：放置于左侧侧栏悬浮图标下方的开阔水墨区 (y=315)
+		ly = 315.0
 	var bg_rect := Rect2(lx - 2, ly - 4, 196, 28)
 	draw_rect(bg_rect, Color(0.12, 0.09, 0.07, 0.72))
 	draw_rect(bg_rect, Color(0.81, 0.51, 0.15, 0.50), false, 1.0)

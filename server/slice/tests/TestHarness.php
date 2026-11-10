@@ -22,9 +22,9 @@ final class TestHarness
     public function reset(): void
     {
         SqlRunner::runFiles($this->pdo, [
-            $this->root . '/schema.sql',
             $this->root . '/legacy_schema.sql',
             $this->root . '/legacy_seed.sql',
+            $this->root . '/schema.sql',
             $this->root . '/seed.sql',
         ]);
     }

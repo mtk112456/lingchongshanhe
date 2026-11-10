@@ -280,8 +280,6 @@ $ExpectedScreens = @(
     'screenshot_tablet_s05_battle_replay.png',
     'screenshot_tablet_s06_faction.png',
     'screenshot_tablet_s10_season.png',
-    'screenshot_phone_portrait_s01_map.png',
-    'screenshot_phone_portrait_s02_drawer.png',
     'screenshot_phone_landscape_s01_map.png',
     'screenshot_phone_landscape_s02_drawer.png'
 )

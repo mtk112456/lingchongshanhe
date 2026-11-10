@@ -1,8 +1,8 @@
 extends Node
 
-## 商业级自动化全分辨率截图套件
-## 覆盖：平板 (1400×1000)、手机竖屏 (720×1280)、手机横屏 (720×514)
-## 验证页面：S01 主沙盘、S02 城池抽屉、S03 军令浮层、S04 战报全屏、S05 沙盘复盘、S06 阵营大势
+## 商业级自动化全分辨率截图套件 (横屏-Only 专用版)
+## 仅覆盖用户确定的横屏设备：平板 (1400×1000)、手机横屏 (720×514)
+## 手机竖屏已正式下线，全套验收由手机横屏负责
 
 var sv: SubViewport
 var scene: Control
@@ -10,7 +10,7 @@ var frames := 0
 var step := 0
 
 func _ready() -> void:
-	print("CAPTURE_SUITE start (SubViewport Mode)")
+	print("CAPTURE_SUITE start (Landscape-Only Mode)")
 	sv = SubViewport.new()
 	sv.size = Vector2i(1400, 1000)
 	sv.render_target_update_mode = SubViewport.UPDATE_ALWAYS
@@ -25,11 +25,18 @@ func _process(_delta: float) -> void:
 	frames += 1
 
 	# -----------------------------------------------------------------------
-	# 阶段零：登录 / 加载页 (Key Art 水彩纸雕背景)
+	# 阶段零：登录页双横屏分辨率验收 (平板 1400×1000 & 手机横屏 720×514)
 	# -----------------------------------------------------------------------
 	if step == 0:
 		if frames > 15:
 			_capture("screenshot_login_keyart.png")
+			_set_viewport_size(720, 514)
+			step = 100
+			frames = 0
+	elif step == 100:
+		if frames > 15:
+			_capture("screenshot_phone_landscape_login.png")
+			_set_viewport_size(1400, 1000)
 			scene.url_edit.text = "http://127.0.0.1:8080"
 			scene.name_edit.text = "青竹一"
 			scene.pass_edit.text = "slice2026"
@@ -43,6 +50,13 @@ func _process(_delta: float) -> void:
 	elif step == 1:
 		if scene.game_layer.visible and not scene.state.is_empty() and frames > 35:
 			_capture("screenshot_tablet_s01_map.png")
+			scene.map_zoom = 0.5
+			scene._clamp_pan()
+			step = 101
+			frames = 0
+	elif step == 101:
+		if frames > 20:
+			_capture("screenshot_tablet_s01_map_zoom_50.png")
 			scene.map_zoom = 1.75
 			scene.focus_city("A_START")
 			step = 2
@@ -89,82 +103,67 @@ func _process(_delta: float) -> void:
 		if frames > 25:
 			_capture("screenshot_tablet_s10_season.png")
 
-			# 切换到手机竖屏 720×1280
-			_set_viewport_size(720, 1280)
+			# 切换到手机横屏 720×514（彻底移除手机竖屏）
+			_set_viewport_size(720, 514)
 			scene._navigate_to("S01_MAP")
 			scene.city_drawer.visible = false
 			step = 9
 			frames = 0
 
 	# -----------------------------------------------------------------------
-	# 阶段二：手机竖屏 720×1280 (S01, S02, 最低城池 N1/B_START 验收)
+	# 阶段二：手机横屏 720×514 (唯一手机验收目标：S01 - S05 及最低节点 N1/B_START)
 	# -----------------------------------------------------------------------
 	elif step == 9:
 		if frames > 35:
-			_capture("screenshot_phone_portrait_s01_map.png")
-			_capture("screenshot_phone_s01_map.png") # 兼容旧命名
+			_capture("screenshot_phone_landscape_s01_map.png")
 			scene._open_city_drawer("A_START")
 			step = 10
 			frames = 0
 	elif step == 10:
 		if frames > 30:
-			_capture("screenshot_phone_portrait_s02_drawer.png")
-			_capture("screenshot_phone_s02_drawer.png") # 兼容旧命名
-			# 验收要求：测试手机竖屏点击最低城池 松风渡 (N1)
+			_capture("screenshot_phone_landscape_s02_drawer.png")
+			# 手机横屏最低城池验收：松风渡 (N1)
 			scene._open_city_drawer("N1")
 			step = 11
 			frames = 0
 	elif step == 11:
 		if frames > 30:
-			_capture("screenshot_phone_portrait_lowest_n1.png")
-			# 验收要求：测试手机竖屏点击最低城池 雁回关 (B_START)
+			_capture("screenshot_phone_landscape_lowest_n1.png")
+			# 手机横屏最低城池验收：雁回关 (B_START)
 			scene._open_city_drawer("B_START")
 			step = 12
 			frames = 0
 	elif step == 12:
 		if frames > 30:
-			_capture("screenshot_phone_portrait_lowest_bstart.png")
-			# 关闭抽屉，Dock 贴底，切换到手机横屏 720×514
-			scene._toggle_city_drawer(false)
-			_set_viewport_size(720, 514)
-			scene._navigate_to("S01_MAP")
+			_capture("screenshot_phone_landscape_lowest_bstart.png")
+			# 手机横屏军令确认浮层验收
+			scene._on_city_defend_pressed()
 			step = 13
 			frames = 0
-
-	# -----------------------------------------------------------------------
-	# 阶段三：手机横屏 720×514 (S01, S02, 最低城池 N1/B_START 验收)
-	# -----------------------------------------------------------------------
 	elif step == 13:
-		if frames > 35:
-			_capture("screenshot_phone_landscape_s01_map.png")
-			scene._open_city_drawer("A_START")
+		if frames > 25:
+			_capture("screenshot_phone_landscape_s03_order_confirm.png")
+			scene.order_confirm_overlay.visible = false
+			scene._open_report()
 			step = 14
 			frames = 0
 	elif step == 14:
 		if frames > 30:
-			_capture("screenshot_phone_landscape_s02_drawer.png")
-			# 验收要求：测试手机横屏点击最低城池 松风渡 (N1)
-			scene._open_city_drawer("N1")
+			_capture("screenshot_phone_landscape_s04_war_report.png")
+			scene._open_replay()
 			step = 15
 			frames = 0
 	elif step == 15:
 		if frames > 30:
-			_capture("screenshot_phone_landscape_lowest_n1.png")
-			# 验收要求：测试手机横屏点击最低城池 雁回关 (B_START)
-			scene._open_city_drawer("B_START")
+			_capture("screenshot_phone_landscape_s05_battle_replay.png")
+			scene._navigate_to("S01_MAP")
+			scene._toggle_city_drawer(false)
 			step = 16
 			frames = 0
 	elif step == 16:
-		if frames > 30:
-			_capture("screenshot_phone_landscape_lowest_bstart.png")
-			# 验收要求：测试关闭抽屉后 Dock 贴底恢复
-			scene._toggle_city_drawer(false)
-			step = 17
-			frames = 0
-	elif step == 17:
 		if frames > 25:
 			_capture("screenshot_phone_landscape_dock_restored.png")
-			print("CAPTURE_SUITE COMPLETE (ALL RESOLUTIONS & LOWEST NODES)")
+			print("CAPTURE_SUITE COMPLETE (LANDSCAPE ONLY: TABLET 1400x1000 & PHONE 720x514)")
 			get_tree().quit(0)
 
 func _set_viewport_size(w: int, h: int) -> void:

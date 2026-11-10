@@ -101,6 +101,12 @@ var countdown_label: Label
 var rail_buttons: Array = []
 var dock_row: HBoxContainer
 
+# 断线/弱网全局警示横幅与动效
+var offline_banner: PanelContainer
+var offline_banner_label: Label
+var offline_retry_btn: Button
+var drawer_tween: Tween
+
 # S01 左右侧栏与底部导航
 var left_rail: Control
 var right_rail: Control
@@ -181,6 +187,13 @@ var faction_cards: Array = []
 
 # 登录与网络设置
 var login_panel: Panel
+var login_inner_box: Panel
+var login_margin: MarginContainer
+var login_vbox: VBoxContainer
+var login_title_lbl: Label
+var login_sub_lbl: Label
+var login_foot_lbl: Label
+var login_sep: HSeparator
 var url_edit: LineEdit
 var name_edit: LineEdit
 var pass_edit: LineEdit
@@ -248,6 +261,7 @@ func _ready() -> void:
 	_build_login()
 	_build_game()
 	_build_toast_banner()
+	_build_offline_banner()
 	_load_config()
 	_layout_responsive()
 
@@ -383,6 +397,60 @@ func _create_res_pill(text: String) -> PanelContainer:
 	p.add_child(l)
 	return p
 
+# 统一国风徽章（印章风格或圆角胶囊风格）
+func _badge(text: String, bg_color: Color, border_color: Color, font_color: Color, font_size: int = 11, is_pill: bool = false) -> PanelContainer:
+	var p := PanelContainer.new()
+	var radius := 11 if is_pill else 4
+	p.add_theme_stylebox_override("panel", _style(bg_color, border_color, 1, radius, 4))
+	var l := Label.new()
+	l.text = text
+	l.add_theme_font_size_override("font_size", font_size)
+	l.add_theme_color_override("font_color", font_color)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	p.add_child(l)
+	return p
+
+# 统一国风纸雕空态卡片（规范空态展示：暂无军情、战报备战等）
+func _build_empty_state(icon: String, title: String, desc: String) -> PanelContainer:
+	var p := PanelContainer.new()
+	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	p.custom_minimum_size = Vector2(0, 150)
+	p.add_theme_stylebox_override("panel", _panel_style(C_XUANZHI, Color("#dfcaa7"), 1, 10, 16))
+	var v := VBoxContainer.new()
+	v.alignment = BoxContainer.ALIGNMENT_CENTER
+	v.add_theme_constant_override("separation", 6)
+	p.add_child(v)
+	
+	var icn := _label(icon, 30, Color(GOLD.r, GOLD.g, GOLD.b, 0.9))
+	icn.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(icn)
+	
+	var tl := _label(title, 15, C_WOOD_DESK)
+	tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(tl)
+	
+	var dc := _label(desc, 12, Color("#7a6b5c"))
+	dc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	dc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(dc)
+	return p
+
+# 统一墨韵推演加载指示器
+func _build_loading_indicator(text: String) -> PanelContainer:
+	var p := PanelContainer.new()
+	p.custom_minimum_size = Vector2(260, 44)
+	p.add_theme_stylebox_override("panel", _style(Color("#241c16", 0.95), GOLD, 1, 8, 8))
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 10)
+	p.add_child(row)
+	var spin := _label("⏳", 15, GOLD_LIGHT)
+	row.add_child(spin)
+	var lbl := _label(text, 13, GOLD_LIGHT)
+	row.add_child(lbl)
+	return p
+
 func _create_page_header(title: String, subtitle: String = "") -> Panel:
 	var p := Panel.new()
 	p.custom_minimum_size = Vector2(0, 64)
@@ -452,6 +520,48 @@ func _toast(msg: String, is_error: bool = false) -> void:
 	toast_timer = 3.2
 
 # ---------------------------------------------------------------------------
+# 全局断线 / 离线警示指示条 (设计系统标准状态响应)
+# ---------------------------------------------------------------------------
+
+func _build_offline_banner() -> void:
+	offline_banner = PanelContainer.new()
+	offline_banner.visible = false
+	offline_banner.custom_minimum_size = Vector2(400, 36)
+	offline_banner.mouse_filter = Control.MOUSE_FILTER_PASS
+	offline_banner.add_theme_stylebox_override("panel", _style(Color("#2c1712", 0.96), C_ZHUSHA, 1, 6, 6))
+	var h := HBoxContainer.new()
+	h.alignment = BoxContainer.ALIGNMENT_CENTER
+	h.add_theme_constant_override("separation", 12)
+	offline_banner.add_child(h)
+	
+	offline_banner_label = _label("⚠️ 烽烟信号微弱 · 正在重连学堂...", 12, Color("#ffd4cc"))
+	h.add_child(offline_banner_label)
+	
+	offline_retry_btn = Button.new()
+	offline_retry_btn.text = "🔄 重连"
+	offline_retry_btn.custom_minimum_size = Vector2(68, 26)
+	offline_retry_btn.add_theme_font_size_override("font_size", 11)
+	offline_retry_btn.add_theme_stylebox_override("normal", _style(C_ZHUSHA, Color("#ff8a80"), 1, 4, 3))
+	offline_retry_btn.add_theme_color_override("font_color", Color("#ffffff"))
+	offline_retry_btn.pressed.connect(func():
+		_set_offline(false)
+		_refresh_state()
+	)
+	h.add_child(offline_retry_btn)
+	add_child(offline_banner)
+
+func _set_offline(is_offline: bool, msg: String = "⚠️ 烽烟信号微弱 · 正在重连学堂...") -> void:
+	if offline_banner == null:
+		return
+	offline_banner_label.text = msg
+	offline_banner.visible = is_offline
+	if is_offline:
+		var banner_w := minf(size.x - 20.0, 400.0)
+		offline_banner.size = Vector2(banner_w, 36.0)
+		var top_bar_h := 50.0 if size.y < 650.0 else (62.0 if size.x < 900.0 else 72.0)
+		offline_banner.position = Vector2((size.x - banner_w) / 2.0, top_bar_h + 4.0)
+
+# ---------------------------------------------------------------------------
 # 页面路由与分层导航管理
 # ---------------------------------------------------------------------------
 
@@ -498,12 +608,36 @@ func _layout_responsive() -> void:
 	var is_compact_h := h < 650.0
 	var is_portrait := h > w
 
-	# 1. 登录卡片
+	# 1. 登录卡片（自适应手机横屏 720×514，确保 0 截断）
 	if login_panel != null:
-		var lp_w := minf(w - 32.0, 500.0)
-		var lp_h := minf(h - 40.0, 600.0)
+		var lp_w := minf(w - 32.0, 480.0 if is_compact_h else 500.0)
+		var lp_h := minf(h - 20.0, 484.0 if is_compact_h else 600.0)
 		login_panel.size = Vector2(lp_w, lp_h)
 		login_panel.position = Vector2((w - lp_w) / 2.0, maxf((h - lp_h) / 2.0, 10.0))
+		if login_inner_box != null:
+			login_inner_box.position = Vector2(10, 10)
+			login_inner_box.size = Vector2(lp_w - 20, lp_h - 20)
+		if login_margin != null:
+			login_margin.position = Vector2(20.0 if is_compact_h else 28.0, 14.0 if is_compact_h else 28.0)
+			login_margin.size = Vector2(lp_w - (40.0 if is_compact_h else 56.0), lp_h - (28.0 if is_compact_h else 56.0))
+		if login_vbox != null:
+			login_vbox.add_theme_constant_override("separation", 6 if is_compact_h else 14)
+		if login_title_lbl != null:
+			login_title_lbl.add_theme_font_size_override("font_size", 24 if is_compact_h else 38)
+		if login_sub_lbl != null:
+			login_sub_lbl.add_theme_font_size_override("font_size", 12 if is_compact_h else 15)
+		if name_edit != null:
+			name_edit.custom_minimum_size.y = 36 if is_compact_h else 44
+		if pass_edit != null:
+			pass_edit.custom_minimum_size.y = 36 if is_compact_h else 44
+		if login_student_btn != null:
+			login_student_btn.custom_minimum_size.y = 40 if is_compact_h else 48
+			login_student_btn.add_theme_font_size_override("font_size", 15 if is_compact_h else 18)
+		if login_status != null:
+			login_status.custom_minimum_size.y = 24 if is_compact_h else 36
+			login_status.add_theme_font_size_override("font_size", 11 if is_compact_h else 13)
+		if login_foot_lbl != null:
+			login_foot_lbl.add_theme_font_size_override("font_size", 10 if is_compact_h else 12)
 	if login_gear_btn != null:
 		login_gear_btn.position = Vector2(w - 124.0, 14.0)
 		
@@ -549,8 +683,8 @@ func _layout_responsive() -> void:
 				resource_bar.size = Vector2(rw_ideal, 44.0)
 
 	# 4. 左右侧栏：贴边半透明印章式悬浮图标列（P0: 去除实心黑底板，全屏通栏）
-	var rail_top := top_h + (8.0 if is_compact_h else 14.0)
-	var rail_btn_size := Vector2(44, 44) if is_phone else Vector2(48, 48)
+	var rail_top := top_h + (6.0 if is_compact_h else 14.0)
+	var rail_btn_size := Vector2(36, 36) if is_compact_h else (Vector2(42, 42) if is_portrait else Vector2(48, 48))
 	if left_rail != null:
 		left_rail.position = Vector2(8 if is_phone else 14, rail_top)
 		left_rail.size = Vector2(rail_btn_size.x, 220)
@@ -567,7 +701,15 @@ func _layout_responsive() -> void:
 			btn.custom_minimum_size = rail_btn_size
 
 	if legend_panel != null:
-		var leg_y := rail_top + (180.0 if is_compact_h else 225.0)
+		var leg_y := 315.0
+		if is_portrait:
+			# 手机竖屏（720×1280）：避开西北大营云麓关(y=281)，置于中左侧开阔远山处
+			leg_y = 480.0
+		elif is_compact_h:
+			# 手机横屏（720×514）：置于左侧悬浮图标下方与西南据点之间
+			leg_y = rail_top + 168.0
+		else:
+			leg_y = rail_top + 225.0
 		legend_panel.position = Vector2(8 if is_phone else 14, minf(leg_y, h - 85.0))
 
 	# 5. 底部导航栏（P0: 贴底通栏，半透明条）
@@ -650,12 +792,18 @@ func _layout_responsive() -> void:
 		toast_panel.size = Vector2(tw, 44.0)
 		toast_panel.position = Vector2((w - tw) / 2.0, top_h + 8.0)
 
+	if offline_banner != null and offline_banner.visible:
+		var banner_w := minf(w - 20.0, 400.0)
+		offline_banner.size = Vector2(banner_w, 36.0)
+		offline_banner.position = Vector2((w - banner_w) / 2.0, top_h + 4.0)
+
 	# 10. 更新城池触控热区位置
 	if map != null and not node_buttons.is_empty():
 		for code in node_buttons.keys():
 			var b: Button = node_buttons[code]
 			if is_instance_valid(b):
-				b.position = map.node_position(code) - Vector2(50, 50)
+				b.size = Vector2(140, 140)
+				b.position = map.node_position(code) - Vector2(70, 105)
 
 # ---------------------------------------------------------------------------
 # MapView 沙盘视口交互控制器（双指缩放、拖拽平移、双击放大、视野聚焦、边界限制）
@@ -717,7 +865,7 @@ func _on_map_view_gui_input(event: InputEvent) -> void:
 			if initial_pinch_dist > 5.0:
 				var factor := cur_dist / initial_pinch_dist
 				var center: Vector2 = (pts[0] + pts[1]) / 2.0
-				var target_zoom := clampf(initial_pinch_zoom * factor, 0.8, 2.5)
+				var target_zoom := clampf(initial_pinch_zoom * factor, 0.5, 2.5)
 				_set_zoom_direct(center, target_zoom)
 		elif touch_points.size() == 1 and is_dragging:
 			map_pan = pan_start + (sd.position - drag_start)
@@ -725,7 +873,7 @@ func _on_map_view_gui_input(event: InputEvent) -> void:
 
 func _zoom_at(focus_screen_pos: Vector2, factor: float) -> void:
 	var old_zoom := map_zoom
-	var new_zoom := clampf(map_zoom * factor, 0.8, 2.5)
+	var new_zoom := clampf(map_zoom * factor, 0.5, 2.5)
 	if is_equal_approx(old_zoom, new_zoom):
 		return
 	var world_pos := (focus_screen_pos - map_pan) / old_zoom
@@ -735,7 +883,7 @@ func _zoom_at(focus_screen_pos: Vector2, factor: float) -> void:
 
 func _set_zoom_direct(focus_screen_pos: Vector2, target_zoom: float) -> void:
 	var old_zoom := map_zoom
-	var new_zoom := clampf(target_zoom, 0.8, 2.5)
+	var new_zoom := clampf(target_zoom, 0.5, 2.5)
 	if is_equal_approx(old_zoom, new_zoom):
 		return
 	var world_pos := (focus_screen_pos - map_pan) / old_zoom
@@ -756,8 +904,8 @@ func focus_city(code: String) -> void:
 	var top_h := top_bar.size.y if top_bar != null else 60.0
 	var avail_h := maxf(map_view.size.y - top_h - drawer_h, 120.0)
 
-	# 手机竖屏（720×1280）：所有 5 个城池（A_START到最低的B_START）天然处于顶部 68% 可视区内，
-	# 且离抽屉顶边（y=1070）至少有 100~195px 充足安全空间；
+	# 手机竖屏（720×1280）：所有 5 个城池（A_START到最低的松风渡N1与听雨台N3）天然处于顶部可视区内，
+	# 且离抽屉顶边（y=1070）至少有 50~195px 充足安全空间；
 	# 未放大时不执行垂直位移，确保水彩底图 100% 贴底铺满，杜绝任何露白与平移空白带。
 	if size.x < size.y and map_zoom <= 1.05:
 		map_pan = Vector2.ZERO
@@ -769,8 +917,9 @@ func focus_city(code: String) -> void:
 	if size.y < 650.0:
 		# 手机横屏（720×514）：紧凑视口
 		if pos.y > top_h + avail_h - 20.0:
-			# 最低城（N1, B_START）上抬到抽屉上方安全区
-			var desired_screen_y := top_h + avail_h - 14.0
+			# 最低城（N1, N3 位于 y=400.9），抽屉顶在 338px
+			# 将其向上适度平移，确保城名和归属签（pos.y + 36）位于抽屉上方，同时水彩底图底边深藏抽屉之后
+			var desired_screen_y := top_h + avail_h - 55.0
 			map_pan.y = desired_screen_y - pos.y * map_zoom
 		else:
 			map_pan.y = 0.0
@@ -795,8 +944,11 @@ func _clamp_pan() -> void:
 		map_pan.x = clampf(map_pan.x, vw - mw, 0.0)
 		
 	if mh <= vh:
-		# 未缩放状态（地图高度未超过视口）：
-		if size.x < size.y:
+		# 当地图高度未超过视口：
+		if map_zoom < 0.98:
+			# 缩小状态（例如 0.5x 全景查看）：沙盘居中
+			map_pan.y = (vh - mh) / 2.0
+		elif size.x < size.y:
 			# 竖屏：保持 0，地图底图 100% 铺满视口，绝不向上平移漏出底板
 			map_pan.y = 0.0
 		elif city_drawer != null and city_drawer.visible:
@@ -858,20 +1010,21 @@ func _build_login() -> void:
 	login_layer.add_child(login_panel)
 	var panel := login_panel
 
-	var inner_box := Panel.new()
-	inner_box.position = Vector2(10, 10)
-	inner_box.size = Vector2(500, 600)
-	inner_box.add_theme_stylebox_override("panel", _style(Color.TRANSPARENT, Color("#dfcaa7"), 1, 12))
-	panel.add_child(inner_box)
+	login_inner_box = Panel.new()
+	login_inner_box.position = Vector2(10, 10)
+	login_inner_box.size = Vector2(500, 600)
+	login_inner_box.add_theme_stylebox_override("panel", _style(Color.TRANSPARENT, Color("#dfcaa7"), 1, 12))
+	panel.add_child(login_inner_box)
 
-	var margin := MarginContainer.new()
-	margin.position = Vector2(28, 30)
-	margin.size = Vector2(464, 560)
-	panel.add_child(margin)
+	login_margin = MarginContainer.new()
+	login_margin.position = Vector2(28, 30)
+	login_margin.size = Vector2(464, 560)
+	panel.add_child(login_margin)
 
-	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 14)
-	margin.add_child(v)
+	login_vbox = VBoxContainer.new()
+	login_vbox.add_theme_constant_override("separation", 14)
+	login_margin.add_child(login_vbox)
+	var v := login_vbox
 
 	var seal_box := HBoxContainer.new()
 	seal_box.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -883,17 +1036,17 @@ func _build_login() -> void:
 	seal_box.add_child(seal_p)
 	v.add_child(seal_box)
 
-	var title := _label("灵宠山河", 38, C_WOOD_DESK)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	v.add_child(title)
+	login_title_lbl = _label("灵宠山河", 38, C_WOOD_DESK)
+	login_title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(login_title_lbl)
 
-	var sub := _label("纸雕国风 · 班宠为将 · 九州沙盘推演", 15, Color("#6d5e4f"))
-	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	v.add_child(sub)
+	login_sub_lbl = _label("纸雕国风 · 班宠为将 · 九州沙盘推演", 15, Color("#6d5e4f"))
+	login_sub_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(login_sub_lbl)
 
-	var sep := HSeparator.new()
-	sep.custom_minimum_size = Vector2(0, 10)
-	v.add_child(sep)
+	login_sep = HSeparator.new()
+	login_sep.custom_minimum_size = Vector2(0, 10)
+	v.add_child(login_sep)
 
 	name_edit = _line_edit("姓名")
 	name_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -915,9 +1068,9 @@ func _build_login() -> void:
 	login_status.custom_minimum_size = Vector2(0, 36)
 	v.add_child(login_status)
 
-	var foot := _label("班级量化考核系统联动 · 每日 21:00 全班推演结算", 12, Color("#7e6e5a"))
-	foot.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	v.add_child(foot)
+	login_foot_lbl = _label("班级量化考核系统联动 · 每日 21:00 全班推演结算", 12, Color("#7e6e5a"))
+	login_foot_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(login_foot_lbl)
 
 	login_gear_btn = Button.new()
 	login_gear_btn.text = "⚙️ 网络设置"
@@ -1237,17 +1390,37 @@ func _add_dock_tab(parent: Control, page_id: String, icon: String, title: String
 	parent.add_child(btn)
 	dock_tab_buttons[page_id] = btn
 
-# 抽屉显示状态与底部 Dock 避让让位联动
+# 抽屉显示状态与底部 Dock 避让让位联动（设计系统动效：220ms TRANS_CUBIC EASE_OUT）
 func _toggle_city_drawer(is_show: bool) -> void:
 	if city_drawer == null:
 		return
-	city_drawer.visible = is_show
-	if legend_panel != null:
-		legend_panel.visible = not is_show
-	if bottom_dock != null:
-		var dock_h := bottom_dock.size.y
-		var target_y := size.y if is_show else (size.y - dock_h)
-		bottom_dock.position.y = target_y
+	var is_compact_h := size.y < 650.0
+	var drawer_h := 168.0 if is_compact_h else 210.0
+	var dock_h := 46.0 if is_compact_h else (56.0 if (size.x < 900.0 or is_compact_h) else 60.0)
+	
+	if is_instance_valid(drawer_tween) and drawer_tween.is_running():
+		drawer_tween.kill()
+
+	if is_show:
+		city_drawer.visible = true
+		city_drawer.position.y = size.y
+		if legend_panel != null:
+			legend_panel.visible = false
+		drawer_tween = create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		drawer_tween.tween_property(city_drawer, "position:y", size.y - drawer_h, 0.22)
+		if bottom_dock != null:
+			drawer_tween.tween_property(bottom_dock, "position:y", size.y, 0.22)
+	else:
+		if legend_panel != null:
+			legend_panel.visible = true
+		drawer_tween = create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		drawer_tween.tween_property(city_drawer, "position:y", size.y, 0.18)
+		if bottom_dock != null:
+			drawer_tween.tween_property(bottom_dock, "position:y", size.y - dock_h, 0.18)
+		drawer_tween.chain().tween_callback(func():
+			if is_instance_valid(city_drawer):
+				city_drawer.visible = false
+		)
 	_clamp_pan()
 
 # ---------------------------------------------------------------------------
@@ -2694,7 +2867,9 @@ func _refresh_state() -> void:
 				return
 			action_status.text = str(err.get("message", "获取战局失败"))
 			_toast(str(err.get("message", "获取战局失败")), true)
+			_set_offline(true, "⚠️ 烽烟微弱 · 战局同步受阻（点击重试）")
 			return
+		_set_offline(false)
 		state = data
 		_render_state(data)
 		if not poll_timer.is_stopped() == false:
@@ -2741,14 +2916,14 @@ func _rebuild_node_buttons(nodes: Array) -> void:
 		var code := str(n.get("code", ""))
 		var b := Button.new()
 		b.text = ""
-		b.size = Vector2(100, 100)
-		b.position = map.node_position(code) - Vector2(50, 50)
+		b.size = Vector2(140, 140)
+		b.position = map.node_position(code) - Vector2(70, 105)
 		b.tooltip_text = str(n.get("name", code))
 		b.focus_mode = Control.FOCUS_NONE
 		var empty := StyleBoxEmpty.new()
 		b.add_theme_stylebox_override("normal", empty)
-		b.add_theme_stylebox_override("hover", _style(Color(1, 1, 1, 0.08), GOLD, 2, 50))
-		b.add_theme_stylebox_override("pressed", _style(Color(1, 1, 1, 0.15), CORAL, 2, 50))
+		b.add_theme_stylebox_override("hover", _style(Color(1, 1, 1, 0.08), GOLD, 2, 20))
+		b.add_theme_stylebox_override("pressed", _style(Color(1, 1, 1, 0.15), CORAL, 2, 20))
 		b.add_theme_stylebox_override("focus", empty)
 		b.pressed.connect(_on_node_pressed.bind(code))
 		if map_world != null:
