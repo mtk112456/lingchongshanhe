@@ -232,7 +232,7 @@ try {
 
         // 敌方集结：同城其他阵营的活跃令，按阵营聚合；疑兵会把展示兵力抬高 50%
         $stmt = $pdo->prepare(
-            'SELECT p.id AS player_id, f.code AS faction_code, f.name AS faction_name,
+            'SELECT p.id AS player_id, p.faction_id, f.code AS faction_code, f.name AS faction_name,
                     o.card_code, sp.level, pt.base_hp, pt.base_atk, pt.base_def, pt.base_spd,
                     pt.growth_rate, pt.code AS pet_code
              FROM slice_order_slots o
@@ -249,6 +249,10 @@ try {
         $byFaction = [];
         $seenPlayers = [];
         foreach ($rows as $row) {
+            // 只显示其他阵营，避免自己的「疑兵」虚报自己的情报
+            if ((int)$row['faction_id'] === (int)$player['faction_id']) {
+                continue;
+            }
             $fid = (string)$row['faction_code'];
             if (!isset($byFaction[$fid])) {
                 $byFaction[$fid] = [

@@ -106,7 +106,7 @@ Authorization: Bearer <token>
 ```
 
 - `lane` 是按 `turn/player/node` 确定性选的一路，刷新页面不变；
-- `massing` 是本城所有活跃令按阵营聚合，含己方；
+- `massing` 是本城其他阵营的活跃令按阵营聚合（不含己方）；
 - `feint: true` 表示该阵营打出了「疑兵」，`troops` 已经 ×1.5，UI 要标“疑似”；
 - 没有哨探时不要轮询该接口。
 

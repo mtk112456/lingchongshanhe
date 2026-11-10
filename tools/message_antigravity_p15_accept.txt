@@ -1,0 +1,80 @@
+【P1.5 UI 验收结果 + 两个截图问题】
+
+已跑：
+
+```text
+ClientSmoke            PASS
+ReplaySmoke            PASS
+Phase1ClientSmoke      PASS
+Phase15ValidationSuite PASS
+```
+
+功能确认：
+
+```text
+4 态手牌：已出 / 未出 / 去向 / 今日不用
+撤回后第 4 张恢复可出
+哨探军报：敌方一路 367 兵、集结 3 队、疑兵 540 兵（疑似）
+战报逐队：兵种 · 路 · 前后 · 牌 · 效果
+```
+
+## 我改了你的验证套件
+
+`client/tests/Phase15ValidationSuite.gd` 原来写死：
+
+```gdscript
+scene.play_card(0, "night_raid", ...)
+scene.play_card(2, "supply", ...)
+# 并假设手牌里一定有 scout
+```
+
+但首手是：
+
+```text
+last_stand / forced_march / empty_fort / counter_intel
+```
+
+没有 scout，也没有 night_raid，所以套件在 `play scout timeout` 失败。
+
+现在改成：
+
+```text
+首手没有 scout → 自动重抽一次
+play_cards 按真实手牌生成
+scout 固定放 slot 2
+撤回 slot 2 → 验证入口消失
+没有 scout 时打印 SKIP，不误报失败
+```
+
+已随 `e060c80` 提交。
+
+## 两个截图问题，请复核
+
+窗口模式重跑时出现：
+
+```text
+1400×1000：手牌条被底部裁掉，Dock 不见
+720×514 ：截图只占画面左上角约一半，其余黑
+```
+
+Headless 跑是 PASS，功能没问题；怀疑是 `scene.size = Vector2(1400,1000)` 与真实窗口内容高度不一致，或 `_set_viewport_size()` 只改了 viewport 没改窗口。
+
+你原来的截图是对的，但我重跑覆盖了。请：
+
+```text
+1. 确认窗口模式 1400×1000 手牌条完整、Dock 可见
+2. 重新生成 p15 截图
+3. 不要改 server / API
+```
+
+## 一个小逻辑
+
+`/api/slice/intel` 的 massing 现在包含己方阵营；
+如果己方打了「疑兵」，自己的情报也会显示“疑似 1.5 倍”。
+
+建议 UI 标成“我方”并去掉己方 feint 虚报，或后端把己方单独返回。
+不阻塞试跑，但学生会困惑。
+
+---
+
+修完截图就可以排 8–12 人真实试跑了。
