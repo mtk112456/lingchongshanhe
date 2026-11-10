@@ -391,6 +391,8 @@ try {
     }
 
     throw new ApiException('NOT_FOUND', '接口不存在：' . $method . ' ' . $path, 404);
+} catch (InvalidArgumentException $e) {
+    failure(new ApiException('BAD_REQUEST', $e->getMessage(), 400));
 } catch (ApiException $e) {
     slice_log('api.error', [
         'request_id' => $requestId,

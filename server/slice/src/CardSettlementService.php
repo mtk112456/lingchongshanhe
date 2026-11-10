@@ -137,7 +137,8 @@ final class CardSettlementService
 
         $troops = 0.0;
         foreach ($vanguard as $order) {
-            $troops += BattleService::petPower($order);
+            // 每个先锋只带 1 支队伍，即总兵力的 1/3
+            $troops += BattleService::petPower($order) / 3;
         }
         $supporters = max(0, count($factionOrders) - count($vanguard));
         $troops *= BattleService::supportMultiplier($supporters) * 1.20;
