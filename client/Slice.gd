@@ -1787,6 +1787,8 @@ func _open_city_intel_dialog(node_code: String) -> void:
 			mass_v.add_child(no_mass)
 		else:
 			var faction_map := {"bi": "笔", "bamboo": "笔", "mo": "墨", "ink": "墨", "yan": "砚", "zhi": "纸"}
+			var my_fc := _my_faction_code()
+			var my_fn := _my_faction_name()
 			for m in mass_list:
 				if typeof(m) != TYPE_DICTIONARY:
 					continue
@@ -1796,9 +1798,12 @@ func _open_city_intel_dialog(node_code: String) -> void:
 				var t_cnt := int(m.get("teams", 0))
 				var troops := int(m.get("troops", 0))
 				var is_feint := bool(m.get("feint", false))
+				var is_my := (f_code == my_fc or f_name == my_fn or (my_fc in ["bi", "bamboo"] and f_code in ["bi", "bamboo"]) or (my_fc in ["mo", "ink"] and f_code in ["mo", "ink"]))
 
 				var row_panel := PanelContainer.new()
-				if is_feint:
+				if is_my:
+					row_panel.add_theme_stylebox_override("panel", _style(Color("#212b24"), Color("#4e7a5d"), 1, 4, 6))
+				elif is_feint:
 					row_panel.add_theme_stylebox_override("panel", _style(Color("#2c221a"), Color("#cf7b32"), 1, 4, 6))
 				else:
 					row_panel.add_theme_stylebox_override("panel", _style(Color("#f0e8dc"), Color("#baa892"), 1, 4, 6))
@@ -1809,18 +1814,31 @@ func _open_city_intel_dialog(node_code: String) -> void:
 				row_panel.add_child(row_v)
 
 				var f_icon := "🔴" if f_name == "笔" else ("🔵" if f_name == "墨" else "🚩")
-				var txt_col := Color("#fae19c") if is_feint else Color("#221a12")
+				var txt_col := Color("#bce5c8") if is_my else (Color("#fae19c") if is_feint else Color("#221a12"))
 				
 				var m_line := Label.new()
-				if is_feint:
-					m_line.text = "%s 【%s阵营】 %d位同窗 · %d队 · 兵力 [疑似 %d 兵]" % [f_icon, f_name, p_cnt, t_cnt, troops]
+				if is_my:
+					if is_feint:
+						var real_troops := int(round(float(troops) / 1.5))
+						m_line.text = "%s 【我方·%s阵营】 %d位同窗 · %d队 · 真实兵力 %d 兵 (外示 %d 兵)" % [f_icon, f_name, p_cnt, t_cnt, real_troops, troops]
+					else:
+						m_line.text = "%s 【我方·%s阵营】 %d位同窗 · %d队 · 真实兵力 %d 兵" % [f_icon, f_name, p_cnt, t_cnt, troops]
 				else:
-					m_line.text = "%s 【%s阵营】 %d位同窗 · %d队 · 真实兵力 %d 兵" % [f_icon, f_name, p_cnt, t_cnt, troops]
+					if is_feint:
+						m_line.text = "%s 【敌方·%s阵营】 %d位学子 · %d队 · 兵力 [疑似 %d 兵]" % [f_icon, f_name, p_cnt, t_cnt, troops]
+					else:
+						m_line.text = "%s 【敌方·%s阵营】 %d位学子 · %d队 · 真实兵力 %d 兵" % [f_icon, f_name, p_cnt, t_cnt, troops]
 				m_line.add_theme_color_override("font_color", txt_col)
 				m_line.add_theme_font_size_override("font_size", 12)
 				row_v.add_child(m_line)
 
-				if is_feint:
+				if is_my and is_feint:
+					var tip_l := Label.new()
+					tip_l.text = "✨【我军疑兵】本部已施展疑兵之计瞒天过海，敌方所见我军兵力已被虚夸 1.5 倍！"
+					tip_l.add_theme_color_override("font_color", Color("#8ec99e"))
+					tip_l.add_theme_font_size_override("font_size", 10)
+					row_v.add_child(tip_l)
+				elif not is_my and is_feint:
 					var warn_l := Label.new()
 					warn_l.text = "⚠️【疑兵虚张】情报兵力已被虚夸1.5倍，非真实数字！"
 					warn_l.add_theme_color_override("font_color", Color("#e88d43"))

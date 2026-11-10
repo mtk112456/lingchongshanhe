@@ -7,6 +7,7 @@ extends Node
 ## 3. 任务 3：哨探情报面板（敌方一路 + 集结概览 + 疑似虚线框 + 撤回后入口消失）
 ## 4. UI 红线：按钮高度 >= 44px 与安全区避让
 
+var sv: SubViewport
 var scene: Control
 var frames := 0
 var step := 0
@@ -15,9 +16,15 @@ var play_cards: Array = []
 var has_scout := false
 
 func _ready() -> void:
-	print("P15_VALIDATION_SUITE start")
+	print("P15_VALIDATION_SUITE start (SubViewport Mode)")
+	sv = SubViewport.new()
+	sv.size = Vector2i(1400, 1000)
+	sv.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	sv.gui_embed_subwindows = true
+	add_child(sv)
+
 	scene = load("res://Slice.tscn").instantiate()
-	add_child(scene)
+	sv.add_child(scene)
 	scene.size = Vector2(1400, 1000)
 	scene._layout_responsive()
 
@@ -265,11 +272,20 @@ func _build_play_cards(hand_cards: Array) -> void:
 			play_cards.append(str(hand_cards[i]))
 
 func _set_viewport_size(w: int, h: int) -> void:
-	get_viewport().size = Vector2i(w, h)
+	if sv != null:
+		sv.size = Vector2i(w, h)
 	scene.size = Vector2(w, h)
 	scene._layout_responsive()
 
 func _capture(filename: String) -> void:
+	if sv != null:
+		var tex := sv.get_texture()
+		if tex != null:
+			var img := tex.get_image()
+			if img != null and not img.is_empty():
+				img.save_png("res://tests/" + filename)
+				print("CAPTURED: %s (%dx%d)" % [filename, img.get_width(), img.get_height()])
+				return
 	var vp := get_viewport()
 	if vp != null:
 		var tex := vp.get_texture()

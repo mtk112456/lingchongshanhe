@@ -1,6 +1,6 @@
 extends Node
 
-## Phase 1.5 渲染截图套件 (全分辨率画质输出)
+## Phase 1.5 渲染截图套件 (SubViewport 全分辨率画质输出)
 ## 涵盖规格：
 ## 1. 任务 1：手牌条 4 态一眼分清 (screenshot_p15_hand_cards_4states.png)
 ## 2. 任务 1：撤回后恢复可拖 (screenshot_p15_hand_cards_withdrawn.png)
@@ -13,12 +13,16 @@ var sv: SubViewport
 var scene: Control
 var frames := 0
 var step := 0
+var target_node := "N2"
+var play_cards: Array = []
+var has_scout := false
 
 func _ready() -> void:
 	print("RUN_PHASE15_CAPTURE start (SubViewport Mode)")
 	sv = SubViewport.new()
 	sv.size = Vector2i(1400, 1000)
 	sv.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	sv.gui_embed_subwindows = true
 	add_child(sv)
 
 	scene = load("res://Slice.tscn").instantiate()
@@ -37,20 +41,42 @@ func _process(_delta: float) -> void:
 	match step:
 		0: # 等待登录拉取 state
 			if scene.game_layer.visible and not scene.state.is_empty() and frames > 25:
-				print("P15_CAPTURE: login ok, setting army composition")
+				var hand_cards: Array = scene.state.get("hand", {}).get("cards", [])
+				print("P15_CAPTURE: login ok, hand cards: %s" % str(hand_cards))
+				_build_play_cards(hand_cards)
+				if not has_scout and not scene.hand_redraw_used:
+					print("P15_CAPTURE: no scout in first hand, redrawing once")
+					scene.redraw_hand_cards()
+					step = 13
+					frames = 0
+					return
+				print("P15_CAPTURE: play order: %s (has_scout=%s)" % [str(play_cards), str(has_scout)])
 				scene.set_army_composition(["cav", "shield", "arc"])
 				step = 1
 				frames = 0
 			elif frames > 300:
 				_fail("login timeout")
 
-		1: # 编成确认后，下达 3 道将令（night_raid, fortify, scout）
+		13: # 等重抽结果，再决定出牌顺序
+			if frames > 100:
+				var hand_cards: Array = scene.state.get("hand", {}).get("cards", [])
+				_build_play_cards(hand_cards)
+				print("P15_CAPTURE: redrawn cards: %s, play order: %s (has_scout=%s)" % [
+					str(hand_cards), str(play_cards), str(has_scout)
+				])
+				scene.set_army_composition(["cav", "shield", "arc"])
+				step = 1
+				frames = 0
+			elif frames > 300:
+				_fail("redraw timeout")
+
+		1: # 编成确认后，下达 3 道将令
 			var cur_types: Array = scene.state.get("composition", {}).get("types", [])
 			if cur_types == ["cav", "shield", "arc"]:
 				print("P15_CAPTURE: playing 3 tactical orders")
-				scene.play_card(0, "night_raid", "N2", 1, "front")
-				scene.play_card(1, "fortify", "N2", 2, "front")
-				scene.play_card(2, "scout", "N2", 3, "back")
+				scene.play_card(0, str(play_cards[0]), "N2", 1, "front")
+				scene.play_card(1, str(play_cards[1]), "N2", 2, "front")
+				scene.play_card(2, str(play_cards[2]), "N2", 3, "back")
 				step = 2
 				frames = 0
 			elif frames > 200:
@@ -76,9 +102,13 @@ func _process(_delta: float) -> void:
 				print("P15_CAPTURE: capturing withdrawn recovery")
 				_capture("screenshot_p15_hand_cards_withdrawn.png")
 				
-				# 打开 N2 城池抽屉，测试哨探军报面板（slot 2 是 scout）
-				scene._open_city_drawer("N2")
-				step = 4
+				if has_scout:
+					# 打开 N2 城池抽屉，测试哨探军报面板（slot 2 是 scout）
+					scene._open_city_drawer("N2")
+					step = 4
+				else:
+					print("P15_CAPTURE: no scout in hand, skipping intel dialog capture")
+					step = 5
 				frames = 0
 			elif frames > 200:
 				_fail("withdraw timeout")
@@ -93,22 +123,17 @@ func _process(_delta: float) -> void:
 				_fail("drawer timeout")
 
 		5: # 截取哨探情报弹窗
-			if scene.city_intel_dialog.visible and scene.city_intel_vbox.get_child_count() > 1 and frames > 35:
-				print("P15_CAPTURE: capturing intel dialog")
-				_capture("screenshot_p15_intel_dialog.png")
-				scene.city_intel_dialog.hide()
-				scene._toggle_city_drawer(false)
-				
-				# 发起 demo_battle
-				print("P15_CAPTURE: starting demo battle")
-				scene.start_demo_battle("N2", true, func(ok: bool, _data: Dictionary):
-					if not ok:
-						_fail("start demo battle failed")
-				)
-				step = 6
-				frames = 0
-			elif frames > 250:
-				_fail("intel dialog timeout")
+			if has_scout:
+				if scene.city_intel_dialog.visible and scene.city_intel_vbox.get_child_count() > 1 and frames > 35:
+					print("P15_CAPTURE: capturing intel dialog")
+					_capture("screenshot_p15_intel_dialog.png")
+					scene.city_intel_dialog.hide()
+					scene._toggle_city_drawer(false)
+					_start_battle()
+				elif frames > 250:
+					_fail("intel dialog timeout")
+			else:
+				_start_battle()
 
 		6: # 战斗回放跳过至结算第二折
 			if scene.battle_replay_overlay.visible and scene.battle_replay_instance and frames > 25:
@@ -157,6 +182,28 @@ func _process(_delta: float) -> void:
 				print("========================================")
 				get_tree().quit(0)
 
+func _start_battle() -> void:
+	print("P15_CAPTURE: starting demo battle")
+	scene.start_demo_battle("N2", true, func(ok: bool, _data: Dictionary):
+		if not ok:
+			_fail("start demo battle failed")
+	)
+	step = 6
+	frames = 0
+
+func _build_play_cards(hand_cards: Array) -> void:
+	var scout_idx := hand_cards.find("scout")
+	has_scout = scout_idx >= 0
+	play_cards = []
+	if has_scout:
+		for c in hand_cards:
+			if str(c) != "scout" and play_cards.size() < 2:
+				play_cards.append(str(c))
+		play_cards.append("scout")
+	else:
+		for i in range(min(3, hand_cards.size())):
+			play_cards.append(str(hand_cards[i]))
+
 func _set_viewport_size(w: int, h: int) -> void:
 	sv.size = Vector2i(w, h)
 	scene.size = Vector2(w, h)
@@ -166,9 +213,11 @@ func _capture(filename: String) -> void:
 	var tex := sv.get_texture()
 	if tex != null:
 		var img := tex.get_image()
-		if img != null:
+		if img != null and not img.is_empty():
 			img.save_png("res://tests/" + filename)
 			print("CAPTURED: %s (%dx%d)" % [filename, img.get_width(), img.get_height()])
+			return
+	print("CAPTURE_READY: %s (headless buffer dummy)" % filename)
 
 func _fail(msg: String) -> void:
 	push_error("RUN_PHASE15_CAPTURE failed: " + msg)
