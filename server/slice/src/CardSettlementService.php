@@ -27,6 +27,13 @@ final class CardSettlementService
         'last_stand', 'counter_intel', 'supply', 'cut_supply',
     ];
 
+    public const REGION_NODES = [
+        'bi' => ['liangzhou', 'hanzhong', 'xiangyang'],
+        'mo' => ['yecheng', 'taiyuan', 'luoyang'],
+        'yan' => ['chengdu', 'jiangling', 'changsha'],
+        'zhi' => ['jianye', 'kuaiji', 'shouchun'],
+    ];
+
     public static function isTeamCard(string $card): bool
     {
         return in_array($card, self::TEAM_CARDS, true);
@@ -203,6 +210,20 @@ final class CardSettlementService
             $attacker['camp_bonus'] = false;
         }
 
+        // 区域：阵营拿下本区 3 城，全军 +5%
+        $regionBonus = $this->factionOwnsRegion($gameId, $attackerFactionId);
+        if ($regionBonus) {
+            foreach ($teams as &$t) {
+                $t['troops'] *= 1.05;
+            }
+            unset($t);
+            $attacker['teams'] = $teams;
+            $attacker['troops'] = array_sum(array_column($teams, 'troops'));
+            $attacker['region_bonus'] = true;
+        } else {
+            $attacker['region_bonus'] = false;
+        }
+
         // 守军：城归属方的驻守令（打自己城 = 驻守）优先；没有才用固定守军。
         $defTeams = [];
         $defGeneral = 'def';
@@ -317,6 +338,24 @@ final class CardSettlementService
             'defender_teams' => $defTeams,
             'real_garrison' => $realGarrison,
         ];
+    }
+
+    private function factionOwnsRegion(int $gameId, int $factionId): bool
+    {
+        $stmt = $this->pdo->prepare('SELECT code FROM slice_factions WHERE id = ? AND game_id = ?');
+        $stmt->execute([$factionId, $gameId]);
+        $code = (string)$stmt->fetchColumn();
+        $nodes = self::REGION_NODES[$code] ?? [];
+        if ($nodes === []) {
+            return false;
+        }
+        $in = implode(',', array_fill(0, count($nodes), '?'));
+        $stmt = $this->pdo->prepare(
+            "SELECT COUNT(*) FROM slice_nodes
+             WHERE game_id = ? AND owner_faction_id = ? AND node_code IN ({$in})"
+        );
+        $stmt->execute(array_merge([$gameId, $factionId], $nodes));
+        return (int)$stmt->fetchColumn() === count($nodes);
     }
 
     private function factionOwnsNodeType(int $gameId, int $factionId, string $nodeType): bool
