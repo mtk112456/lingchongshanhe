@@ -70,6 +70,7 @@ CREATE TABLE slice_nodes (
   node_type ENUM('start','neutral') NOT NULL DEFAULT 'neutral',
   owner_faction_id BIGINT UNSIGNED NULL,
   initial_owner_faction_id BIGINT UNSIGNED NULL,
+  morale TINYINT UNSIGNED NOT NULL DEFAULT 0,
   sort_order INT NOT NULL DEFAULT 0,
   PRIMARY KEY (id),
   UNIQUE KEY uk_nodes_game_code (game_id, node_code),

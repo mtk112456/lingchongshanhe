@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once dirname(__DIR__) . '/bootstrap.php';
 require_once dirname(__DIR__) . '/src/HandService.php';
 require_once dirname(__DIR__) . '/src/BattleService.php';
+require_once dirname(__DIR__) . '/src/BattleSettlementService.php';
 
 $started = microtime(true);
 $requestId = $_SERVER['HTTP_X_REQUEST_ID'] ?? bin2hex(random_bytes(6));
@@ -287,6 +288,23 @@ try {
             throw new ApiException('NOT_FOUND', '战斗不存在', 404);
         }
         success($battle);
+    }
+
+    if ($method === 'POST' && $path === '/api/slice/battle/settle') {
+        $player = requireAuth($service);
+        $body = jsonBody();
+        $battleId = (int)($body['battle_id'] ?? 0);
+        $battle = (new BattleService(null, $pdo))->getBattle($battleId);
+        if ($battle === null || (int)$battle['game_id'] !== (int)$player['game_id']) {
+            throw new ApiException('NOT_FOUND', '战斗不存在', 404);
+        }
+        success((new BattleSettlementService($pdo))->apply(
+            (int)$player['game_id'],
+            (int)$battle['turn_id'],
+            (string)$battle['node_code'],
+            $battle['att_faction_id'],
+            (int)($battle['result']['score'] ?? 0)
+        ));
     }
 
     if ($method === 'GET' && $path === '/api/slice/report') {

@@ -159,6 +159,8 @@ final class BattleService
             'game_id' => (int)$row['game_id'],
             'turn_id' => (int)$row['turn_id'],
             'node_code' => (string)$row['node_code'],
+            'att_faction_id' => $row['att_faction_id'] === null ? null : (int)$row['att_faction_id'],
+            'def_faction_id' => $row['def_faction_id'] === null ? null : (int)$row['def_faction_id'],
             'attacker' => json_decode((string)$row['attacker_json'], true),
             'defender' => json_decode((string)$row['defender_json'], true),
             'log' => $log,
