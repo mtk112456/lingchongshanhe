@@ -1,0 +1,34 @@
+【三方设计 consultation】
+
+请读：
+
+```text
+MULTI_AGENT_CONSULT.md
+CITY_DESIGN.md
+MAP_SPEC.md 第 8 节
+DETAIL_CHECKLIST.md
+client/MAP12_PROTOTYPE_REPORT.md
+```
+
+按你的角色（美术 + 终审）回答 consultation 里的 5 块：
+
+1. 参考哪款/怎么模仿；
+2. 是否加入抽卡、怎么抽；
+3. 城池设计；
+4. 60–100 人怎么支持；
+5. 先做什么。
+
+重点：
+
+- 你不负责后端，但请从美术/经济/公平角度判断抽卡；
+- 60–100 人时，地图/城池/榜单会不会糊屏，城池 Sprite/状态怎么聚合；
+- 给出明确“加/不加抽卡”的结论；
+- 给出 4 座城垂直切片的建议（长安/凉州/洛阳/建业 或其他）。
+
+输出：
+
+```text
+art_src/gpt/MULTI_AGENT_CONSULT_GPT.md
+```
+
+不要改 client/server，不要 commit。

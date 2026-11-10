@@ -1,0 +1,35 @@
+【三方设计 consultation · 设计主责意见】
+
+请读：
+
+```text
+MULTI_AGENT_CONSULT.md
+CITY_DESIGN.md
+MAP_SPEC.md 第 8 节
+DETAIL_CHECKLIST.md
+client/MAP12_PROTOTYPE_REPORT.md
+client/MAP12_REVIEW_ANTIGRAVITY.md
+```
+
+按设计主责回答 consultation 的 5 块：
+
+1. 城池设计主参考哪款/怎么模仿；
+2. 是否加入抽卡、怎么抽（明确结论）；
+3. 城池设计（类型/状态/LOD/城望/城池卡）；
+4. 60–100 人怎么支持（玩法公平/UI/地图聚合/教师操作）；
+5. 先做什么（4 城垂直切片/压测/抽卡时机）。
+
+重点：
+
+- 从 Godot 前端/可读性角度判断 60–100 人会不会糊屏；
+- 城池卡怎么显示“驻守 N 人 / 贡献前 3”；
+- 0.35x/0.50x 下玩家标记是否只显示阵营聚合；
+- 抽卡如果加，UI 上怎么避免赌博感；如果不加，替代目标是什么。
+
+输出：
+
+```text
+client/MULTI_AGENT_CONSULT_ANTIGRAVITY.md
+```
+
+不要改 client/server 代码；只写判断。
