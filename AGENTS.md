@@ -139,6 +139,7 @@ fix/backend-*              # OpenCode 后端修复
 | `deploy/lingchong/` | OpenCode / 部署 | 不写真实密码 |
 | `HANDOVER.md` / `handover/` | OpenCode | GPT 最终审查后更新 |
 | `reference/Unciv/` | 只读 | 不提交、不打包、不复制 |
+| `.agents/skills/` | 第三方（Apache-2.0） | 只读技能库，不写项目逻辑；升级整目录替换；来源见 `THIRD_PARTY_NOTICES.md` |
 
 ---
 
