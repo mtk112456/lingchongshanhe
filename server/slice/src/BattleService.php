@@ -50,6 +50,16 @@ final class BattleService
         return max(-1, min(2, $score));
     }
 
+    public static function scoreLabel(int $score): string
+    {
+        return [
+            2 => '破城',
+            1 => '撼城',
+            0 => '对峙',
+            -1 => '被挡',
+        ][$score] ?? '战报';
+    }
+
     /**
      * @param array{general:string,troops:int|float,composition:array,fire?:bool} $attacker
      * @param array{general:string,troops:int|float,composition:array} $defender
@@ -122,6 +132,7 @@ final class BattleService
                 'wall' => $result['wall'],
                 'score' => $result['score'],
                 'ticks' => $result['ticks'],
+                'headline' => self::scoreLabel((int)$result['score']),
             ]),
         ]);
         return (int)$this->pdo->lastInsertId();
@@ -138,6 +149,11 @@ final class BattleService
         if (!$row) {
             return null;
         }
+        $log = json_decode((string)$row['log_json'], true);
+        $result = json_decode((string)$row['result_json'], true);
+        if (is_array($log) && is_array($result)) {
+            $log['result'] = $result;
+        }
         return [
             'id' => (int)$row['id'],
             'game_id' => (int)$row['game_id'],
@@ -145,8 +161,8 @@ final class BattleService
             'node_code' => (string)$row['node_code'],
             'attacker' => json_decode((string)$row['attacker_json'], true),
             'defender' => json_decode((string)$row['defender_json'], true),
-            'log' => json_decode((string)$row['log_json'], true),
-            'result' => json_decode((string)$row['result_json'], true),
+            'log' => $log,
+            'result' => $result,
         ];
     }
 

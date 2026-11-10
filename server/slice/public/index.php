@@ -2,6 +2,8 @@
 declare(strict_types=1);
 
 require_once dirname(__DIR__) . '/bootstrap.php';
+require_once dirname(__DIR__) . '/src/HandService.php';
+require_once dirname(__DIR__) . '/src/BattleService.php';
 
 $started = microtime(true);
 $requestId = $_SERVER['HTTP_X_REQUEST_ID'] ?? bin2hex(random_bytes(6));
@@ -87,7 +89,7 @@ function requireAuth(SliceService $service): array
 }
 
 try {
-    [, , $service] = slice_bootstrap();
+    [, $pdo, $service] = slice_bootstrap();
 } catch (Throwable $e) {
     slice_log('bootstrap.failed', ['error' => $e->getMessage()]);
     respond(500, [
@@ -139,6 +141,152 @@ try {
     if ($method === 'POST' && $path === '/api/slice/orders/withdraw') {
         $player = requireAuth($service);
         success($service->withdrawOrder($player, jsonBody()), 200);
+    }
+
+    // ---- Phase 1：编成 / 手牌 / 3 张将令 / 战斗 ----
+
+    if ($method === 'GET' && $path === '/api/slice/hand') {
+        $player = requireAuth($service);
+        $turnId = isset($_GET['turn_id']) ? (int)$_GET['turn_id'] : (int)($player['game_current_turn_id'] ?? 0);
+        if ($turnId <= 0) {
+            throw new ApiException('BAD_REQUEST', '缺少 turn_id');
+        }
+        $handService = new HandService($pdo);
+        success([
+            'turn_id' => $turnId,
+            'hand' => $handService->getOrCreateHand((int)$player['game_id'], $turnId, (int)$player['id']),
+            'composition' => $handService->getComposition((int)$player['game_id'], (int)$player['id'], 1),
+            'orders' => $handService->getOrders($turnId, (int)$player['id']),
+        ]);
+    }
+
+    if ($method === 'POST' && $path === '/api/slice/hand/redraw') {
+        $player = requireAuth($service);
+        $body = jsonBody();
+        $turnId = isset($body['turn_id']) ? (int)$body['turn_id'] : (int)($player['game_current_turn_id'] ?? 0);
+        if ($turnId <= 0) {
+            throw new ApiException('BAD_REQUEST', '缺少 turn_id');
+        }
+        success((new HandService($pdo))->redraw((int)$player['game_id'], $turnId, (int)$player['id']));
+    }
+
+    if ($method === 'GET' && $path === '/api/slice/composition') {
+        $player = requireAuth($service);
+        $weekNo = (int)($_GET['week_no'] ?? 1);
+        success((new HandService($pdo))->getComposition((int)$player['game_id'], (int)$player['id'], $weekNo));
+    }
+
+    if ($method === 'POST' && $path === '/api/slice/composition') {
+        $player = requireAuth($service);
+        $body = jsonBody();
+        $weekNo = (int)($body['week_no'] ?? 1);
+        success((new HandService($pdo))->setComposition(
+            (int)$player['game_id'],
+            (int)$player['id'],
+            $weekNo,
+            is_array($body['types'] ?? null) ? $body['types'] : []
+        ));
+    }
+
+    if ($method === 'POST' && $path === '/api/slice/order/play') {
+        $player = requireAuth($service);
+        $body = jsonBody();
+        $turnId = isset($body['turn_id']) ? (int)$body['turn_id'] : (int)($player['game_current_turn_id'] ?? 0);
+        if ($turnId <= 0) {
+            throw new ApiException('BAD_REQUEST', '缺少 turn_id');
+        }
+        success((new HandService($pdo))->play(
+            (int)$player['game_id'],
+            $turnId,
+            (int)$player['id'],
+            (int)($body['slot'] ?? 0),
+            (string)($body['card_code'] ?? ''),
+            (string)($body['target_node_code'] ?? ''),
+            isset($body['lane']) ? (int)$body['lane'] : null,
+            isset($body['row_pos']) ? (string)$body['row_pos'] : null,
+            (string)($body['request_key'] ?? '')
+        ));
+    }
+
+    if ($method === 'POST' && $path === '/api/slice/order/withdraw') {
+        $player = requireAuth($service);
+        $body = jsonBody();
+        $turnId = isset($body['turn_id']) ? (int)$body['turn_id'] : (int)($player['game_current_turn_id'] ?? 0);
+        if ($turnId <= 0) {
+            throw new ApiException('BAD_REQUEST', '缺少 turn_id');
+        }
+        success(['withdrawn' => (new HandService($pdo))->withdraw($turnId, (int)$player['id'], (int)($body['slot'] ?? 0))]);
+    }
+
+    if ($method === 'POST' && $path === '/api/slice/battle/demo') {
+        $player = requireAuth($service);
+        $body = jsonBody();
+        $turnId = isset($body['turn_id']) ? (int)$body['turn_id'] : (int)($player['game_current_turn_id'] ?? 0);
+        if ($turnId <= 0) {
+            throw new ApiException('BAD_REQUEST', '缺少 turn_id');
+        }
+        $stmt = $pdo->prepare(
+            'SELECT sp.level, pt.base_hp, pt.base_atk, pt.base_def, pt.base_spd,
+                    pt.growth_rate, pt.element, pt.code
+             FROM slice_players p
+             JOIN student_pets sp ON sp.student_id = p.student_id
+             JOIN pet_templates pt ON pt.id = sp.pet_template_id
+             WHERE p.id = ?'
+        );
+        $stmt->execute([(int)$player['id']]);
+        $pet = $stmt->fetch();
+        if (!$pet) {
+            throw new ApiException('PET_NOT_FOUND', '没有班宠数据', 404);
+        }
+        $handService = new HandService($pdo);
+        $composition = $handService->getComposition((int)$player['game_id'], (int)$player['id'], 1);
+        $general = (string)$pet['code'] === 'pet_inkdrop_01' ? 'tac' : 'def';
+        $attacker = [
+            'general' => $general,
+            'troops' => BattleService::petPower($pet) * 1.20,
+            'composition' => $composition['types'],
+            'fire' => (bool)($body['fire'] ?? false),
+        ];
+        $defender = [
+            'general' => 'atk',
+            'troops' => 1200.0 * 1.10,
+            'composition' => ['shield', 'spear', 'arc'],
+        ];
+        $battleService = new BattleService(null, $pdo);
+        $result = $battleService->resolve($attacker, $defender);
+        $battleId = $battleService->saveBattle(
+            (int)$player['game_id'],
+            $turnId,
+            (string)($body['node_code'] ?? 'hanzhong'),
+            $player['faction_id'] !== null ? (int)$player['faction_id'] : null,
+            null,
+            $attacker,
+            $defender,
+            $result
+        );
+        success([
+            'battle_id' => $battleId,
+            'attacker' => $attacker,
+            'defender' => $defender,
+            'log' => array_merge($result, [
+                'result' => [
+                    'wall' => $result['wall'],
+                    'score' => $result['score'],
+                    'ticks' => $result['ticks'],
+                    'headline' => BattleService::scoreLabel((int)$result['score']),
+                ],
+            ]),
+        ]);
+    }
+
+    if ($method === 'GET' && $path === '/api/slice/battle') {
+        $player = requireAuth($service);
+        $battleId = (int)($_GET['id'] ?? 0);
+        $battle = (new BattleService(null, $pdo))->getBattle($battleId);
+        if ($battle === null || (int)$battle['game_id'] !== (int)$player['game_id']) {
+            throw new ApiException('NOT_FOUND', '战斗不存在', 404);
+        }
+        success($battle);
     }
 
     if ($method === 'GET' && $path === '/api/slice/report') {
