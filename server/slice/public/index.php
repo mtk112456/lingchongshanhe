@@ -5,6 +5,7 @@ require_once dirname(__DIR__) . '/bootstrap.php';
 require_once dirname(__DIR__) . '/src/HandService.php';
 require_once dirname(__DIR__) . '/src/BattleService.php';
 require_once dirname(__DIR__) . '/src/BattleSettlementService.php';
+require_once dirname(__DIR__) . '/src/CardSettlementService.php';
 
 $started = microtime(true);
 $requestId = $_SERVER['HTTP_X_REQUEST_ID'] ?? bin2hex(random_bytes(6));
@@ -358,6 +359,19 @@ try {
         success($service->settleTurn($player, (int)($body['turn_id'] ?? 0), [
             'inject_failure' => (bool)($body['inject_failure'] ?? false),
         ]));
+    }
+
+    if ($method === 'POST' && $path === '/api/slice/admin/card-settle') {
+        $player = requireAuth($service);
+        if ((string)$player['role'] !== 'teacher') {
+            throw new ApiException('FORBIDDEN', '只有教师可以结算', 403);
+        }
+        $body = jsonBody();
+        $turnId = (int)($body['turn_id'] ?? 0);
+        if ($turnId <= 0) {
+            throw new ApiException('BAD_REQUEST', '缺少 turn_id');
+        }
+        success((new CardSettlementService($pdo))->settle((int)$player['game_id'], $turnId));
     }
 
     if ($method === 'POST' && $path === '/api/slice/admin/next-turn') {

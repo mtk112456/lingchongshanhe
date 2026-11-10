@@ -116,6 +116,19 @@ try {
     Check "battle read back" ($read.data.id -eq $battle.data.battle_id)
     Check "battle log replayable" ($read.data.log.events.Count -gt 0)
 
+    # teacher 21:00 card settlement
+    $teacherJson = @{ username = "teacher"; password = "teacher2026" } | ConvertTo-Json -Compress
+    $teacher = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/auth/admin-login" `
+        -ContentType "application/json; charset=utf-8" `
+        -Body ([System.Text.Encoding]::UTF8.GetBytes($teacherJson))
+    Check "teacher login" ($teacher.ok -eq $true)
+    $teacherHeaders = @{ Authorization = "Bearer $($teacher.data.token)" }
+    $cardSettleJson = @{ turn_id = $TurnId } | ConvertTo-Json -Compress
+    $cardSettle = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/slice/admin/card-settle" -Headers $teacherHeaders `
+        -ContentType "application/json" -Body $cardSettleJson
+    Check "card settlement runs" ($cardSettle.data.already_settled -eq $false)
+    Check "card settlement produced battle" ($cardSettle.data.battles.Count -ge 1)
+
     Write-Host ""
     if ($failed -gt 0) {
         Write-Host "PHASE1_E2E FAIL ($failed)" -ForegroundColor Red
