@@ -464,6 +464,7 @@ final class SliceService
         $hand = null;
         $composition = null;
         $cardOrders = [];
+        $scoutedNodes = [];
         if ((string)$player['role'] === 'player') {
             $handService = new HandService($this->pdo);
             $hand = $handService->getOrCreateHand((int)$game['id'], (int)$turn['id'], (int)$player['id']);
@@ -473,6 +474,12 @@ final class SliceService
                 Clock::weekOfTurn((int)$turn['turn_no'])
             );
             $cardOrders = $handService->getOrders((int)$turn['id'], (int)$player['id']);
+            $stmt = $this->pdo->prepare(
+                "SELECT target_node_code FROM slice_order_slots
+                 WHERE turn_id = ? AND player_id = ? AND card_code = 'scout' AND status = 'active'"
+            );
+            $stmt->execute([(int)$turn['id'], (int)$player['id']]);
+            $scoutedNodes = array_map('strval', $stmt->fetchAll(PDO::FETCH_COLUMN));
         }
 
         $canEdit = (string)$turn['status'] === 'open'
@@ -642,6 +649,7 @@ final class SliceService
             'hand' => $hand,
             'composition' => $composition,
             'card_orders' => $cardOrders,
+            'scouted_nodes' => $scoutedNodes,
             'reachable_targets' => $reachableTargets,
             'options' => [
                 'advance_from' => $advanceFrom,

@@ -26,7 +26,9 @@
   },
   "card_orders": [
     {"slot": 0, "card_code": "night_raid", "target_node_code": "N2", "lane": 1, "row_pos": "front"}
-  ]
+  ],
+  "scouted_nodes": ["N2"],
+  "reachable_targets": ["A_START", "N1", "N2"]
 }
 ```
 
@@ -36,7 +38,9 @@
 - 底部 4 张手牌；
 - 编成面板 3 个兵种；
 - 已出令显示在槽位里；
-- `composition` 返回的是**当前回合所属周**的编成，不是固定第 1 周。
+- `composition` 返回的是**当前回合所属周**的编成，不是固定第 1 周；
+- `scouted_nodes` 是本回合已打出「哨探」的城，未侦察城不显示守军细节；
+- `reachable_targets` 是当前可出令的城（己方城 + 相邻城），其余城应置灰。
 
 ---
 
