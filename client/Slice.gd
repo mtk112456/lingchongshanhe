@@ -907,7 +907,7 @@ func _layout_responsive() -> void:
 		var tb_w := minf(w - 24.0, 560.0)
 		var tb_h := 62.0 if is_compact_h else 68.0
 		tutorial_box.size = Vector2(tb_w, tb_h)
-		tutorial_box.position = Vector2((w - tb_w) / 2.0, top_h + 8.0)
+		tutorial_box.position = Vector2((w - tb_w) / 2.0, top_h + 58.0)
 
 # ---------------------------------------------------------------------------
 # MapView 沙盘视口交互控制器（双指缩放、拖拽平移、双击放大、视野聚焦、边界限制）
@@ -3722,7 +3722,7 @@ func _create_single_hand_card(idx: int, cdata: Dictionary) -> PanelContainer:
 		if is_played:
 			nine_sb.modulate_color = Color("#756858") # 已出：暗金古铜
 		elif is_discarded:
-			nine_sb.modulate_color = Color("#382e27") # 弃用：幽暗纯黑
+			nine_sb.modulate_color = Color("#7d6653") # 弃用：幽暗纯黑
 		else:
 			nine_sb.modulate_color = Color("#fffef6") # 可出：明亮温润宣纸
 		card.add_theme_stylebox_override("panel", nine_sb)
@@ -3759,7 +3759,7 @@ func _create_single_hand_card(idx: int, cdata: Dictionary) -> PanelContainer:
 	if is_played:
 		name_l.add_theme_color_override("font_color", Color("#ffd700"))
 	elif is_discarded:
-		name_l.add_theme_color_override("font_color", Color("#756658"))
+		name_l.add_theme_color_override("font_color", Color("#f0e0c8"))
 	else:
 		name_l.add_theme_color_override("font_color", Color("#1e1712"))
 	name_l.add_theme_font_size_override("font_size", 12)
@@ -3808,7 +3808,7 @@ func _create_single_hand_card(idx: int, cdata: Dictionary) -> PanelContainer:
 		desc_l.add_theme_color_override("font_color", Color("#ffd700"))
 	elif is_discarded:
 		desc_l.text = "今日不用"
-		desc_l.add_theme_color_override("font_color", Color("#63564c"))
+		desc_l.add_theme_color_override("font_color", Color("#e0ccb2"))
 	else:
 		desc_l.text = str(cdata.get("short_desc", "战策就绪"))
 		desc_l.add_theme_color_override("font_color", Color("#42352a"))
@@ -3827,8 +3827,8 @@ func _create_single_hand_card(idx: int, cdata: Dictionary) -> PanelContainer:
 		assign_btn.disabled = false
 	elif is_discarded:
 		assign_btn.text = "今日不用"
-		assign_btn.add_theme_color_override("font_color", Color("#6e5d50"))
-		assign_btn.add_theme_stylebox_override("disabled", _style(Color("#181412"), Color("#352c26"), 1, 4, 2))
+		assign_btn.add_theme_color_override("font_color", Color("#e0ccb2"))
+		assign_btn.add_theme_stylebox_override("disabled", _style(Color("#4a3a2e"), Color("#6b5747"), 1, 4, 2))
 		assign_btn.tooltip_text = "今日 3 队将令已满，此牌今日不用。撤回任一已出牌后可恢复使用！"
 		assign_btn.disabled = true
 	else:

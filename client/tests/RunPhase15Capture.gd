@@ -24,6 +24,11 @@ func _ready() -> void:
 	get_window().size = Vector2i(1400, 1000)
 	get_viewport().size = Vector2i(1400, 1000)
 
+	# 截图套件不显示首次教学，避免遮挡手牌/战报
+	var tut_cfg := ConfigFile.new()
+	tut_cfg.set_value("tutorial", "completed", true)
+	tut_cfg.save("user://tutorial_completed.cfg")
+
 	sv = SubViewport.new()
 	sv.size = Vector2i(1400, 1000)
 	sv.render_target_update_mode = SubViewport.UPDATE_ALWAYS

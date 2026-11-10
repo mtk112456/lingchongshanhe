@@ -11,6 +11,9 @@ var step := 0
 
 func _ready() -> void:
 	print("CAPTURE_SUITE start (Landscape-Only Mode)")
+	var tut_cfg := ConfigFile.new()
+	tut_cfg.set_value("tutorial", "completed", true)
+	tut_cfg.save("user://tutorial_completed.cfg")
 	sv = SubViewport.new()
 	sv.size = Vector2i(1400, 1000)
 	sv.render_target_update_mode = SubViewport.UPDATE_ALWAYS
