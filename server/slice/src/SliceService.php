@@ -6,6 +6,7 @@ require_once __DIR__ . '/Clock.php';
 require_once __DIR__ . '/PointsService.php';
 require_once __DIR__ . '/HandService.php';
 require_once __DIR__ . '/BattleSettlementService.php';
+require_once __DIR__ . '/BulletinService.php';
 
 final class SliceService
 {
@@ -480,6 +481,26 @@ final class SliceService
             );
             $stmt->execute([(int)$turn['id'], (int)$player['id']]);
             $scoutedNodes = array_map('strval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+
+            $bulletin = (new BulletinService($this->pdo))->summary(
+                (int)$game['id'],
+                (int)$turn['id'],
+                (int)$player['id']
+            );
+            if (($bulletin['choice'] ?? null) === 'scout') {
+                $stmt = $this->pdo->prepare(
+                    'SELECT node_code FROM slice_nodes
+                     WHERE game_id = ? AND owner_faction_id IS NOT NULL AND owner_faction_id <> ?'
+                );
+                $stmt->execute([(int)$game['id'], (int)($player['faction_id'] ?? 0)]);
+                foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $code) {
+                    if (!in_array((string)$code, $scoutedNodes, true)) {
+                        $scoutedNodes[] = (string)$code;
+                    }
+                }
+            }
+        } else {
+            $bulletin = null;
         }
 
         $canEdit = (string)$turn['status'] === 'open'
@@ -650,6 +671,7 @@ final class SliceService
             'composition' => $composition,
             'card_orders' => $cardOrders,
             'scouted_nodes' => $scoutedNodes,
+            'bulletin' => $bulletin,
             'reachable_targets' => $reachableTargets,
             'options' => [
                 'advance_from' => $advanceFrom,

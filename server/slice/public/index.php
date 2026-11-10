@@ -7,6 +7,7 @@ require_once dirname(__DIR__) . '/src/BattleService.php';
 require_once dirname(__DIR__) . '/src/BattleSettlementService.php';
 require_once dirname(__DIR__) . '/src/CardSettlementService.php';
 require_once dirname(__DIR__) . '/src/SeasonService.php';
+require_once dirname(__DIR__) . '/src/BulletinService.php';
 
 $started = microtime(true);
 $requestId = $_SERVER['HTTP_X_REQUEST_ID'] ?? bin2hex(random_bytes(6));
@@ -324,6 +325,31 @@ try {
             'lane' => $laneInfo,
             'massing' => $massing,
         ]);
+    }
+
+    if ($method === 'GET' && $path === '/api/slice/bulletin') {
+        $player = requireAuth($service);
+        $turnId = isset($_GET['turn_id']) ? (int)$_GET['turn_id'] : (int)($player['game_current_turn_id'] ?? 0);
+        if ($turnId <= 0) {
+            throw new ApiException('BAD_REQUEST', '缺少 turn_id');
+        }
+        success((new BulletinService($pdo))->summary((int)$player['game_id'], $turnId, (int)$player['id']));
+    }
+
+    if ($method === 'POST' && $path === '/api/slice/bulletin') {
+        $player = requireAuth($service);
+        $body = jsonBody();
+        $turnId = isset($body['turn_id']) ? (int)$body['turn_id'] : (int)($player['game_current_turn_id'] ?? 0);
+        $choice = (string)($body['choice'] ?? '');
+        if ($turnId <= 0 || $choice === '') {
+            throw new ApiException('BAD_REQUEST', '缺少 turn_id 或 choice');
+        }
+        success((new BulletinService($pdo))->choose(
+            (int)$player['game_id'],
+            $turnId,
+            (int)$player['id'],
+            $choice
+        ));
     }
 
     if ($method === 'GET' && $path === '/api/slice/composition') {

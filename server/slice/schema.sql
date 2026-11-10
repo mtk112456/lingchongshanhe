@@ -10,6 +10,7 @@ DROP TABLE IF EXISTS game_recharge_requests;
 DROP TABLE IF EXISTS game_wallet_transactions;
 DROP TABLE IF EXISTS game_wallets;
 DROP TABLE IF EXISTS slice_battles;
+DROP TABLE IF EXISTS slice_bulletins;
 DROP TABLE IF EXISTS slice_order_slots;
 DROP TABLE IF EXISTS slice_hands;
 DROP TABLE IF EXISTS slice_compositions;
@@ -399,4 +400,22 @@ CREATE TABLE IF NOT EXISTS slice_battles (
   KEY idx_battles_turn_node (turn_id, node_code),
   CONSTRAINT fk_battles_game FOREIGN KEY (game_id) REFERENCES slice_games(id) ON DELETE CASCADE,
   CONSTRAINT fk_battles_turn FOREIGN KEY (turn_id) REFERENCES slice_turns(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- D6 每日邸报：每个学生每天二选一，获得本回合小 buff
+CREATE TABLE IF NOT EXISTS slice_bulletins (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  game_id BIGINT UNSIGNED NOT NULL,
+  turn_id BIGINT UNSIGNED NOT NULL,
+  player_id BIGINT UNSIGNED NOT NULL,
+  options_json JSON NOT NULL,
+  choice VARCHAR(24) NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_bulletin_turn_player (turn_id, player_id),
+  KEY idx_bulletin_game_turn (game_id, turn_id),
+  CONSTRAINT fk_bulletin_game FOREIGN KEY (game_id) REFERENCES slice_games(id) ON DELETE CASCADE,
+  CONSTRAINT fk_bulletin_turn FOREIGN KEY (turn_id) REFERENCES slice_turns(id) ON DELETE CASCADE,
+  CONSTRAINT fk_bulletin_player FOREIGN KEY (player_id) REFERENCES slice_players(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

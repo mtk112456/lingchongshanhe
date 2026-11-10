@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/BattleService.php';
 require_once __DIR__ . '/BattleSettlementService.php';
+require_once __DIR__ . '/BulletinService.php';
 
 /**
  * 21:00 卡牌结算：把 slice_order_slots 按城聚合，打一场，推民心。
@@ -87,8 +88,9 @@ final class CardSettlementService
 
         $battles = [];
         $weekNo = self::weekOfTurn((int)$turn['turn_no']);
+        $bulletins = (new BulletinService($this->pdo))->choicesForTurn($turnId);
         foreach ($byCity as $nodeCode => $cityOrders) {
-            $battle = $this->settleCity($gameId, $turnId, $nodeCode, $cityOrders, $weekNo);
+            $battle = $this->settleCity($gameId, $turnId, $nodeCode, $cityOrders, $weekNo, $bulletins);
             if ($battle !== null) {
                 $battles[] = $battle;
             }
@@ -103,7 +105,7 @@ final class CardSettlementService
         return ['turn_id' => $turnId, 'already_settled' => false, 'battles' => $battles];
     }
 
-    private function settleCity(int $gameId, int $turnId, string $nodeCode, array $orders, int $weekNo): ?array
+    private function settleCity(int $gameId, int $turnId, string $nodeCode, array $orders, int $weekNo, array $bulletins = []): ?array
     {
         $stmt = $this->pdo->prepare('SELECT * FROM slice_nodes WHERE game_id = ? AND node_code = ?');
         $stmt->execute([$gameId, $nodeCode]);
@@ -175,7 +177,13 @@ final class CardSettlementService
         $supportMult = BattleService::supportMultiplier($supporters) * 1.20;
 
         // 一令 = 一队：兵种取该玩家本周编成的对应位，位置与牌取该令自己的
-        $teams = $this->teamsFromOrders($vanguard, $gameId, $weekNo, $supportMult);
+        $teams = $this->teamsFromOrders($vanguard, $gameId, $weekNo, $supportMult, $bulletins);
+
+        // 邸报「攻城器械」：先锋每有一人选，攻城伤害 +25%，最多 +75%
+        $siegeMult = 1.0;
+        foreach ($vanguard as $order) {
+            $siegeMult += BulletinService::siegeMultiplier($bulletins[(int)$order['player_id']] ?? null) - 1.0;
+        }
 
         $scouted = false;
         $fire = false;
@@ -196,6 +204,7 @@ final class CardSettlementService
             'fire' => $fire,
             'supporters' => $supporters,
             'support_mult' => round($supportMult, 3),
+            'siege_mult' => round($siegeMult, 3),
         ];
 
         // 大营：阵营拥有任意大营，进攻 +5% 兵力
@@ -263,7 +272,8 @@ final class CardSettlementService
                     $defVanguard,
                     $gameId,
                     $weekNo,
-                    $defSupportMult
+                    $defSupportMult,
+                    $bulletins
                 );
                 $defGeneral = $this->generalOf((string)($defVanguard[0]['pet_code'] ?? ''));
                 $defTroops = array_sum(array_column($defTeams, 'troops'));
@@ -381,7 +391,7 @@ final class CardSettlementService
      * @param array<int,array> $vanguard
      * @return array<int,array{type:string,troops:float,lane:int,row:string,card:string}>
      */
-    private function teamsFromOrders(array $vanguard, int $gameId, int $weekNo, float $mult): array
+    private function teamsFromOrders(array $vanguard, int $gameId, int $weekNo, float $mult, array $bulletins = []): array
     {
         $teams = [];
         foreach ($vanguard as $i => $order) {
@@ -396,13 +406,16 @@ final class CardSettlementService
             if ($type === 'arc') {
                 $row = 'back';
             }
+            $playerId = (int)$order['player_id'];
+            $bulletinChoice = $bulletins[$playerId] ?? null;
             $teams[] = [
                 'type' => $type,
-                'troops' => BattleService::petPower($order) / 3 * $mult,
+                'troops' => BattleService::petPower($order) / 3 * $mult * BulletinService::teamMultiplier($bulletinChoice),
                 'lane' => $lane,
                 'row' => $row,
                 'card' => (string)$order['card_code'],
-                'player_id' => (int)$order['player_id'],
+                'player_id' => $playerId,
+                'bulletin' => $bulletinChoice,
             ];
         }
         return $teams;

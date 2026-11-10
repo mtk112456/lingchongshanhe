@@ -28,7 +28,15 @@
     {"slot": 0, "card_code": "night_raid", "target_node_code": "N2", "lane": 1, "row_pos": "front"}
   ],
   "scouted_nodes": ["N2"],
-  "reachable_targets": ["A_START", "N1", "N2"]
+  "reachable_targets": ["A_START", "N1", "N2"],
+  "bulletin": {
+    "turn_id": 3,
+    "options": [
+      {"code": "grain", "title": "粮草先行", "desc": "你的队伍本回合兵力 +5%", "icon": "🌾"},
+      {"code": "ram", "title": "攻城器械", "desc": "你的队伍本回合攻城伤害 +25%", "icon": "🪵"}
+    ],
+    "choice": null
+  }
 }
 ```
 
@@ -40,7 +48,28 @@
 - 已出令显示在槽位里；
 - `composition` 返回的是**当前回合所属周**的编成，不是固定第 1 周；
 - `scouted_nodes` 是本回合已打出「哨探」的城，未侦察城不显示守军细节；
+- `bulletin` 是当日邸报，二选一；`choice=null` 表示还没选；
 - `reachable_targets` 是当前可出令的城（己方城 + 相邻城），其余城应置灰。
+
+---
+
+## 1.05 GET/POST /api/slice/bulletin
+
+```text
+GET  /api/slice/bulletin?turn_id=3
+POST /api/slice/bulletin  {"turn_id": 3, "choice": "grain"}
+Authorization: Bearer <token>
+```
+
+返回结构同 `state.bulletin`。选择在结算前可改；结算时按最终选择生效。
+
+三个备选，每天每人只出现两个：
+
+```text
+grain 粮草先行  你的队伍本回合兵力 +5%
+ram   攻城器械  你的队伍本回合攻城伤害 +25%（3 名先锋可叠到 +75%）
+scout 斥候密报  本回合所有敌城守军可见
+```
 
 ---
 

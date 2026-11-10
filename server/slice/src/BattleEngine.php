@@ -202,7 +202,7 @@ final class BattleEngine
         $wall = (float)self::WALL_BASE;
         $events = [];
         $totalTroops = array_sum(array_column($attTeams, 'troops'));
-        $siegeAtk = ($totalTroops / 3 * 0.05 + 10) * self::SIEGE_MULT;
+        $siegeAtk = ($totalTroops / 3 * 0.05 + 10) * self::SIEGE_MULT * (float)($attacker['siege_mult'] ?? 1.0);
         $fire = !empty($attacker['fire']) || in_array('fire_attack', array_column($attTeams, 'card'), true);
         if ($fire) {
             $siegeAtk *= 1.5;
