@@ -27,9 +27,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File server/slice/start_mariadb.p
 
 保持这个窗口不要关。
 
-### 1.2 重建测试库
+### 1.2 重建试跑库（独立于冒烟测试）
 
 ```powershell
+$env:SLICE_CONFIG = "$PWD\server\slice\config.trial.php"
 php server/slice/scripts/setup_test_db.php
 ```
 
@@ -39,18 +40,21 @@ php server/slice/scripts/setup_test_db.php
 完成：{"games":1,"players":9,"students":8,"pets":8,"nodes":5,"turns":1}
 ```
 
-### 1.3 启动 API
+试跑用 `qingzhu_slice_trial`，不会和客户端 smoke / E2E 的 `qingzhu_slice_test` 互相重置。
+
+### 1.3 启动试跑 API
 
 新开一个 PowerShell：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File server/slice/start_api.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File server/slice/start_trial_api.ps1 -Bind 0.0.0.0 -Port 8081
 ```
 
 期望：
 
 ```text
-API: http://0.0.0.0:8080/api/health
+Trial config: ...\config.trial.php
+Trial API: http://0.0.0.0:8081/api/health
 ```
 
 ### 1.4 查教师 PC 的局域网 IP
@@ -63,10 +67,10 @@ API: http://0.0.0.0:8080/api/health
 
 假设得到 `192.168.1.3`。
 
-### 1.5 防火墙放行 8080
+### 1.5 防火墙放行 8081
 
 ```powershell
-New-NetFirewallRule -DisplayName "QingzhuSlice8080" -Direction Inbound -Protocol TCP -LocalPort 8080 -Action Allow
+New-NetFirewallRule -DisplayName "QingzhuSlice8081" -Direction Inbound -Protocol TCP -LocalPort 8081 -Action Allow
 ```
 
 ### 1.6 APK 指向教师 PC
@@ -74,7 +78,7 @@ New-NetFirewallRule -DisplayName "QingzhuSlice8080" -Direction Inbound -Protocol
 `client/Api.gd` 默认：
 
 ```gdscript
-var base_url := "http://10.0.2.2:8080"
+var base_url := "http://10.0.2.2:8081"
 ```
 
 真实手机不能用 `10.0.2.2`。两种做法：
@@ -82,17 +86,17 @@ var base_url := "http://10.0.2.2:8080"
 1. 打包前改成教师 PC 的 IP：
 
 ```gdscript
-var base_url := "http://192.168.1.3:8080"
+var base_url := "http://192.168.1.3:8081"
 ```
 
-2. 或让学生首次打开时在设置里填 `192.168.1.3:8080`。
+2. 或让学生首次打开时在设置里填 `192.168.1.3:8081`。
 
 ### 1.7 手机自检
 
 在手机浏览器打开：
 
 ```text
-http://192.168.1.3:8080/api/health
+http://192.168.1.3:8081/api/health
 ```
 
 看到：
@@ -179,19 +183,19 @@ http://192.168.1.3:8080/api/health
 ### 4.1 卡牌结算
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File tools/trial_teacher.ps1 -Action settle -TurnId 1
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/trial_teacher.ps1 -BaseUrl http://127.0.0.1:8081 -Action settle -TurnId 1
 ```
 
 ### 4.2 下一回合
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File tools/trial_teacher.ps1 -Action next -TurnId 1
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/trial_teacher.ps1 -BaseUrl http://127.0.0.1:8081 -Action next -TurnId 1
 ```
 
 ### 4.3 查看状态
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File tools/trial_teacher.ps1 -Action status
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/trial_teacher.ps1 -BaseUrl http://127.0.0.1:8081 -Action status
 ```
 
 ---
@@ -227,7 +231,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/trial_teacher.ps1 -Act
 
 | 问题 | 处理 |
 |---|---|
-| 手机连不上 API | 检查同一 Wi-Fi、IP、防火墙 8080 |
+| 手机连不上 API | 检查同一 Wi-Fi、IP、防火墙 8081 |
 | 登录 401 | 姓名用显示名（青竹一），密码 slice2026 |
 | 手牌只有 3 张 | 刷新 state；服务端发 4 张 |
 | 出令 400 `CARD_NOT_IN_HAND` | 刷新页面重新取手牌 |
