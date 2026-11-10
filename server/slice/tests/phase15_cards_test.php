@@ -296,6 +296,46 @@ foreach ($result['battles'] as $b) {
 check('平票返回 standoff', ($standoff['reason'] ?? '') === 'standoff', json_encode($result['battles'], JSON_UNESCAPED_UNICODE));
 check('平票不产生 battle_id', empty($standoff['battle_id']));
 
+// ---- 15. 一人一票：同一玩家 3 张令只算 1 票 ----
+$cleanup();
+$pdo->prepare("UPDATE slice_turns SET turn_no = 8, status = 'open', settled_at = NULL WHERE id = ?")->execute([$turnId]);
+for ($slot = 0; $slot < 3; $slot++) {
+    $insertOrder->execute([$gameId, $turnId, $biPlayers[0], $slot, 'night_raid', $nodeCode, $slot + 1, 'front', 'p15_v1_' . $slot . '_' . bin2hex(random_bytes(3))]);
+}
+$insertOrder->execute([$gameId, $turnId, $otherPlayerId, 0, 'fortify', $nodeCode, 1, 'front', 'p15_v2_' . bin2hex(random_bytes(3))]);
+$result = $settler->settle($gameId, $turnId);
+$voteBattle = null;
+foreach ($result['battles'] as $b) {
+    if (($b['node_code'] ?? '') === $nodeCode) {
+        $voteBattle = $b;
+        break;
+    }
+}
+check('同一玩家 3 令只算 1 票 → 平票', ($voteBattle['reason'] ?? '') === 'standoff', json_encode($result['battles'], JSON_UNESCAPED_UNICODE));
+
+// ---- 16. 守方自己的令不挡攻城 ----
+$cleanup();
+$pdo->prepare("UPDATE slice_turns SET turn_no = 8, status = 'open', settled_at = NULL WHERE id = ?")->execute([$turnId]);
+$moFactionId = (int)$pdo->query("SELECT id FROM slice_factions WHERE game_id = {$gameId} AND code = 'mo'")->fetchColumn();
+$pdo->prepare("UPDATE slice_nodes SET owner_faction_id = (SELECT id FROM slice_factions WHERE game_id = ? AND code = 'bi'), morale = 0 WHERE game_id = ? AND node_code = 'A_START'")
+    ->execute([$gameId, $gameId]);
+for ($slot = 0; $slot < 3; $slot++) {
+    $insertOrder->execute([$gameId, $turnId, $biPlayers[0], $slot, 'fortify', 'A_START', $slot + 1, 'front', 'p15_d1_' . $slot . '_' . bin2hex(random_bytes(3))]);
+}
+$insertOrder->execute([$gameId, $turnId, $otherPlayerId, 0, 'night_raid', 'A_START', 1, 'front', 'p15_d2_' . bin2hex(random_bytes(3))]);
+$result = $settler->settle($gameId, $turnId);
+$defendBattle = null;
+foreach ($result['battles'] as $b) {
+    if (($b['node_code'] ?? '') === 'A_START') {
+        $defendBattle = $b;
+        break;
+    }
+}
+check('守方 3 令不挡攻城', !empty($defendBattle['battle_id']), json_encode($result['battles'], JSON_UNESCAPED_UNICODE));
+check('攻方是墨而不是守方笔', ($defendBattle['attacker_faction_id'] ?? 0) === $moFactionId);
+$pdo->prepare("UPDATE slice_nodes SET owner_faction_id = (SELECT id FROM slice_factions WHERE game_id = ? AND code = 'bi'), morale = 0 WHERE game_id = ? AND node_code = 'A_START'")
+    ->execute([$gameId, $gameId]);
+
 // ---- 清理 ----
 $cleanup();
 $pdo->prepare('UPDATE slice_turns SET turn_no = ?, status = ?, settled_at = NULL WHERE id = ?')

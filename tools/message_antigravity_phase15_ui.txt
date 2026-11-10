@@ -1,0 +1,112 @@
+【P1.5 客户端任务：让牌和站位看得见】
+
+后端已合入 `fc5211d`，P1.5 的结算全部生效：
+
+```text
+一令 = 一队：兵种取本周编成对应位，位置/前后排/战术取该令自己的
+12 张战术全部生效
+编成按真实周次（每 7 回合一周）
+GET /api/slice/intel 已上线
+```
+
+接口和口径以这两个文件为准：
+
+```text
+PHASE1_CLIENT_CONTRACT.md   第 3.1 节是 intel
+ORDER_CARDS.md              第 2 节是 12 张牌的实装效果
+GAME_PLAN_V7.md             审计与路线图
+```
+
+---
+
+## 任务 1：手牌条显示“已出 / 未出 / 去向”
+
+现在 4 抽 3，第 4 张是当天弃牌。学生看不出这张还能不能改。
+
+要求：
+
+```text
+已出的牌：灰底 + 目标城名 + 路 1/2/3 + 前/后
+未出的牌：正常卡面
+当天弃牌：右下角标“今日不用”，不可再拖
+撤回后：恢复可拖
+```
+
+验收：截图里 4 张牌状态能一眼分清。
+
+## 任务 2：战报折页逐队解释
+
+战斗现在真的有 3 队，每队带自己的牌。战报要能回答“我的牌干了什么”。
+
+要求：
+
+```text
+每队一行：兵种 / 路 / 前或后 / 带的牌 / 实际效果
+例：骑 · 1 路前 · 夜袭 · 攻击 +20%（本城未侦察）
+例：盾 · 2 路前 · 坚壁 · 防御 +20%
+例：弓 · 3 路后 · 火攻 · 器械攻墙 +50%
+```
+
+数据来源：`GET /api/slice/battle?id=` 的 `attacker.teams`、`units[].card`、`events[]`。
+
+验收：一场带 3 张牌的战斗，能逐队说清效果；不带牌时显示“无战术”。
+
+## 任务 3：哨探情报面板
+
+学生打出「哨探」后，城池抽屉里出现“情报”入口，调用：
+
+```text
+GET /api/slice/intel?node=N2&turn_id=1
+```
+
+返回：
+
+```json
+{
+  "lane": {"lane": 2, "type": "spear", "name": "枪", "row": "front", "troops": 366},
+  "massing": [
+    {"faction": "mo", "name": "墨", "players": 2, "teams": 3, "troops": 870, "feint": false}
+  ]
+}
+```
+
+要求：
+
+```text
+敌方一路：显示兵种图 + 路号 + 前/后 + 兵力
+集结概览：阵营旗 + 人数 + 队数 + 兵力
+feint=true：兵力旁标“疑似”，用虚线框，不要当真实数字
+没有哨探：不显示入口；接口会返回 403 SCOUT_REQUIRED，不要轮询
+```
+
+验收：打出哨探后能看到一路守军 + 集结；撤回哨探后入口消失。
+
+## 顺手修两条 UI 红线
+
+```text
+1. 地图 HUD 按钮当前 52×28px，高度太小；学生手指目标 ≥44×44
+2. 接 DisplayServer.get_display_safe_area()，刘海屏顶栏不要被压
+```
+
+---
+
+## 边界
+
+```text
+不改 server/、不改 schema、不改 API 字段
+只改 client/*.gd、*.tscn、assets
+```
+
+完成后按老格式回报：
+
+```text
+改了什么 / 文件 / 跑了什么验收 / 截图 / 没做
+```
+
+至少跑：
+
+```text
+godot --headless --path client res://tests/ClientSmoke.tscn
+godot --headless --path client res://tests/ReplaySmoke.tscn
+godot --headless --path client res://tests/Phase1ClientSmoke.tscn
+```

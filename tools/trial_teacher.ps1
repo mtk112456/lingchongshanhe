@@ -35,6 +35,12 @@ switch ($Action) {
             } else {
                 Write-Host ("  {0}: score={1} wall={2} morale {3}->{4} captured={5}" -f `
                     $b.node_code, $b.score, $b.wall, $b.morale_before, $b.morale_after, $b.captured)
+                foreach ($team in @($b.teams)) {
+                    if ($null -ne $team) {
+                        Write-Host ("     {0,-6} lane {1} {2,-5} {3}" -f `
+                            $team.type, $team.lane, $team.row, $team.card)
+                    }
+                }
             }
         }
     }

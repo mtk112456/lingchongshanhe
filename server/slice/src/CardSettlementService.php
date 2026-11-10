@@ -91,24 +91,31 @@ final class CardSettlementService
             return null;
         }
 
-        // 哪个阵营令最多
-        $counts = [];
+        // 哪个阵营令最多：一名学生一票，守方自己的令不算进攻
+        $ownerFactionId = $node['owner_faction_id'] === null ? null : (int)$node['owner_faction_id'];
+        $votes = [];
         foreach ($orders as $order) {
             $fid = $order['faction_id'] === null ? 0 : (int)$order['faction_id'];
-            $counts[$fid] = ($counts[$fid] ?? 0) + 1;
+            if ($fid <= 0) {
+                continue;
+            }
+            if ($ownerFactionId !== null && $fid === $ownerFactionId) {
+                continue;
+            }
+            $votes[$fid][(int)$order['player_id']] = true;
         }
+        $counts = array_map('count', $votes);
         arsort($counts);
         $factionIds = array_keys($counts);
+        if ($counts === []) {
+            return ['node_code' => $nodeCode, 'battle_id' => null, 'reason' => 'already_owned'];
+        }
         if (count($factionIds) > 1 && $counts[$factionIds[0]] === $counts[$factionIds[1]]) {
             return ['node_code' => $nodeCode, 'battle_id' => null, 'reason' => 'standoff'];
         }
         $attackerFactionId = (int)$factionIds[0];
         if ($attackerFactionId <= 0) {
             return ['node_code' => $nodeCode, 'battle_id' => null, 'reason' => 'no_faction'];
-        }
-        $ownerFactionId = $node['owner_faction_id'] === null ? null : (int)$node['owner_faction_id'];
-        if ($ownerFactionId === $attackerFactionId) {
-            return ['node_code' => $nodeCode, 'battle_id' => null, 'reason' => 'already_owned'];
         }
 
         // 先锋：该阵营贡献前 3 名（按宠物战力，一名玩家只带 1 队）
