@@ -1,0 +1,94 @@
+【Phase 1 制作任务 · 设计与前端】
+
+请读：
+
+```text
+TASKS_PHASE1.md
+GAMEPLAY_DESIGN.md
+RECRUITMENT.md
+ARMY_MODEL.md
+UNIT_TYPES_REFERENCE.md
+FEEDBACK_LOOP.md
+```
+
+开始制作 Phase 1 三块 UI。先用占位美术，GPT 的图后到再替换。
+
+## 1. 每周编成
+
+```text
+4 个兵种按钮：骑 / 盾 / 弓 / 枪
+3 个槽位：可重复
+显示：总兵力、每队兵力、兵源城加成
+周中可改 1 次
+```
+
+720×514：一行 4 个按钮 + 3 个槽位，不弹二级页。  
+1400×1000：同上放大。
+
+## 2. 每日手牌
+
+```text
+底部 4 张战术牌
+拖到 3 支队伍上分配
+每张牌显示：名字、一行效果、分配给哪队
+重抽按钮 1 次
+```
+
+约束：
+
+- 手牌不遮挡城池抽屉；
+- 抽屉打开时手牌收成一条；
+- 长按看完整说明。
+
+## 3. 战斗回放
+
+```text
+3 路 × 2 排
+每路：前排 / 后排
+攻方左，守方右，城门最右
+4 兵种 + 器械
+60 秒，1x / 2x / 跳过
+顶部：城墙耐久条
+底部：双方兵力条
+结束：结果印章 + 3 帧折页
+```
+
+**输入 JSON，不自己算结果：**
+
+```json
+{
+  "tick_max": 60,
+  "wall_base": 1000,
+  "att_slots": {"1": {"front": "cav", "back": "arc"}, "2": {"front": "shield"}},
+  "def_slots": {"1": {"front": "shield", "back": "arc"}},
+  "units": [
+    {"id": "A1F", "side": "att", "lane": 1, "row": "front", "type": "cav", "troops": 363, "max_troops": 363}
+  ],
+  "events": [
+    {"t": 4, "lane": 1, "unit": "A1F", "action": "attack", "target": "D1F", "damage": 30, "target_troops": 333, "killed": false},
+    {"t": 6, "unit": "SIEGE", "action": "wall", "damage": 42, "wall": 958}
+  ],
+  "result": {"wall": 300, "score": 1, "ticks": 61}
+}
+```
+
+交付：
+
+```text
+client/BattleReplay.tscn + .gd
+client/CompositionPanel.gd（或整合进 Slice.gd）
+client/tests/BattleReplaySmoke.tscn
+client/PHASE1_CLIENT_REPORT.md
+720×514 / 1400×1000 截图
+```
+
+验收：
+
+- ClientSmoke PASS；
+- ReplaySmoke PASS；
+- BattleReplaySmoke PASS；
+- 样例 JSON 能播完，可跳过；
+- 0.50x 手机横屏能看清兵种和前后排。
+
+不要改后端/schema。  
+先做编成 + 手牌，再做回放。
