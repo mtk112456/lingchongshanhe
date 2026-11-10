@@ -134,7 +134,7 @@ try {
                 }
                 $target = "N2"
                 if ($p.faction -eq "mo" -and $pi -eq 11) {
-                    $target = "N1"
+                    $target = "N3"
                 }
                 $orderJson = @{
                     turn_id = $tid

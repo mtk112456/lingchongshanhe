@@ -124,6 +124,7 @@ final class HandService
         }
 
         $this->assertSeasonTarget($gameId, $turnId, $targetNodeCode);
+        $this->assertAdjacentTarget($gameId, $playerId, $targetNodeCode);
 
         $hand = $this->getOrCreateHand($gameId, $turnId, $playerId);
         $orders = $this->getOrders($turnId, $playerId);
@@ -239,6 +240,51 @@ final class HandService
         $stmt->execute([$gameId, $playerId, $weekNo, $this->encode(array_values($types))]);
 
         return ['types' => array_values($types), 'changed_once' => $row !== false];
+    }
+
+    /**
+     * 只能打己方领土相邻的城；打自己城 = 驻守。
+     * 没有任何领土时放行（避免新局锁死）。
+     */
+    private function assertAdjacentTarget(int $gameId, int $playerId, string $target): void
+    {
+        $stmt = $this->pdo->prepare('SELECT faction_id FROM slice_players WHERE id = ? AND game_id = ?');
+        $stmt->execute([$playerId, $gameId]);
+        $factionId = $stmt->fetchColumn();
+        if ($factionId === false || $factionId === null) {
+            return;
+        }
+        $factionId = (int)$factionId;
+
+        $stmt = $this->pdo->prepare(
+            'SELECT 1 FROM slice_nodes WHERE game_id = ? AND node_code = ? AND owner_faction_id = ? LIMIT 1'
+        );
+        $stmt->execute([$gameId, $target, $factionId]);
+        if ($stmt->fetchColumn() !== false) {
+            return;
+        }
+
+        $stmt = $this->pdo->prepare(
+            'SELECT node_code FROM slice_nodes WHERE game_id = ? AND owner_faction_id = ?'
+        );
+        $stmt->execute([$gameId, $factionId]);
+        $owned = array_map('strval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+        if ($owned === []) {
+            return;
+        }
+
+        $in = implode(',', array_fill(0, count($owned), '?'));
+        $sql = "SELECT 1 FROM slice_edges
+                WHERE game_id = ?
+                  AND ((a_node_code = ? AND b_node_code IN ({$in}))
+                    OR (b_node_code = ? AND a_node_code IN ({$in})))
+                LIMIT 1";
+        $params = array_merge([$gameId, $target], $owned, [$target], $owned);
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+        if ($stmt->fetchColumn() === false) {
+            throw new InvalidArgumentException('NOT_ADJACENT');
+        }
     }
 
     /**

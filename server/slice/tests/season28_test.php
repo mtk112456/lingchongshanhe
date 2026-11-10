@@ -52,6 +52,12 @@ foreach ($pdo->query("SELECT code FROM slice_factions WHERE game_id = {$gameId} 
 $turnId = (int)$pdo->query("SELECT id FROM slice_turns WHERE game_id = {$gameId} ORDER BY turn_no LIMIT 1")->fetchColumn();
 $handService = new HandService($pdo);
 $settler = new CardSettlementService($pdo);
+$seasonCards = CardSettlementService::TEAM_CARDS;
+$insertSeasonOrder = $pdo->prepare(
+    'INSERT INTO slice_order_slots
+        (game_id, turn_id, player_id, slot, card_code, target_node_code, lane, row_pos, status, last_request_key)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, "active", ?)'
+);
 
 $neutral = ['hanzhong', 'xiangyang', 'taiyuan', 'luoyang', 'jiangling', 'changsha', 'kuaiji', 'shouchun'];
 $changanNeighbors = ['hanzhong', 'luoyang', 'jiangling', 'jianye'];
@@ -99,7 +105,6 @@ try {
         foreach ($players as $p) {
             $pid = (int)$p['id'];
             $fi = $factionIndex[(string)$p['faction_code']] ?? 0;
-            $hand = $handService->getOrCreateHand($gameId, $turnId, $pid);
 
             if ($week <= 2) {
                 $target = $neutral[($fi * 2 + $round) % count($neutral)];
@@ -111,17 +116,17 @@ try {
             }
 
             for ($slot = 0; $slot < 3; $slot++) {
-                $handService->play(
+                $insertSeasonOrder->execute([
                     $gameId,
                     $turnId,
                     $pid,
                     $slot,
-                    (string)$hand['cards'][$slot],
+                    $seasonCards[($pid + $slot) % count($seasonCards)],
                     $target,
                     $slot + 1,
                     $slot === 2 ? 'back' : 'front',
-                    's28_' . $round . '_' . $pid . '_' . $slot
-                );
+                    's28_' . $round . '_' . $pid . '_' . $slot,
+                ]);
             }
         }
 

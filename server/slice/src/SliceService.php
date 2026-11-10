@@ -596,6 +596,30 @@ final class SliceService
             $wallet = $this->points->getWallet((int)$player['student_id']);
         }
 
+        $reachableTargets = [];
+        if ($player['faction_id'] !== null) {
+            $stmt = $this->pdo->prepare(
+                'SELECT node_code FROM slice_nodes WHERE game_id = ? AND owner_faction_id = ?'
+            );
+            $stmt->execute([(int)$game['id'], (int)$player['faction_id']]);
+            $owned = array_map('strval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+            if ($owned !== []) {
+                $reachableTargets = $owned;
+                $in = implode(',', array_fill(0, count($owned), '?'));
+                $stmt = $this->pdo->prepare(
+                    "SELECT a_node_code, b_node_code FROM slice_edges
+                     WHERE game_id = ? AND (a_node_code IN ({$in}) OR b_node_code IN ({$in}))"
+                );
+                $stmt->execute(array_merge([(int)$game['id']], $owned, $owned));
+                foreach ($stmt->fetchAll() as $edge) {
+                    $a = (string)$edge['a_node_code'];
+                    $b = (string)$edge['b_node_code'];
+                    $reachableTargets[] = in_array($a, $owned, true) ? $b : $a;
+                }
+                $reachableTargets = array_values(array_unique($reachableTargets));
+            }
+        }
+
         return [
             'server_time' => $this->nowSql(),
             'wallet' => $wallet,
@@ -618,6 +642,7 @@ final class SliceService
             'hand' => $hand,
             'composition' => $composition,
             'card_orders' => $cardOrders,
+            'reachable_targets' => $reachableTargets,
             'options' => [
                 'advance_from' => $advanceFrom,
                 'defend_targets' => $defendTargets,

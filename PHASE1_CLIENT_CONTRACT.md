@@ -186,6 +186,7 @@ PLAY_LIMIT_REACHED
 BAD_SLOT / BAD_LANE / BAD_ROW / BAD_REQUEST_KEY
 CHANGAN_LOCKED       第 1–2 周不能打长安
 SEASON_FINAL_WEEK    第 4 周只能打长安或长安邻城
+NOT_ADJACENT         目标城不与己方领土相邻
 UNKNOWN_TARGET       目标城不存在
 ```
 
