@@ -1,0 +1,33 @@
+【可玩性补强 · 只排序，不重写规则】
+
+请读：
+
+```text
+GAMEPLAY_FUN_LAYERS.md
+MULTI_AGENT_GAMEPLAY_DECISION.md
+DAILY_LOOP.md
+```
+
+用户觉得“还是不好玩”。我列了 5 个补强层：
+
+1. 每日军议事件（Reigns 式）；
+2. 班宠组合技（火焰纹章/宝可梦式）；
+3. 每周锦囊/奇谋（三国杀/率土式）；
+4. 战报说书/名场面（Clash Royale/率土式）；
+5. 每周军议大会（Jackbox/Kahoot 式）。
+
+请只回答：
+
+1. 按“好玩收益 / 学生负担 / 实现成本”给 5 层排序；
+2. 先做哪 2 层？为什么？
+3. 哪些层会让学生/教师负担过重，直接排除？
+4. 每层 1 个最小实现，不要展开成大系统；
+5. 对“Among Us/狼人杀式背叛”是否适合班级，明确判断。
+
+输出：
+
+```text
+client/GAMEPLAY_FUN_LAYERS_ANTIGRAVITY.md
+```
+
+不要改 client/server；不要重写 3 令规则。
