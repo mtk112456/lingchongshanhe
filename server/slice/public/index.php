@@ -7,6 +7,7 @@ require_once dirname(__DIR__) . '/src/BattleService.php';
 require_once dirname(__DIR__) . '/src/BattleSettlementService.php';
 require_once dirname(__DIR__) . '/src/CardSettlementService.php';
 require_once dirname(__DIR__) . '/src/SeasonService.php';
+require_once dirname(__DIR__) . '/src/SeasonHistoryService.php';
 require_once dirname(__DIR__) . '/src/BulletinService.php';
 
 $started = microtime(true);
@@ -173,6 +174,11 @@ try {
     if ($method === 'GET' && $path === '/api/slice/season') {
         $player = requireAuth($service);
         success((new SeasonService($pdo))->summary((int)$player['game_id']));
+    }
+
+    if ($method === 'GET' && $path === '/api/slice/season/history') {
+        $player = requireAuth($service);
+        success((new SeasonHistoryService($pdo))->history((int)$player['game_id']));
     }
 
     if ($method === 'POST' && $path === '/api/slice/orders') {

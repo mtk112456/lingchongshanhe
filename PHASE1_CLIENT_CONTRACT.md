@@ -106,6 +106,53 @@ Authorization: Bearer <token>
 
 ---
 
+## 1.2 GET /api/slice/season/history
+
+```text
+GET /api/slice/season/history
+Authorization: Bearer <token>
+```
+
+返回赛季史书：按周聚合的战斗、易主、关键战役和周末排名。
+
+```json
+{
+  "game": "MAP12_TEST",
+  "current_week": 1,
+  "max_turn": 4,
+  "weeks": [
+    {
+      "week": 1,
+      "turn_from": 1,
+      "turn_to": 4,
+      "complete": false,
+      "battles": 4,
+      "captures": [
+        {"turn_no": 3, "node_code": "hanzhong", "node_name": "汉中", "winner": {"code": "bi", "name": "笔", "color": "#B83B32"}}
+      ],
+      "key_battle": {
+        "turn_no": 3, "node_code": "hanzhong", "node_name": "汉中",
+        "headline": "大捷", "score": 3, "wall": 0, "ticks": 58,
+        "attacker": {"code": "bi", "name": "笔", "color": "#B83B32"},
+        "defender": null
+      },
+      "standings": [
+        {"code": "bi", "name": "笔", "color": "#B83B32", "cities": 2},
+        {"code": "neutral", "name": "中立", "color": "#7a7066", "cities": 7}
+      ],
+      "headline": "第 1 周：笔 2 城领先，1 城易主"
+    }
+  ]
+}
+```
+
+- `weeks` 只返回已开始或已结束的周；
+- `complete=true` 表示该周 7 天都已结算；
+- `key_battle` 取本周战果分最高、其次回合数最长的一场；
+- `standings` 是周末归属，`neutral` 固定排最后。
+
+---
+
 ## 2. POST /api/slice/composition
 
 ```json
