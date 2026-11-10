@@ -6,6 +6,7 @@ require_once dirname(__DIR__) . '/src/HandService.php';
 require_once dirname(__DIR__) . '/src/BattleService.php';
 require_once dirname(__DIR__) . '/src/BattleSettlementService.php';
 require_once dirname(__DIR__) . '/src/CardSettlementService.php';
+require_once dirname(__DIR__) . '/src/SeasonService.php';
 
 $started = microtime(true);
 $requestId = $_SERVER['HTTP_X_REQUEST_ID'] ?? bin2hex(random_bytes(6));
@@ -147,6 +148,11 @@ try {
         $player = requireAuth($service);
         $turnId = isset($_GET['turn_id']) ? (int)$_GET['turn_id'] : null;
         success($service->getState($player, $turnId));
+    }
+
+    if ($method === 'GET' && $path === '/api/slice/season') {
+        $player = requireAuth($service);
+        success((new SeasonService($pdo))->summary((int)$player['game_id']));
     }
 
     if ($method === 'POST' && $path === '/api/slice/orders') {

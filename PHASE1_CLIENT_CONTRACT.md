@@ -40,6 +40,39 @@
 
 ---
 
+## 1.1 GET /api/slice/season
+
+```text
+GET /api/slice/season
+Authorization: Bearer <token>
+```
+
+返回：
+
+```json
+{
+  "game": "MAP12_TEST",
+  "week": 3,
+  "turn_no": 15,
+  "days_left": 13,
+  "season_over": false,
+  "factions": [
+    {"code": "bi", "name": "笔", "color": "#B83B32", "cities": 3, "morale": 4}
+  ],
+  "neutral_cities": 2,
+  "changan": {"node_code": "changan", "name": "长安", "owner": null, "morale": 1, "morale_cap": 5},
+  "winner": null
+}
+```
+
+- `week` 1–4；
+- `days_left = max(0, 28 - turn_no)`；
+- 占长安直接获胜：`winner.reason = "changan"`；
+- 第 28 回合后按城数、再按民心：`winner.reason = "cities"`；
+- 平局时 `winner = null`。
+
+---
+
 ## 2. POST /api/slice/composition
 
 ```json
