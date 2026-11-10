@@ -1,0 +1,42 @@
+【横屏-only 改造】
+
+用户决定：这款游戏只横屏玩，不再维护手机竖屏。
+
+已由 OpenCode 改：
+
+- `client/project.godot` 增加：
+  ```text
+  display/window/handheld/orientation=0
+  ```
+- `tools/watch_acceptance.ps1` 已移除手机竖屏截图要求。
+
+请你做：
+
+1. **确认 Android 导出锁定横屏**：检查 `project.godot` / 导出设置，构建出的 APK 不应再旋转到竖屏。
+
+2. **CaptureScreenshots.gd 删除竖屏步骤**：
+   - 删除 720×1280 手机竖屏的 `screenshot_phone_portrait_s01_map.png`、`screenshot_phone_portrait_s02_drawer.png`、`lowest_n1`、`lowest_bstart`；
+   - 只保留：
+     ```text
+     平板 1400×1000
+     手机横屏 720×514
+     ```
+   - 最低节点验收用手机横屏 720×514 做，不再用竖屏。
+
+3. **手机横屏是唯一手机验收目标**：
+   - 登录页 720×514 不裁切；
+   - 地图/城池抽屉/军令确认/战报/回放 720×514 完整；
+   - `is_portrait` 代码可以保留作为 fallback，但不验收、不再为它调布局。
+
+4. **DESIGN_SYSTEM.md** 里所有“手机竖屏”描述改为“手机横屏 720×514”。
+
+5. 重跑：
+   ```text
+   godot --headless --path client res://tests/ClientSmoke.tscn
+   godot --headless --path client res://tests/ReplaySmoke.tscn
+   godot --path client res://tests/CaptureScreenshots.tscn
+   ```
+
+6. 更新 `client/LAYOUT_FIX_REPORT.md`：注明横屏-only、删了哪些竖屏截图、手机横屏验收结果。
+
+不要改 server/API；不要为了横屏删掉已有竖屏资产，只是不再验收。

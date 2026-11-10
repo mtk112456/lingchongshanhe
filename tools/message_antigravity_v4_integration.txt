@@ -1,0 +1,77 @@
+【v4 地形接入 · 最后一层】
+
+P0/P1 布局已验收通过，GPT 的 China 方位地形也交付了。现在把 v4 真正接进客户端。
+
+资产已在：
+
+```text
+client/assets/art/map_c_v4.png              2560×1600
+client/assets/art/map_c_portrait_v2.png     936×1664
+client/assets/art/city_yunlu_trim.png
+client/assets/art/city_yanhui_trim.png
+client/assets/art/city_luoxia_trim.png
+client/assets/art/city_tingyu_trim.png
+client/assets/art/city_songfeng_trim.png
+```
+
+## 1. 切换底图
+
+```text
+ART_MAP_PATH = res://assets/art/map_c_v4.png
+ART_MAP_PORTRAIT_PATH = res://assets/art/map_c_portrait_v2.png
+```
+
+## 2. 更新锚点（按中国大致方位）
+
+横屏：
+
+```text
+A_START 云麓关  0.22, 0.24
+B_START 雁回关  0.80, 0.22
+N2      落霞原  0.50, 0.50
+N3      听雨台  0.22, 0.78
+N1      松风渡  0.80, 0.78
+```
+
+竖屏：
+
+```text
+A_START 云麓关  0.20, 0.22
+B_START 雁回关  0.80, 0.22
+N2      落霞原  0.50, 0.50
+N3      听雨台  0.20, 0.78
+N1      松风渡  0.80, 0.78
+```
+
+## 3. 叠加独立城池 Sprite
+
+v4 地形底图没有主城建筑，必须叠 `city_*_trim.png`：
+
+- 每个节点在锚点处画自己的 trim Sprite；
+- **底边中心对齐锚点**，不要把整张 512 画布居中；
+- 按纹理宽高比缩放，不要拉伸；
+- 目标高度：起点 120px、普通城 104px（地图坐标，随 map_world 缩放）；
+- 选中环、旗帜、城名纸签、归属签继续画在 Sprite 上方/下方；
+- 不再画原来的代码城堡图标/白玉基座（避免双建筑）；
+- 如果某个 trim 资产缺失，才回退到旧矢量图标。
+
+建议在 `_draw_node_over_art` 开头画 Sprite，再画光环/旗帜/标签。
+
+## 4. 验证
+
+- 平板 1400×1000：五城都能看到，城池不重叠，标签不被城楼挡住；
+- 手机竖屏 720×1280：五城全在，最低城不被抽屉挡；
+- 手机横屏 720×514：五城全在，Dock 可见；
+- 50% 缩放：能分清五城轮廓和归属；
+- 选中松风渡 / 雁回关：相邻路线全部高亮，主按钮完整；
+- 不出现空白纸带、双屋顶、双塔。
+
+重跑：
+
+```text
+godot --headless --path client res://tests/ClientSmoke.tscn
+godot --headless --path client res://tests/ReplaySmoke.tscn
+godot --path client res://tests/CaptureScreenshots.tscn
+```
+
+更新 `client/LAYOUT_FIX_REPORT.md`，注明 v4 接入、锚点、城池 Sprite、截图路径。不要改 server/API。

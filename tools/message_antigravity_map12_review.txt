@@ -1,0 +1,31 @@
+【12 城布局独立评审 · 只判断，不改代码】
+
+请读：
+
+```text
+art_src/gpt/ai_pipeline_v1/MAP12_LAYOUT_CONCEPT.png
+art_src/gpt/ai_pipeline_v1/DETAIL_SHEET_MAP.png
+art_src/gpt/JOINT_MAP_REVIEW.md
+MAP_SPEC.md 第 8 节
+ENVIRONMENT_SPEC.md
+DETAIL_CHECKLIST.md
+```
+
+按你的前端视角独立判断，不要只附和 GPT：
+
+1. **12 个落点**：能一眼找到 12 个空地吗？中央金田是否像“第 13 个落点”？空地是否过于圆整、大小相近？
+2. **四区方位**：西北/东北/西南/东南是否大致符合中国环境？有没有明显错位？
+3. **叠层验证**：如果按 0.35x 全图、0.50x 区域看，地形/城池/归属/城名/路线五层会怎么叠？哪里会遮挡、重叠、错认？
+4. **战术可读性**：纯地形现在看不出，你建议的 12 城叠层验证图怎么做？先做哪几张截图？
+5. **细节**：空地边缘怎么改成河湾/台地/田界，减少“圆斑感”？
+6. **最优先 3 个修改**，按优先级。
+
+输出：
+
+```text
+client/MAP12_REVIEW_ANTIGRAVITY.md
+```
+
+格式：结论 / 逐项判断 / 3 个修改 / 与 GPT 不一致的地方（如果有）。
+
+本轮只写评审，不改 client/ 或 server/ 代码。
