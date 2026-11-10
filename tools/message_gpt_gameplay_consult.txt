@@ -1,0 +1,25 @@
+【可玩性 consultation · 只判断】
+
+请读：
+
+```text
+MULTI_AGENT_GAMEPLAY_CONSULT.md
+MULTI_AGENT_CONSULT_DECISION.md
+CITY_DESIGN.md
+```
+
+按你的角色回答：
+
+1. 主学哪 3 款游戏的可玩性？具体借什么机制？
+2. 3 令/4 阵营/12 城的最小规则集：动作、消耗、结算、信息、班宠、赛季；
+3. 60–100 人怎么保证普通学生不是“只点按钮”；
+4. 怎么用 bot/8–12 人/100 人验证“好玩”；
+5. 先做什么。
+
+输出：
+
+```text
+art_src/gpt/MULTI_AGENT_GAMEPLAY_CONSULT_GPT.md
+```
+
+不要改 client/server；不要泛泛说“学策略”，给具体机制和数字。

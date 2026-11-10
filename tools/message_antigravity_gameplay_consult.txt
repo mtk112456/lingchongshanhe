@@ -1,0 +1,33 @@
+【可玩性 consultation · 设计主责】
+
+请读：
+
+```text
+MULTI_AGENT_GAMEPLAY_CONSULT.md
+MULTI_AGENT_CONSULT_DECISION.md
+CITY_DESIGN.md
+client/MAP12_PROTOTYPE_REPORT.md
+```
+
+按设计主责回答：
+
+1. 主学哪 3 款游戏的可玩性？具体借什么机制？
+2. 3 令/4 阵营/12 城的最小规则集：动作、消耗、结算、信息、班宠、赛季；
+3. 60–100 人怎么保证普通学生不是“只点按钮”；
+4. 怎么用 bot/8–12 人/100 人验证“好玩”；
+5. 先做什么。
+
+重点：
+
+- 从学生每天 3–5 分钟、横屏、班级场景出发；
+- 不要用“更多系统”堆深度；
+- 给出可落地的最小规则和 UI 反馈；
+- 哪些机制会让学生看不懂，直接排除。
+
+输出：
+
+```text
+client/MULTI_AGENT_GAMEPLAY_CONSULT_ANTIGRAVITY.md
+```
+
+不要改 client/server 代码；只写判断。
