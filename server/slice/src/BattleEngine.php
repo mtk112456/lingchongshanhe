@@ -113,54 +113,51 @@ final class BattleEngine
     }
 
     /**
-     * @param array{general:string,troops:int|float,composition:array,fire?:bool} $attacker
-     * @param array{general:string,troops:int|float,composition:array} $defender
+     * 输入二选一：
+     *   - composition + troops：旧接口，按兵种自动排 3 路（测试/演示仍在用）
+     *   - teams：每队自带 type/troops/lane/row/card（正式结算）
+     *
+     * card 是这一队带的战术；12 张牌的效果见 applyCards()。
+     *
+     * @param array{general:string,troops?:int|float,composition?:array,teams?:array,fire?:bool,scouted?:bool} $attacker
+     * @param array{general:string,troops?:int|float,composition?:array,teams?:array,scouted?:bool} $defender
      */
     public function resolve(array $attacker, array $defender): array
     {
-        $attSlots = self::place($attacker['composition']);
-        $defSlots = self::place($defender['composition']);
+        $attTeams = $this->teamsOf($attacker);
+        $defTeams = $this->teamsOf($defender);
+        $attSlots = self::slotsOf($attTeams);
+        $defSlots = self::slotsOf($defTeams);
 
         $units = [];
-        foreach ([1, 2, 3] as $lane) {
-            foreach (['front', 'back'] as $row) {
-                if (isset($attSlots[$lane][$row])) {
-                    $id = "A{$lane}" . ($row === 'front' ? 'F' : 'B');
-                    $units[$id] = $this->makeUnit(
-                        $id,
-                        'att',
-                        $lane,
-                        $row,
-                        $attSlots[$lane][$row],
-                        $attacker['general'],
-                        (float)$attacker['troops'] / 3
-                    );
-                }
-                if (isset($defSlots[$lane][$row])) {
-                    $id = "D{$lane}" . ($row === 'front' ? 'F' : 'B');
-                    $units[$id] = $this->makeUnit(
-                        $id,
-                        'def',
-                        $lane,
-                        $row,
-                        $defSlots[$lane][$row],
-                        $defender['general'],
-                        (float)$defender['troops'] / 3
-                    );
-                }
-            }
+        foreach ($attTeams as $t) {
+            $id = self::unitId('att', $t);
+            $units[$id] = $this->makeUnit(
+                $id,
+                'att',
+                $t['lane'],
+                $t['row'],
+                $t['type'],
+                (string)$attacker['general'],
+                $t['troops']
+            );
+            $units[$id]['card'] = $t['card'];
+        }
+        foreach ($defTeams as $t) {
+            $id = self::unitId('def', $t);
+            $units[$id] = $this->makeUnit(
+                $id,
+                'def',
+                $t['lane'],
+                $t['row'],
+                $t['type'],
+                (string)$defender['general'],
+                $t['troops']
+            );
+            $units[$id]['card'] = $t['card'];
         }
 
-        // 谋将：敌方攻击 -5%
-        foreach ($units as &$u) {
-            if ($attacker['general'] === 'tac' && $u['side'] === 'def') {
-                $u['atk'] *= 0.95;
-            }
-            if ($defender['general'] === 'tac' && $u['side'] === 'att') {
-                $u['atk'] *= 0.95;
-            }
-        }
-        unset($u);
+        $this->applyCards($units, $attTeams, $defTeams, $attacker, $defender);
 
         $initialUnits = array_values(array_map(fn($u) => [
             'id' => $u['id'],
@@ -168,14 +165,20 @@ final class BattleEngine
             'lane' => $u['lane'],
             'row' => $u['row'],
             'type' => $u['type'],
+            'card' => $u['card'] ?? null,
+            'atk' => round($u['atk'], 2),
+            'def_mult' => round($u['def_mult'], 3),
+            'initiative' => (int)($u['initiative'] ?? 0),
             'troops' => round($u['troops'], 1),
             'max_troops' => round($u['max_troops'], 1),
         ], $units));
 
         $wall = (float)self::WALL_BASE;
         $events = [];
-        $siegeAtk = ((float)$attacker['troops'] / 3 * 0.05 + 10) * self::SIEGE_MULT;
-        if (!empty($attacker['fire'])) {
+        $totalTroops = array_sum(array_column($attTeams, 'troops'));
+        $siegeAtk = ($totalTroops / 3 * 0.05 + 10) * self::SIEGE_MULT;
+        $fire = !empty($attacker['fire']) || in_array('fire_attack', array_column($attTeams, 'card'), true);
+        if ($fire) {
             $siegeAtk *= 1.5;
         }
 
@@ -198,11 +201,25 @@ final class BattleEngine
                         'action' => 'wall',
                         'damage' => round($siegeAtk, 1),
                         'wall' => max(0, round($wall, 1)),
+                        'fire' => $fire,
                     ];
                 }
             }
 
-            foreach (array_keys($units) as $uid) {
+            // 15 tick：运粮回血、断粮掉兵
+            if ($tick % 15 === 0) {
+                $this->upkeep($units, $tick, $events);
+            }
+
+            // 急行先手：本 tick 内先行动，其余按固定 id 顺序
+            $order = array_keys($units);
+            usort($order, function (string $a, string $b) use ($units): int {
+                $ia = (int)($units[$a]['initiative'] ?? 0);
+                $ib = (int)($units[$b]['initiative'] ?? 0);
+                return $ia === $ib ? strcmp($a, $b) : $ib <=> $ia;
+            });
+
+            foreach ($order as $uid) {
                 if ($wall <= 0) {
                     break 2;
                 }
@@ -221,6 +238,17 @@ final class BattleEngine
             $score = -1;
         }
 
+        $finalUnits = array_values(array_map(fn($u) => [
+            'id' => $u['id'],
+            'side' => $u['side'],
+            'lane' => $u['lane'],
+            'row' => $u['row'],
+            'type' => $u['type'],
+            'card' => $u['card'] ?? null,
+            'troops' => round($u['troops'], 1),
+            'alive' => $u['alive'],
+        ], $units));
+
         return [
             'wall' => max(0, round($wall, 1)),
             'score' => $score,
@@ -228,8 +256,216 @@ final class BattleEngine
             'att_slots' => $attSlots,
             'def_slots' => $defSlots,
             'units' => $initialUnits,
+            'final_units' => $finalUnits,
             'events' => $events,
         ];
+    }
+
+    /**
+     * 把输入统一成 3 支队伍。
+     *
+     * @return array<int,array{type:string,troops:float,lane:int,row:string,card:?string}>
+     */
+    private function teamsOf(array $config): array
+    {
+        if (!empty($config['teams']) && is_array($config['teams'])) {
+            $teams = [];
+            $used = [];
+            foreach (array_values($config['teams']) as $i => $t) {
+                $type = (string)($t['type'] ?? '');
+                if (!isset(self::TYPES[$type])) {
+                    throw new InvalidArgumentException('UNKNOWN_UNIT_TYPE: ' . $type);
+                }
+                $lane = (int)($t['lane'] ?? 0);
+                if ($lane < 1 || $lane > 3) {
+                    $lane = min(3, $i + 1);
+                }
+                $row = (string)($t['row'] ?? '');
+                if (!in_array($row, ['front', 'back'], true)) {
+                    $row = self::TYPES[$type]['row'];
+                }
+                if ($type === 'arc') {
+                    $row = 'back';
+                }
+                // 同一格重复时顺延到最近的空位，保证 6 个位置不互相覆盖
+                if (isset($used[$lane . '|' . $row])) {
+                    foreach ([1, 2, 3] as $l) {
+                        foreach (['front', 'back'] as $r) {
+                            if (!isset($used[$l . '|' . $r])) {
+                                $lane = $l;
+                                $row = $r;
+                                break 2;
+                            }
+                        }
+                    }
+                }
+                $used[$lane . '|' . $row] = true;
+                $card = isset($t['card']) && $t['card'] !== '' ? (string)$t['card'] : null;
+                $teams[] = [
+                    'type' => $type,
+                    'troops' => (float)($t['troops'] ?? 0),
+                    'lane' => $lane,
+                    'row' => $row,
+                    'card' => $card,
+                ];
+                if (count($teams) >= 3) {
+                    break;
+                }
+            }
+            return $teams;
+        }
+
+        $slots = self::place($config['composition'] ?? []);
+        $troops = (float)($config['troops'] ?? 0);
+        $count = max(1, count($config['composition'] ?? []));
+        $teams = [];
+        foreach ([1, 2, 3] as $lane) {
+            foreach (['front', 'back'] as $row) {
+                if (isset($slots[$lane][$row])) {
+                    $teams[] = [
+                        'type' => $slots[$lane][$row],
+                        'troops' => $troops / $count,
+                        'lane' => $lane,
+                        'row' => $row,
+                        'card' => null,
+                    ];
+                }
+            }
+        }
+        return $teams;
+    }
+
+    /**
+     * @param array<int,array{type:string,lane:int,row:string}> $teams
+     * @return array<int,array<string,string>>
+     */
+    private static function slotsOf(array $teams): array
+    {
+        $slots = [];
+        foreach ($teams as $t) {
+            $slots[$t['lane']][$t['row']] = $t['type'];
+        }
+        return $slots;
+    }
+
+    private static function unitId(string $side, array $team): string
+    {
+        return ($side === 'att' ? 'A' : 'D') . $team['lane'] . ($team['row'] === 'front' ? 'F' : 'B');
+    }
+
+    /**
+     * 12 张战术的结算顺序：
+     *   1. 将军光环（谋将 -5% 敌军攻击）
+     *   2. 敌方全场牌：空城、反间（我军攻击 -10%）
+     *   3. 本队牌：坚壁、夜袭、死守、运粮、断粮、急行
+     *   4. 邻接牌：犄角（相邻路防御 +10%）
+     *   5. 器械：火攻在 resolve() 里单独加成
+     *
+     * 哨探、疑兵不改战斗数值，只影响情报接口。
+     */
+    private function applyCards(array &$units, array $attTeams, array $defTeams, array $attacker, array $defender): void
+    {
+        $cards = [
+            'att' => array_values(array_filter(array_column($attTeams, 'card'))),
+            'def' => array_values(array_filter(array_column($defTeams, 'card'))),
+        ];
+        $scouted = [
+            'att' => !empty($attacker['scouted']),
+            'def' => !empty($defender['scouted']),
+        ];
+
+        foreach ($units as &$u) {
+            $side = $u['side'];
+            $enemy = $side === 'att' ? 'def' : 'att';
+
+            // 1. 谋将：敌方攻击 -5%
+            $enemyGeneral = $side === 'att' ? $defender['general'] : $attacker['general'];
+            if ($enemyGeneral === 'tac') {
+                $u['atk'] *= 0.95;
+            }
+
+            // 2. 敌方全场牌
+            if (in_array('empty_fort', $cards[$enemy], true)) {
+                $u['atk'] *= 0.9;
+            }
+            if (in_array('counter_intel', $cards[$enemy], true)) {
+                $u['atk'] *= 0.9;
+            }
+
+            // 3. 本队牌
+            $card = $u['card'] ?? null;
+            if ($card === 'fortify') {
+                $u['def_mult'] *= 1.2;
+            }
+            if ($card === 'night_raid' && !$scouted[$side]) {
+                $u['atk'] *= 1.2;
+            }
+            if ($card === 'last_stand') {
+                $u['last_stand'] = true;
+            }
+            if ($card === 'supply') {
+                $u['heal'] = 0.05;
+            }
+            if ($card === 'cut_supply') {
+                $u['cut_supply'] = true;
+            }
+            if ($card === 'forced_march') {
+                $u['initiative'] = 1;
+                $u['dot_immune'] = true;
+            }
+        }
+        unset($u);
+
+        // 4. 犄角：相邻路的友军防御 +10%
+        foreach ($units as $u) {
+            if (($u['card'] ?? null) !== 'mutual_support' || !$u['alive']) {
+                continue;
+            }
+            foreach ($units as &$v) {
+                if ($v['side'] === $u['side'] && abs($v['lane'] - $u['lane']) === 1) {
+                    $v['def_mult'] *= 1.1;
+                }
+            }
+            unset($v);
+        }
+    }
+
+    /**
+     * 每 15 tick：运粮回血，断粮掉兵。
+     */
+    private function upkeep(array &$units, int $tick, array &$events): void
+    {
+        foreach ($units as &$u) {
+            if (!$u['alive'] || empty($u['heal'])) {
+                continue;
+            }
+            $before = $u['troops'];
+            $u['troops'] = min($u['max_troops'], $u['troops'] + $u['max_troops'] * (float)$u['heal']);
+            if ($u['troops'] > $before) {
+                $events[] = [
+                    't' => $tick,
+                    'lane' => $u['lane'],
+                    'unit' => $u['id'],
+                    'action' => 'heal',
+                    'heal' => round($u['troops'] - $before, 1),
+                    'troops' => round($u['troops'], 1),
+                ];
+            }
+        }
+        unset($u);
+
+        foreach ($units as $src) {
+            if (!$src['alive'] || empty($src['cut_supply'])) {
+                continue;
+            }
+            foreach ($units as $target) {
+                if ($target['side'] === $src['side'] || !$target['alive'] || !empty($target['dot_immune'])) {
+                    continue;
+                }
+                $dmg = $target['max_troops'] * 0.03;
+                $this->damage($units, $target['id'], $dmg, $tick, $events, 'CUT_SUPPLY', 'cut_supply');
+            }
+        }
     }
 
     private function makeUnit(
@@ -327,10 +563,33 @@ final class BattleEngine
         unset($u);
     }
 
-    private function damage(array &$units, string $targetId, float $dmg, int $tick, array &$events, string $sourceId): void
-    {
+    private function damage(
+        array &$units,
+        string $targetId,
+        float $dmg,
+        int $tick,
+        array &$events,
+        string $sourceId,
+        string $action = 'attack'
+    ): void {
         $units[$targetId]['troops'] -= $dmg;
         $killed = $units[$targetId]['troops'] <= 0;
+
+        // 死守：本队第一次致命伤留 1 兵
+        if ($killed && !empty($units[$targetId]['last_stand'])) {
+            $units[$targetId]['troops'] = 1.0;
+            $units[$targetId]['alive'] = true;
+            $units[$targetId]['last_stand'] = false;
+            $killed = false;
+            $events[] = [
+                't' => $tick,
+                'lane' => $units[$targetId]['lane'],
+                'unit' => $sourceId,
+                'action' => 'last_stand',
+                'target' => $targetId,
+            ];
+        }
+
         if ($killed) {
             $units[$targetId]['troops'] = 0;
             $units[$targetId]['alive'] = false;
@@ -339,7 +598,7 @@ final class BattleEngine
             't' => $tick,
             'lane' => $units[$targetId]['lane'],
             'unit' => $sourceId,
-            'action' => 'attack',
+            'action' => $action,
             'target' => $targetId,
             'damage' => round($dmg, 1),
             'target_troops' => round($units[$targetId]['troops'], 1),

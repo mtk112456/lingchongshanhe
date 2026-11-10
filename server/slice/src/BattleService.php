@@ -66,10 +66,12 @@ final class BattleService
      */
     public function resolve(array $attacker, array $defender): array
     {
-        if (count($attacker['composition'] ?? []) !== 3) {
+        $attHasTeams = !empty($attacker['teams']);
+        $defHasTeams = !empty($defender['teams']);
+        if (!$attHasTeams && count($attacker['composition'] ?? []) !== 3) {
             throw new InvalidArgumentException('ATTACKER_NEEDS_3_UNITS');
         }
-        if (count($defender['composition'] ?? []) !== 3) {
+        if (!$defHasTeams && count($defender['composition'] ?? []) !== 3) {
             throw new InvalidArgumentException('DEFENDER_NEEDS_3_UNITS');
         }
         if (!isset(BattleEngine::GENERALS[$attacker['general'] ?? ''])) {

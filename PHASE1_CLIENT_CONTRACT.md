@@ -35,7 +35,8 @@
 - 每座城画 `morale / morale_cap` 小格；
 - 底部 4 张手牌；
 - 编成面板 3 个兵种；
-- 已出令显示在槽位里。
+- 已出令显示在槽位里；
+- `composition` 返回的是**当前回合所属周**的编成，不是固定第 1 周。
 
 ---
 
@@ -53,6 +54,7 @@
 
 - `types` 必须 3 个；
 - 可重复；
+- `week_no` 可省略，服务端按当前回合推导（每 7 回合一周，1–4）；
 - 第一次设置 `changed_once=false`；
 - 第二次改 `changed_once=true`；
 - 第三次返回 `COMPOSITION_LOCKED`。
@@ -73,6 +75,40 @@
 
 - 每天 1 次；
 - 第二次返回 `REDRAW_USED`。
+
+---
+
+## 3.1 GET /api/slice/intel
+
+```text
+GET /api/slice/intel?node=N2&turn_id=1
+Authorization: Bearer <token>
+```
+
+前提：**本回合已经对该城打出「哨探」**。没有哨探返回：
+
+```json
+{"ok": false, "error": {"code": "SCOUT_REQUIRED", "message": "需要先对这座城打出「哨探」"}}
+```
+
+有哨探时：
+
+```json
+{
+  "turn_id": 1,
+  "node_code": "N2",
+  "owner_faction_id": null,
+  "lane": {"lane": 2, "type": "spear", "name": "枪", "row": "front", "troops": 366},
+  "massing": [
+    {"faction": "mo", "name": "墨", "players": 2, "teams": 3, "troops": 870, "feint": false}
+  ]
+}
+```
+
+- `lane` 是按 `turn/player/node` 确定性选的一路，刷新页面不变；
+- `massing` 是本城所有活跃令按阵营聚合，含己方；
+- `feint: true` 表示该阵营打出了「疑兵」，`troops` 已经 ×1.5，UI 要标“疑似”；
+- 没有哨探时不要轮询该接口。
 
 ---
 

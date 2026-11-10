@@ -75,6 +75,20 @@ function jsonBody(): array
     return $data;
 }
 
+/**
+ * 回合 id → 周次（4 周赛季，每 7 回合一周）。
+ */
+function weekNoForTurn(PDO $pdo, int $turnId): int
+{
+    if ($turnId <= 0) {
+        return 1;
+    }
+    $stmt = $pdo->prepare('SELECT turn_no FROM slice_turns WHERE id = ?');
+    $stmt->execute([$turnId]);
+    $turnNo = $stmt->fetchColumn();
+    return Clock::weekOfTurn($turnNo === false ? 1 : (int)$turnNo);
+}
+
 function bearerToken(): ?string
 {
     $header = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
@@ -157,7 +171,11 @@ try {
         success([
             'turn_id' => $turnId,
             'hand' => $handService->getOrCreateHand((int)$player['game_id'], $turnId, (int)$player['id']),
-            'composition' => $handService->getComposition((int)$player['game_id'], (int)$player['id'], 1),
+            'composition' => $handService->getComposition(
+                (int)$player['game_id'],
+                (int)$player['id'],
+                weekNoForTurn($pdo, $turnId)
+            ),
             'orders' => $handService->getOrders($turnId, (int)$player['id']),
         ]);
     }
@@ -172,16 +190,127 @@ try {
         success((new HandService($pdo))->redraw((int)$player['game_id'], $turnId, (int)$player['id']));
     }
 
+    // 哨探情报：只有对本城打出「哨探」，才能看到敌方一路 + 集结概览。
+    if ($method === 'GET' && $path === '/api/slice/intel') {
+        $player = requireAuth($service);
+        $nodeCode = (string)($_GET['node'] ?? '');
+        $turnId = isset($_GET['turn_id']) ? (int)$_GET['turn_id'] : (int)($player['game_current_turn_id'] ?? 0);
+        if ($nodeCode === '' || $turnId <= 0) {
+            throw new ApiException('BAD_REQUEST', '缺少 node 或 turn_id');
+        }
+
+        $stmt = $pdo->prepare(
+            "SELECT COUNT(*) FROM slice_order_slots
+             WHERE turn_id = ? AND player_id = ? AND target_node_code = ? AND card_code = 'scout' AND status = 'active'"
+        );
+        $stmt->execute([$turnId, (int)$player['id'], $nodeCode]);
+        if ((int)$stmt->fetchColumn() === 0) {
+            throw new ApiException('SCOUT_REQUIRED', '需要先对这座城打出「哨探」', 403);
+        }
+
+        $stmt = $pdo->prepare('SELECT * FROM slice_nodes WHERE game_id = ? AND node_code = ?');
+        $stmt->execute([(int)$player['game_id'], $nodeCode]);
+        $node = $stmt->fetch();
+        if (!$node) {
+            throw new ApiException('NODE_NOT_FOUND', '城池不存在', 404);
+        }
+
+        $ownerFactionId = $node['owner_faction_id'] === null ? null : (int)$node['owner_faction_id'];
+        $defTroops = ($ownerFactionId === null ? 1000.0 : 1200.0) * 1.10;
+        $defComp = $ownerFactionId === null
+            ? ['shield', 'shield', 'arc']
+            : ['shield', 'spear', 'arc'];
+        $lane = (int)(sprintf('%u', crc32($turnId . ':' . (int)$player['id'] . ':' . $nodeCode)) % 3) + 1;
+        $type = $defComp[$lane - 1];
+        $laneInfo = [
+            'lane' => $lane,
+            'type' => $type,
+            'name' => BattleEngine::TYPES[$type]['name'],
+            'row' => BattleEngine::TYPES[$type]['row'],
+            'troops' => (int)round($defTroops / 3),
+        ];
+
+        // 敌方集结：同城其他阵营的活跃令，按阵营聚合；疑兵会把展示兵力抬高 50%
+        $stmt = $pdo->prepare(
+            'SELECT p.id AS player_id, f.code AS faction_code, f.name AS faction_name,
+                    o.card_code, sp.level, pt.base_hp, pt.base_atk, pt.base_def, pt.base_spd,
+                    pt.growth_rate, pt.code AS pet_code
+             FROM slice_order_slots o
+             JOIN slice_players p ON p.id = o.player_id
+             JOIN slice_factions f ON f.id = p.faction_id
+             LEFT JOIN student_pets sp ON sp.student_id = p.student_id
+             LEFT JOIN pet_templates pt ON pt.id = sp.pet_template_id
+             WHERE o.turn_id = ? AND o.target_node_code = ? AND o.status = "active"
+             ORDER BY f.sort_order, o.slot'
+        );
+        $stmt->execute([$turnId, $nodeCode]);
+        $rows = $stmt->fetchAll();
+
+        $byFaction = [];
+        $seenPlayers = [];
+        foreach ($rows as $row) {
+            $fid = (string)$row['faction_code'];
+            if (!isset($byFaction[$fid])) {
+                $byFaction[$fid] = [
+                    'faction' => $fid,
+                    'name' => (string)$row['faction_name'],
+                    'players' => 0,
+                    'teams' => 0,
+                    'troops' => 0,
+                    'feint' => false,
+                ];
+            }
+            $byFaction[$fid]['teams']++;
+            $pid = (int)$row['player_id'];
+            if (!isset($seenPlayers[$fid][$pid])) {
+                $seenPlayers[$fid][$pid] = true;
+                $byFaction[$fid]['players']++;
+                $byFaction[$fid]['troops'] += BattleService::petPower($row) / 3;
+            }
+            if ((string)$row['card_code'] === 'feint') {
+                $byFaction[$fid]['feint'] = true;
+            }
+        }
+
+        $massing = [];
+        foreach ($byFaction as $f) {
+            $troops = (int)(round($f['troops'] / 10) * 10);
+            if ($f['feint']) {
+                $troops = (int)(round($troops * 1.5 / 10) * 10);
+            }
+            $massing[] = [
+                'faction' => $f['faction'],
+                'name' => $f['name'],
+                'players' => $f['players'],
+                'teams' => $f['teams'],
+                'troops' => $troops,
+                'feint' => $f['feint'],
+            ];
+        }
+
+        success([
+            'turn_id' => $turnId,
+            'node_code' => $nodeCode,
+            'owner_faction_id' => $ownerFactionId,
+            'lane' => $laneInfo,
+            'massing' => $massing,
+        ]);
+    }
+
     if ($method === 'GET' && $path === '/api/slice/composition') {
         $player = requireAuth($service);
-        $weekNo = (int)($_GET['week_no'] ?? 1);
+        $weekNo = isset($_GET['week_no'])
+            ? (int)$_GET['week_no']
+            : weekNoForTurn($pdo, (int)($player['game_current_turn_id'] ?? 0));
         success((new HandService($pdo))->getComposition((int)$player['game_id'], (int)$player['id'], $weekNo));
     }
 
     if ($method === 'POST' && $path === '/api/slice/composition') {
         $player = requireAuth($service);
         $body = jsonBody();
-        $weekNo = (int)($body['week_no'] ?? 1);
+        $weekNo = isset($body['week_no'])
+            ? (int)$body['week_no']
+            : weekNoForTurn($pdo, (int)($player['game_current_turn_id'] ?? 0));
         success((new HandService($pdo))->setComposition(
             (int)$player['game_id'],
             (int)$player['id'],
@@ -241,7 +370,11 @@ try {
             throw new ApiException('PET_NOT_FOUND', '没有班宠数据', 404);
         }
         $handService = new HandService($pdo);
-        $composition = $handService->getComposition((int)$player['game_id'], (int)$player['id'], 1);
+        $composition = $handService->getComposition(
+            (int)$player['game_id'],
+            (int)$player['id'],
+            weekNoForTurn($pdo, $turnId)
+        );
         $general = (string)$pet['code'] === 'pet_inkdrop_01' ? 'tac' : 'def';
         $attacker = [
             'general' => $general,

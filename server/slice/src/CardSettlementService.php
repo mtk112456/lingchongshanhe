@@ -7,12 +7,13 @@ require_once __DIR__ . '/BattleSettlementService.php';
 /**
  * 21:00 卡牌结算：把 slice_order_slots 按城聚合，打一场，推民心。
  *
- * 简化规则（Phase 1）：
+ * 规则（Phase 1.5）：
  *   - 每座城只打一场；
  *   - 攻方 = 该城令数最多的阵营；并列则对峙，不结算；
- *   - 先锋 = 该阵营贡献前 3 名学生，各出 1 只班宠；
+ *   - 先锋 = 该阵营贡献前 3 名学生，各出 1 只班宠 + 1 支队伍；
+ *   - 一令 = 一队：兵种取该玩家本周编成的对应位，位置与战术取该令自己的；
  *   - 其余支援 +2%/人，上限 +30%；
- *   - 守方 = 城归属方（固定守军）；中立城用中立守军；
+ *   - 守方 = 城归属方（Phase 1 仍是固定守军）；
  *   - 结果写入 slice_battles，民心写入 slice_nodes。
  */
 final class CardSettlementService
@@ -64,8 +65,9 @@ final class CardSettlementService
         }
 
         $battles = [];
+        $weekNo = self::weekOfTurn((int)$turn['turn_no']);
         foreach ($byCity as $nodeCode => $cityOrders) {
-            $battle = $this->settleCity($gameId, $turnId, $nodeCode, $cityOrders);
+            $battle = $this->settleCity($gameId, $turnId, $nodeCode, $cityOrders, $weekNo);
             if ($battle !== null) {
                 $battles[] = $battle;
             }
@@ -80,7 +82,7 @@ final class CardSettlementService
         return ['turn_id' => $turnId, 'already_settled' => false, 'battles' => $battles];
     }
 
-    private function settleCity(int $gameId, int $turnId, string $nodeCode, array $orders): ?array
+    private function settleCity(int $gameId, int $turnId, string $nodeCode, array $orders, int $weekNo): ?array
     {
         $stmt = $this->pdo->prepare('SELECT * FROM slice_nodes WHERE game_id = ? AND node_code = ?');
         $stmt->execute([$gameId, $nodeCode]);
@@ -89,7 +91,7 @@ final class CardSettlementService
             return null;
         }
 
-        // 哪個阵营令最多
+        // 哪个阵营令最多
         $counts = [];
         foreach ($orders as $order) {
             $fid = $order['faction_id'] === null ? 0 : (int)$order['faction_id'];
@@ -109,7 +111,7 @@ final class CardSettlementService
             return ['node_code' => $nodeCode, 'battle_id' => null, 'reason' => 'already_owned'];
         }
 
-        // 先锋：该阵营贡献前 3 名（按宠物战力），其余支援
+        // 先锋：该阵营贡献前 3 名（按宠物战力，一名玩家只带 1 队）
         $factionOrders = array_values(array_filter(
             $orders,
             fn($o) => (int)($o['faction_id'] ?? 0) === $attackerFactionId
@@ -135,37 +137,71 @@ final class CardSettlementService
             return ['node_code' => $nodeCode, 'battle_id' => null, 'reason' => 'no_vanguard'];
         }
 
-        $troops = 0.0;
-        foreach ($vanguard as $order) {
-            // 每个先锋只带 1 支队伍，即总兵力的 1/3
-            $troops += BattleService::petPower($order) / 3;
-        }
-        $supporters = max(0, count($factionOrders) - count($vanguard));
-        $troops *= BattleService::supportMultiplier($supporters) * 1.20;
+        $supporters = max(0, count(array_unique(array_column($factionOrders, 'player_id'))) - count($vanguard));
+        $supportMult = BattleService::supportMultiplier($supporters) * 1.20;
 
-        $composition = $this->compositionOf((int)$vanguard[0]['player_id'], $gameId);
-        $general = $this->generalOf((string)($vanguard[0]['pet_code'] ?? ''));
+        // 一令 = 一队：兵种取该玩家本周编成的对应位，位置与牌取该令自己的
+        $teams = [];
+        foreach ($vanguard as $i => $order) {
+            $slot = max(0, min(2, (int)$order['slot']));
+            $composition = $this->compositionOf((int)$order['player_id'], $gameId, $weekNo);
+            $type = $composition[$slot] ?? $composition[$i] ?? 'shield';
+            $lane = $order['lane'] === null ? $i + 1 : (int)$order['lane'];
+            $row = (string)($order['row_pos'] ?? '');
+            if (!in_array($row, ['front', 'back'], true)) {
+                $row = BattleEngine::TYPES[$type]['row'];
+            }
+            if ($type === 'arc') {
+                $row = 'back';
+            }
+            $teams[] = [
+                'type' => $type,
+                'troops' => BattleService::petPower($order) / 3 * $supportMult,
+                'lane' => $lane,
+                'row' => $row,
+                'card' => (string)$order['card_code'],
+            ];
+        }
+
+        $scouted = false;
+        $fire = false;
+        foreach ($factionOrders as $order) {
+            if ((string)$order['card_code'] === 'scout') {
+                $scouted = true;
+            }
+            if ((string)$order['card_code'] === 'fire_attack') {
+                $fire = true;
+            }
+        }
 
         $attacker = [
-            'general' => $general,
-            'troops' => $troops,
-            'composition' => $composition,
-            'fire' => $this->hasFire($factionOrders),
+            'general' => $this->generalOf((string)($vanguard[0]['pet_code'] ?? '')),
+            'teams' => $teams,
+            'troops' => array_sum(array_column($teams, 'troops')),
+            'scouted' => $scouted,
+            'fire' => $fire,
         ];
 
-        if ($ownerFactionId === null) {
-            $defender = [
-                'general' => 'def',
-                'troops' => 1000.0 * 1.10,
-                'composition' => ['shield', 'shield', 'arc'],
-            ];
-        } else {
-            $defender = [
-                'general' => 'def',
-                'troops' => 1200.0 * 1.10,
-                'composition' => ['shield', 'spear', 'arc'],
+        // 守军：Phase 1 仍是固定守军，P2 换真实驻守
+        $defTroops = ($ownerFactionId === null ? 1000.0 : 1200.0) * 1.10;
+        $defComp = $ownerFactionId === null
+            ? ['shield', 'shield', 'arc']
+            : ['shield', 'spear', 'arc'];
+        $defTeams = [];
+        foreach ($defComp as $i => $type) {
+            $defTeams[] = [
+                'type' => $type,
+                'troops' => $defTroops / 3,
+                'lane' => $i + 1,
+                'row' => BattleEngine::TYPES[$type]['row'],
+                'card' => null,
             ];
         }
+        $defender = [
+            'general' => 'def',
+            'teams' => $defTeams,
+            'troops' => $defTroops,
+        ];
 
         $result = $this->battleService->resolve($attacker, $defender);
         $battleId = $this->battleService->saveBattle(
@@ -198,15 +234,26 @@ final class CardSettlementService
             'morale_before' => $change['morale_before'],
             'morale_after' => $change['morale_after'],
             'reason' => $change['reason'],
+            'scouted' => $scouted,
+            'fire' => $fire,
+            'teams' => $teams,
         ];
     }
 
-    private function compositionOf(int $playerId, int $gameId): array
+    /**
+     * 4 周赛季，每周 7 个回合。
+     */
+    public static function weekOfTurn(int $turnNo): int
+    {
+        return Clock::weekOfTurn($turnNo);
+    }
+
+    private function compositionOf(int $playerId, int $gameId, int $weekNo): array
     {
         $stmt = $this->pdo->prepare(
-            'SELECT types_json FROM slice_compositions WHERE game_id = ? AND player_id = ? AND week_no = 1'
+            'SELECT types_json FROM slice_compositions WHERE game_id = ? AND player_id = ? AND week_no = ?'
         );
-        $stmt->execute([$gameId, $playerId]);
+        $stmt->execute([$gameId, $playerId, $weekNo]);
         $json = $stmt->fetchColumn();
         if ($json === false) {
             return ['cav', 'shield', 'arc'];
@@ -225,15 +272,5 @@ final class CardSettlementService
             'pet_bamboo_01' => 'def',
             default => 'def',
         };
-    }
-
-    private function hasFire(array $orders): bool
-    {
-        foreach ($orders as $order) {
-            if ((string)($order['card_code'] ?? '') === 'fire_attack') {
-                return true;
-            }
-        }
-        return false;
     }
 }

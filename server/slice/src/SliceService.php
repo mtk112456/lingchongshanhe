@@ -467,7 +467,11 @@ final class SliceService
         if ((string)$player['role'] === 'player') {
             $handService = new HandService($this->pdo);
             $hand = $handService->getOrCreateHand((int)$game['id'], (int)$turn['id'], (int)$player['id']);
-            $composition = $handService->getComposition((int)$game['id'], (int)$player['id'], 1);
+            $composition = $handService->getComposition(
+                (int)$game['id'],
+                (int)$player['id'],
+                Clock::weekOfTurn((int)$turn['turn_no'])
+            );
             $cardOrders = $handService->getOrders((int)$turn['id'], (int)$player['id']);
         }
 
