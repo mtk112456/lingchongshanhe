@@ -34,7 +34,7 @@ const ART_MAP_PATH := "res://assets/art/map_c.png"
 const ART_MAP_PORTRAIT_PATH := "res://assets/art/map_c_portrait.png"
 const ART_MAP_MIN_ASPECT := 1.15
 const ART_MAP_MAX_PORTRAIT_ASPECT := 0.90
-const ART_MAP_INSET := 14.0
+const ART_MAP_INSET := 2.0
 
 # 5 个节点在横向底图中的归一化锚点（按 keyart_c.png 原画位置标定）
 const ART_NODE_POS := {
@@ -95,16 +95,9 @@ func set_zoom_level(z: float) -> void:
 	zoom_level = z
 	queue_redraw()
 
-# 地图主卷轴绘制区域（全屏自适应，留出左右侧栏与上下导航空间）
+# 地图主卷轴绘制区域（P0: 铺满全屏，无粗重木框）
 func _map_rect() -> Rect2:
-	var w := size.x
-	var h := size.y
-	if w >= 900.0 and h >= 650.0:
-		return Rect2(160.0, 80.0, maxf(w - 320.0, 300.0), maxf(h - 160.0, 200.0))
-	elif h < 650.0:
-		return Rect2(52.0, 56.0, maxf(w - 104.0, 260.0), maxf(h - 108.0, 180.0))
-	else:
-		return Rect2(52.0, 70.0, maxf(w - 104.0, 260.0), maxf(h - 140.0, 200.0))
+	return Rect2(Vector2.ZERO, size)
 
 func _art_landscape_enabled() -> bool:
 	if art_map_texture == null:
@@ -133,7 +126,7 @@ func _art_texture() -> Texture2D:
 	return null
 
 func _art_dest_rect(mr: Rect2) -> Rect2:
-	return mr.grow(-ART_MAP_INSET)
+	return mr
 
 func _art_source_rect_for(tex: Texture2D, dest: Rect2) -> Rect2:
 	if tex == null:
@@ -208,50 +201,41 @@ func _draw() -> void:
 	var total_rect := Rect2(Vector2.ZERO, size)
 	var mr := _map_rect()
 
-	# 1. 外围案台底色（Style C 深墨木桌）
-	draw_rect(total_rect, C_WOOD_DESK)
+	# 1. 宣纸底衬与本体（P0: 全景沙盘，消除案台深木底板）
+	draw_rect(total_rect, C_XUANZHI)
 
-	# 2. 卷轴阴影与绢布本体
-	var shadow_rect := mr.grow(10)
-	shadow_rect.position += Vector2(0, 6)
-	draw_rect(shadow_rect, C_SHADOW_WARM)
-	
-	# 宣纸底衬
-	draw_rect(mr, C_XUANZHI) # 宣纸米黄
-	draw_rect(mr.grow(-8), Color("#eee7d7")) # 渐层内纸
-
-	# C 版水彩地图底图：横向/平板启用；竖屏或资产缺失时回退到绘制版
+	# 2. C 版水彩地图底图：横向/平板与竖屏自适应铺满
 	if _art_map_active():
 		var tex := _art_texture()
 		var dest := _art_dest_rect(mr)
 		draw_texture_rect_region(tex, dest, _art_source_rect_for(tex, dest))
 		# 轻罩暖纸色，保证 HUD/标签在复杂地形上的对比度
-		draw_rect(dest, Color(0.96, 0.91, 0.82, 0.05))
+		draw_rect(dest, Color(0.96, 0.91, 0.82, 0.04))
 	else:
 		_draw_landscape_accents(mr)
 
-	# 质感外框（压在底图之上）
-	draw_rect(mr, C_WOOD_DESK, false, 7.0) # 深墨木桌封边
-	draw_rect(mr.grow(5), C_TENGHUANG, false, 2.0) # 藤黄丝线
-	draw_rect(mr.grow(-14), Color("#c8b89e"), false, 1.5) # 内边墨线
+	# 3. 2–3px 细纸边与藤黄微光边缘（保留国风画卷感，无粗木框）
+	draw_rect(mr, Color("#c8b89e"), false, 1.5)
+	draw_rect(total_rect, Color(0.81, 0.51, 0.15, 0.45), false, 2.0)
 
-	# 3. 四角烫金云纹饰件
-	_draw_corner_ornament(mr.position, 1, 1)
-	_draw_corner_ornament(Vector2(mr.end.x, mr.position.y), -1, 1)
-	_draw_corner_ornament(Vector2(mr.position.x, mr.end.y), 1, -1)
-	_draw_corner_ornament(mr.end, -1, -1)
-
-	# 5. 城际驰道连接线
+	# 5. 城际驰道连接线（以真实 edges 为准，全部相邻边统一画成高对比三层金色流光）
 	var edges: Array = map_data.get("edges", [])
 	if _art_map_active():
-		# C 版底图已有手绘驰道，只高亮当前选中城池的相邻路线
 		for e in edges:
 			if typeof(e) != TYPE_ARRAY or e.size() < 2:
 				continue
-			if selected_code != "" and (str(e[0]) == selected_code or str(e[1]) == selected_code):
-				var ea := node_position(str(e[0]))
-				var eb := node_position(str(e[1]))
-				draw_line(ea, eb, Color(GOLD.r, GOLD.g, GOLD.b, 0.45), 3.0, true)
+			var code_a := str(e[0])
+			var code_b := str(e[1])
+			if selected_code != "" and (code_a == selected_code or code_b == selected_code):
+				var ea := node_position(code_a)
+				var eb := node_position(code_b)
+				# 1. 深色对比外晕（保证在浅色麦田与雪山地形上具有高对比轮廓）
+				draw_line(ea, eb, Color(0.12, 0.08, 0.04, 0.55), 9.0, true)
+				# 2. 金色发光能量底晕
+				draw_line(ea, eb, Color(0.96, 0.72, 0.18, 0.88), 5.5, true)
+				# 3. 动态亮白金虚线流光
+				var dash_offset := fmod(pulse * 24.0, 24.0)
+				_draw_animated_path(ea, eb, Color(1.0, 0.96, 0.80), 3.4, 16.0, 8.0, dash_offset)
 	else:
 		for e in edges:
 			if typeof(e) != TYPE_ARRAY or e.size() < 2:
@@ -275,8 +259,8 @@ func _draw() -> void:
 	for n in map_data.get("nodes", []):
 		_draw_node(n)
 
-	# 8. 战局图例（极简右上角木签）
-	_draw_mini_legend(mr)
+	# 8. 战局图例：已提升为固定 UI 控件（位于 Slice.gd），此处不再在沙盘画布内重绘，避免随相机平移错位
+	# _draw_mini_legend(mr)
 
 # 绘制军令动态行军路线（金光流动的箭头指示）
 func _draw_order_trajectory() -> void:
@@ -458,19 +442,23 @@ func _draw_node_over_art(n: Dictionary, pos: Vector2, faction_color: Color, is_s
 	draw_colored_polygon(flag, faction_color)
 	draw_polyline(flag, Color("#2b1e13"), 1.6, true)
 
-	# 3. 城名纸签（放在建筑基座下方，不盖城门）
+	# 3. 城名纸签（放在建筑基座下方，小高度设备下最低城上抬至安全区）
+	var is_compact_screen := size.y < 650.0
+	var is_lowest_node := is_compact_screen and pos.y > size.y * 0.70
 	var label := str(n.get("name", code))
-	var fsize := 15
-	var tw := 100.0
+	var fsize := 12 if is_compact_screen else 15
+	var tw := 86.0 if is_compact_screen else 100.0
 	if font != null:
-		tw = font.get_string_size(label, HORIZONTAL_ALIGNMENT_CENTER, -1, fsize).x + 28.0
-	var tag_rect := Rect2(pos + Vector2(-tw / 2.0, 48), Vector2(tw, 26))
+		tw = font.get_string_size(label, HORIZONTAL_ALIGNMENT_CENTER, -1, fsize).x + (18.0 if is_compact_screen else 28.0)
+	var tag_y_offset := -48.0 if is_lowest_node else (30.0 if is_compact_screen else 46.0)
+	var tag_h := 20.0 if is_compact_screen else 26.0
+	var tag_rect := Rect2(pos + Vector2(-tw / 2.0 - (12.0 if is_lowest_node else 0.0), tag_y_offset), Vector2(tw, tag_h))
 	draw_rect(tag_rect.grow(2), Color(0, 0, 0, 0.18))
 	draw_rect(tag_rect, CREAM)
-	draw_rect(tag_rect, faction_color, false, 2.2)
+	draw_rect(tag_rect, faction_color, false, 2.0)
 	draw_rect(tag_rect.grow(-3), Color("#cfbfa6"), false, 1.0)
 	if font != null:
-		draw_string(font, tag_rect.position + Vector2(0, 19), label, HORIZONTAL_ALIGNMENT_CENTER, tag_rect.size.x, fsize, INK_DARK)
+		draw_string(font, tag_rect.position + Vector2(0, tag_h - 5.0), label, HORIZONTAL_ALIGNMENT_CENTER, tag_rect.size.x, fsize, INK_DARK)
 
 	# 4. 归属小签
 	if font != null:
@@ -480,10 +468,13 @@ func _draw_node_over_art(n: Dictionary, pos: Vector2, faction_color: Color, is_s
 		if is_start:
 			owner_name += " [大营]"
 		var sub_color := Color("#8c3a32") if is_mine else Color("#5f5242")
-		var owner_rect := Rect2(pos + Vector2(-62, 82), Vector2(124, 20))
-		draw_rect(owner_rect, Color(CREAM.r, CREAM.g, CREAM.b, 0.88))
+		var owner_y_offset := -25.0 if is_lowest_node else (52.0 if is_compact_screen else 74.0)
+		var owner_h := 16.0 if is_compact_screen else 20.0
+		var owner_w := 104.0 if is_compact_screen else 124.0
+		var owner_rect := Rect2(pos + Vector2(-owner_w / 2.0 - (12.0 if is_lowest_node else 0.0), owner_y_offset), Vector2(owner_w, owner_h))
+		draw_rect(owner_rect, Color(CREAM.r, CREAM.g, CREAM.b, 0.90))
 		draw_rect(owner_rect, Color(faction_color.r, faction_color.g, faction_color.b, 0.45), false, 1.0)
-		draw_string(font, owner_rect.position + Vector2(0, 15), owner_name, HORIZONTAL_ALIGNMENT_CENTER, owner_rect.size.x, 12, sub_color)
+		draw_string(font, owner_rect.position + Vector2(0, owner_h - 4.0), owner_name, HORIZONTAL_ALIGNMENT_CENTER, owner_rect.size.x, 10 if is_compact_screen else 12, sub_color)
 
 	# 5. 高缩放文化标签/诗词
 	if zoom_level >= 1.35:
@@ -665,23 +656,23 @@ func _draw_landscape_accents(mr: Rect2) -> void:
 	])
 	draw_polyline(pts2, m_color, 4.0, true)
 
-# 右上方精致小图例
+# 精致半透明图例（放置于左侧空白山峦区，彻底避开听雨台屋顶与侧栏悬浮图标）
 func _draw_mini_legend(mr: Rect2) -> void:
 	if font == null:
 		return
-	var lx := mr.end.x - 220.0
-	var ly := mr.position.y + 24.0
-	var bg_rect := Rect2(lx - 12, ly - 8, 206, 36)
-	draw_rect(bg_rect, Color(1, 1, 1, 0.65))
-	draw_rect(bg_rect, Color("#baa789"), false, 1.0)
+	var lx := 14.0
+	var ly := 235.0 if mr.size.y < 650.0 else 315.0
+	var bg_rect := Rect2(lx - 2, ly - 4, 196, 28)
+	draw_rect(bg_rect, Color(0.12, 0.09, 0.07, 0.72))
+	draw_rect(bg_rect, Color(0.81, 0.51, 0.15, 0.50), false, 1.0)
 	
-	draw_string(font, Vector2(lx, ly + 16), "阵营：", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, INK_DARK)
+	draw_string(font, Vector2(lx + 6, ly + 15), "势态：", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, CREAM)
 	var tags = [["笔", CORAL], ["墨", C_MOLAN], ["中立", NEUTRAL]]
-	var ox := lx + 44.0
+	var ox := lx + 46.0
 	for t in tags:
-		draw_circle(Vector2(ox, ly + 12), 5.5, t[1])
-		draw_string(font, Vector2(ox + 8, ly + 16), str(t[0]), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, INK_LIGHT)
-		ox += 48.0
+		draw_circle(Vector2(ox, ly + 10), 5.0, t[1])
+		draw_string(font, Vector2(ox + 8, ly + 15), str(t[0]), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, GOLD_LIGHT)
+		ox += 46.0
 
 func _draw_animated_path(a: Vector2, b: Vector2, color: Color, width: float, dash: float, gap: float, offset: float) -> void:
 	var total_len := a.distance_to(b)

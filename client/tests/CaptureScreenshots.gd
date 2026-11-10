@@ -97,7 +97,7 @@ func _process(_delta: float) -> void:
 			frames = 0
 
 	# -----------------------------------------------------------------------
-	# 阶段二：手机竖屏 720×1280 (S01, S02)
+	# 阶段二：手机竖屏 720×1280 (S01, S02, 最低城池 N1/B_START 验收)
 	# -----------------------------------------------------------------------
 	elif step == 9:
 		if frames > 35:
@@ -110,27 +110,61 @@ func _process(_delta: float) -> void:
 		if frames > 30:
 			_capture("screenshot_phone_portrait_s02_drawer.png")
 			_capture("screenshot_phone_s02_drawer.png") # 兼容旧命名
-
-			# 切换到手机横屏 720×514
-			_set_viewport_size(720, 514)
-			scene._navigate_to("S01_MAP")
-			scene.city_drawer.visible = false
+			# 验收要求：测试手机竖屏点击最低城池 松风渡 (N1)
+			scene._open_city_drawer("N1")
 			step = 11
 			frames = 0
-
-	# -----------------------------------------------------------------------
-	# 阶段三：手机横屏 720×514 (S01, S02)
-	# -----------------------------------------------------------------------
 	elif step == 11:
-		if frames > 35:
-			_capture("screenshot_phone_landscape_s01_map.png")
-			scene._open_city_drawer("A_START")
+		if frames > 30:
+			_capture("screenshot_phone_portrait_lowest_n1.png")
+			# 验收要求：测试手机竖屏点击最低城池 雁回关 (B_START)
+			scene._open_city_drawer("B_START")
 			step = 12
 			frames = 0
 	elif step == 12:
 		if frames > 30:
+			_capture("screenshot_phone_portrait_lowest_bstart.png")
+			# 关闭抽屉，Dock 贴底，切换到手机横屏 720×514
+			scene._toggle_city_drawer(false)
+			_set_viewport_size(720, 514)
+			scene._navigate_to("S01_MAP")
+			step = 13
+			frames = 0
+
+	# -----------------------------------------------------------------------
+	# 阶段三：手机横屏 720×514 (S01, S02, 最低城池 N1/B_START 验收)
+	# -----------------------------------------------------------------------
+	elif step == 13:
+		if frames > 35:
+			_capture("screenshot_phone_landscape_s01_map.png")
+			scene._open_city_drawer("A_START")
+			step = 14
+			frames = 0
+	elif step == 14:
+		if frames > 30:
 			_capture("screenshot_phone_landscape_s02_drawer.png")
-			print("CAPTURE_SUITE COMPLETE (ALL RESOLUTIONS)")
+			# 验收要求：测试手机横屏点击最低城池 松风渡 (N1)
+			scene._open_city_drawer("N1")
+			step = 15
+			frames = 0
+	elif step == 15:
+		if frames > 30:
+			_capture("screenshot_phone_landscape_lowest_n1.png")
+			# 验收要求：测试手机横屏点击最低城池 雁回关 (B_START)
+			scene._open_city_drawer("B_START")
+			step = 16
+			frames = 0
+	elif step == 16:
+		if frames > 30:
+			_capture("screenshot_phone_landscape_lowest_bstart.png")
+			# 验收要求：测试关闭抽屉后 Dock 贴底恢复
+			scene._toggle_city_drawer(false)
+			step = 17
+			frames = 0
+	elif step == 17:
+		if frames > 25:
+			_capture("screenshot_phone_landscape_dock_restored.png")
+			print("CAPTURE_SUITE COMPLETE (ALL RESOLUTIONS & LOWEST NODES)")
 			get_tree().quit(0)
 
 func _set_viewport_size(w: int, h: int) -> void:

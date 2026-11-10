@@ -83,6 +83,8 @@ var touch_points: Dictionary = {}
 var initial_pinch_dist: float = 0.0
 var initial_pinch_zoom: float = 1.0
 
+var legend_panel: PanelContainer
+
 # S01 顶部 HUD & 导航栏
 var top_bar: Panel
 var gold_line: ColorRect
@@ -120,6 +122,8 @@ var city_routes_label: Label
 var city_tactical_label: Label
 var city_order_hint: Label
 var city_lore_label: Label
+var city_power_diff_label: Label
+var city_lore_dialog: AcceptDialog
 var city_action_advance_btn: Button
 var city_action_defend_btn: Button
 var city_action_scout_btn: Button
@@ -455,12 +459,14 @@ func _navigate_to(page_id: String) -> void:
 	current_page = page_id
 	if page_id == "S01_MAP":
 		map_shell.visible = true
+		if legend_panel != null and (city_drawer == null or not city_drawer.visible):
+			legend_panel.visible = true
 		for p in pages.values():
 			p.visible = false
 	else:
 		map_shell.visible = false
 		if city_drawer != null:
-			city_drawer.visible = false
+			_toggle_city_drawer(false)
 		if order_confirm_overlay != null:
 			order_confirm_overlay.visible = false
 		for k in pages.keys():
@@ -542,60 +548,77 @@ func _layout_responsive() -> void:
 				resource_bar.position = Vector2((w - rw_ideal) / 2.0, (top_h - 44.0) / 2.0)
 				resource_bar.size = Vector2(rw_ideal, 44.0)
 
-	# 4. 左右侧栏响应式折叠
+	# 4. 左右侧栏：贴边半透明印章式悬浮图标列（P0: 去除实心黑底板，全屏通栏）
 	var rail_top := top_h + (8.0 if is_compact_h else 14.0)
+	var rail_btn_size := Vector2(44, 44) if is_phone else Vector2(48, 48)
 	if left_rail != null:
-		if is_phone:
-			left_rail.position = Vector2(6, rail_top)
-			left_rail.size = Vector2(44, 175)
-		else:
-			left_rail.position = Vector2(16, rail_top)
-			left_rail.size = Vector2(130, 210)
+		left_rail.position = Vector2(8 if is_phone else 14, rail_top)
+		left_rail.size = Vector2(rail_btn_size.x, 220)
 			
 	if right_rail != null:
-		if is_phone:
-			right_rail.position = Vector2(w - 50, rail_top)
-			right_rail.size = Vector2(44, 135)
-		else:
-			right_rail.position = Vector2(w - 146, rail_top)
-			right_rail.size = Vector2(130, 160)
+		right_rail.position = Vector2(w - rail_btn_size.x - (8 if is_phone else 14), rail_top)
+		right_rail.size = Vector2(rail_btn_size.x, 220)
 			
 	for item in rail_buttons:
 		var btn: Button = item.get("btn", null)
 		if btn != null:
-			btn.text = str(item.get("icon", "")) if is_phone else str(item.get("full", ""))
-			btn.custom_minimum_size = Vector2(40 if is_phone else 126, 36 if is_compact_h else 42)
+			btn.text = str(item.get("icon", ""))
+			btn.tooltip_text = str(item.get("full", ""))
+			btn.custom_minimum_size = rail_btn_size
 
-	# 5. 底部导航栏
+	if legend_panel != null:
+		var leg_y := rail_top + (180.0 if is_compact_h else 225.0)
+		legend_panel.position = Vector2(8 if is_phone else 14, minf(leg_y, h - 85.0))
+
+	# 5. 底部导航栏（P0: 贴底通栏，半透明条）
 	if bottom_dock != null:
-		var dock_h := 46.0 if is_compact_h else (58.0 if is_phone else 66.0)
-		if is_phone:
-			bottom_dock.position = Vector2(0, h - dock_h)
-			bottom_dock.size = Vector2(w, dock_h)
+		var dock_h := 46.0 if is_compact_h else (56.0 if is_phone else 60.0)
+		bottom_dock.size = Vector2(w, dock_h)
+		# 抽屉滑出时 Dock 向下滑出屏幕让位；关闭时贴底
+		if city_drawer != null and city_drawer.visible:
+			bottom_dock.position = Vector2(0, h)
 		else:
-			var dw := minf(w - 60.0, 700.0)
-			bottom_dock.position = Vector2((w - dw) / 2.0, h - dock_h - 10.0)
-			bottom_dock.size = Vector2(dw, dock_h)
+			bottom_dock.position = Vector2(0, h - dock_h)
 			
 		if dock_row != null:
-			dock_row.position = Vector2(4.0, (dock_h - (38.0 if is_compact_h else 44.0)) / 2.0)
-			dock_row.size = Vector2(bottom_dock.size.x - 8.0, 38.0 if is_compact_h else 44.0)
+			var max_dock_w := minf(w - 20.0, 720.0)
+			dock_row.position = Vector2((w - max_dock_w) / 2.0, (dock_h - (38.0 if is_compact_h else 44.0)) / 2.0)
+			dock_row.size = Vector2(max_dock_w, 38.0 if is_compact_h else 44.0)
 			
 		for tab_id in dock_tab_buttons.keys():
 			var btn: Button = dock_tab_buttons[tab_id]
 			btn.add_theme_font_size_override("font_size", 12 if is_compact_h else 14)
 
-	# 6. S02 城池底部抽屉
+	# 6. S02 城池底部抽屉（P1: 高度压到紧凑战术条 ≤28–32%，杜绝大块黑白空卡）
 	if city_drawer != null:
-		var drawer_w := w if is_portrait else minf(w - 20.0, 720.0)
-		var drawer_h := 220.0 if is_compact_h else (300.0 if is_portrait else 290.0)
+		var drawer_w := w if (is_phone or is_portrait) else minf(w - 40.0, 840.0)
+		var drawer_h := 168.0 if is_compact_h else 210.0
 		city_drawer.size = Vector2(drawer_w, drawer_h)
-		city_drawer.position = Vector2((w - drawer_w) / 2.0, h - drawer_h - (0.0 if is_phone else 10.0))
+		city_drawer.position = Vector2((w - drawer_w) / 2.0, h - drawer_h)
 		if city_drawer_margin != null:
-			city_drawer_margin.position = Vector2(12.0, 8.0)
-			city_drawer_margin.size = Vector2(drawer_w - 24.0, drawer_h - 16.0)
+			city_drawer_margin.position = Vector2(10.0, 4.0 if is_compact_h else 6.0)
+			city_drawer_margin.size = Vector2(drawer_w - 20.0, drawer_h - (8.0 if is_compact_h else 10.0))
 		if city_drawer_handle != null:
-			city_drawer_handle.position = Vector2((drawer_w - 44.0) / 2.0, 4.0)
+			city_drawer_handle.position = Vector2((drawer_w - 44.0) / 2.0, 3.0)
+
+		# 动作按钮尺寸与字号紧凑响应，杜绝在 720x514 手机横屏截断
+		var act_btn_h := 34.0 if is_compact_h else 42.0
+		var act_font_size := 12 if is_compact_h else 14
+		if city_action_advance_btn != null:
+			city_action_advance_btn.custom_minimum_size.y = act_btn_h
+			city_action_advance_btn.add_theme_font_size_override("font_size", act_font_size)
+		if city_action_defend_btn != null:
+			city_action_defend_btn.custom_minimum_size.y = act_btn_h
+			city_action_defend_btn.add_theme_font_size_override("font_size", act_font_size)
+		if city_action_scout_btn != null:
+			city_action_scout_btn.custom_minimum_size = Vector2(56 if is_compact_h else 66, act_btn_h)
+			city_action_scout_btn.add_theme_font_size_override("font_size", 11 if is_compact_h else 13)
+		if city_action_supply_btn != null:
+			city_action_supply_btn.custom_minimum_size = Vector2(56 if is_compact_h else 66, act_btn_h)
+			city_action_supply_btn.add_theme_font_size_override("font_size", 11 if is_compact_h else 13)
+		if city_action_withdraw_btn != null:
+			city_action_withdraw_btn.custom_minimum_size = Vector2(56 if is_compact_h else 66, act_btn_h)
+			city_action_withdraw_btn.add_theme_font_size_override("font_size", 11 if is_compact_h else 13)
 
 	# 7. S03 军令确认浮层
 	if order_confirm_modal != null:
@@ -656,6 +679,10 @@ func _on_map_view_gui_input(event: InputEvent) -> void:
 				drag_start = mb.position
 				pan_start = map_pan
 			else:
+				if is_dragging and (mb.position - drag_start).length() < 6.0:
+					# 单击地图空白处，收起城池抽屉，恢复底部通栏 Dock
+					if city_drawer != null and city_drawer.visible:
+						_toggle_city_drawer(false)
 				is_dragging = false
 	elif event is InputEventMouseMotion:
 		var mm := event as InputEventMouseMotion
@@ -725,11 +752,31 @@ func focus_city(code: String) -> void:
 	if map == null or map_view == null:
 		return
 	var pos: Vector2 = map.node_position(code)
-	var drawer_h := city_drawer.size.y if (city_drawer != null and city_drawer.visible) else 240.0
+	var drawer_h := city_drawer.size.y if (city_drawer != null and city_drawer.visible) else (size.y * 0.28)
 	var top_h := top_bar.size.y if top_bar != null else 60.0
-	var target_screen_y := top_h + maxf(map_view.size.y - top_h - drawer_h, 80.0) / 2.0
-	var target_screen := Vector2(map_view.size.x / 2.0, target_screen_y)
-	map_pan = target_screen - pos * map_zoom
+	var avail_h := maxf(map_view.size.y - top_h - drawer_h, 120.0)
+
+	# 手机竖屏（720×1280）：所有 5 个城池（A_START到最低的B_START）天然处于顶部 68% 可视区内，
+	# 且离抽屉顶边（y=1070）至少有 100~195px 充足安全空间；
+	# 未放大时不执行垂直位移，确保水彩底图 100% 贴底铺满，杜绝任何露白与平移空白带。
+	if size.x < size.y and map_zoom <= 1.05:
+		map_pan = Vector2.ZERO
+		_clamp_pan()
+		return
+
+	# 横屏与平板环境：
+	var target_screen_y := top_h + avail_h / 2.0
+	if size.y < 650.0:
+		# 手机横屏（720×514）：紧凑视口
+		if pos.y > top_h + avail_h - 20.0:
+			# 最低城（N1, B_START）上抬到抽屉上方安全区
+			var desired_screen_y := top_h + avail_h - 14.0
+			map_pan.y = desired_screen_y - pos.y * map_zoom
+		else:
+			map_pan.y = 0.0
+		map_pan.x = 0.0
+	else:
+		map_pan = Vector2(map_view.size.x / 2.0, target_screen_y) - pos * map_zoom
 	_clamp_pan()
 
 func _clamp_pan() -> void:
@@ -748,9 +795,21 @@ func _clamp_pan() -> void:
 		map_pan.x = clampf(map_pan.x, vw - mw, 0.0)
 		
 	if mh <= vh:
-		map_pan.y = (vh - mh) / 2.0
+		# 未缩放状态（地图高度未超过视口）：
+		if size.x < size.y:
+			# 竖屏：保持 0，地图底图 100% 铺满视口，绝不向上平移漏出底板
+			map_pan.y = 0.0
+		elif city_drawer != null and city_drawer.visible:
+			# 横屏且抽屉打开：最大上抬量严格限制在抽屉高度内减去 24px 安全重叠，
+			# 确保地图底边（vh + map_pan.y）始终深藏于抽屉（vh - drawer_h）之后至少 24px，绝不露底
+			var max_lift := maxf(city_drawer.size.y - 24.0, 0.0)
+			map_pan.y = clampf(map_pan.y, -max_lift, 0.0)
+		else:
+			map_pan.y = 0.0
 	else:
-		map_pan.y = clampf(map_pan.y, vh - mh, 0.0)
+		# 放大状态（mh > vh）：允许在实际超出的地图尺寸范围内拖拽平移
+		var drawer_lift := city_drawer.size.y if (city_drawer != null and city_drawer.visible) else 0.0
+		map_pan.y = clampf(map_pan.y, vh - mh - drawer_lift, 0.0)
 		
 	map_world.position = map_pan
 	map_world.scale = Vector2(map_zoom, map_zoom)
@@ -952,6 +1011,7 @@ func _build_game() -> void:
 
 	_build_top_hud()
 	_build_side_rails()
+	_build_map_legend()
 	_build_bottom_dock()
 	_build_city_drawer()
 	_build_order_confirm_modal()
@@ -976,15 +1036,16 @@ func _build_game() -> void:
 	add_child(poll_timer)
 
 # 构建 S01 顶部 HUD
+# 构建 S01 顶部 HUD（P0: 改半透明深墨，让地图从下方透出来）
 func _build_top_hud() -> void:
 	top_bar = Panel.new()
 	top_bar.position = Vector2.ZERO
 	top_bar.size = Vector2(size.x, 72)
-	top_bar.add_theme_stylebox_override("panel", _style(INK_DARK, GOLD, 0, 0))
+	top_bar.add_theme_stylebox_override("panel", _style(Color(0.12, 0.09, 0.07, 0.78), Color.TRANSPARENT, 0, 0))
 	map_shell.add_child(top_bar)
 
 	gold_line = ColorRect.new()
-	gold_line.color = GOLD
+	gold_line.color = Color(0.81, 0.51, 0.15, 0.75)
 	gold_line.position = Vector2(0, 70)
 	gold_line.size = Vector2(size.x, 2)
 	top_bar.add_child(gold_line)
@@ -1080,12 +1141,12 @@ func _build_top_hud() -> void:
 	logout_btn.pressed.connect(_on_logout)
 	hud_right_box.add_child(logout_btn)
 
-# 构建 S01 左右侧边栏
+# 构建 S01 左右贴边半透明悬浮图标列（P0: 去除实心黑底栏，改为贴边半透明印章）
 func _build_side_rails() -> void:
 	rail_buttons.clear()
 	left_rail = VBoxContainer.new()
-	left_rail.position = Vector2(20, 90)
-	left_rail.size = Vector2(136, 220)
+	left_rail.position = Vector2(14, 86)
+	left_rail.size = Vector2(48, 220)
 	left_rail.add_theme_constant_override("separation", 8)
 	map_shell.add_child(left_rail)
 
@@ -1095,8 +1156,8 @@ func _build_side_rails() -> void:
 	_add_rail_item(left_rail, "🎯 任务", "🎯", func(): _navigate_to("S13_TASKS"))
 
 	right_rail = VBoxContainer.new()
-	right_rail.position = Vector2(size.x - 156, 90)
-	right_rail.size = Vector2(136, 215)
+	right_rail.position = Vector2(size.x - 62, 86)
+	right_rail.size = Vector2(48, 220)
 	right_rail.add_theme_constant_override("separation", 8)
 	map_shell.add_child(right_rail)
 
@@ -1107,30 +1168,51 @@ func _build_side_rails() -> void:
 
 func _add_rail_item(parent: Control, full_text: String, icon_only: String, on_click: Callable) -> void:
 	var btn := Button.new()
-	btn.text = full_text
-	btn.custom_minimum_size = Vector2(parent.size.x, 42)
-	btn.add_theme_font_size_override("font_size", 14)
+	btn.text = icon_only
+	btn.tooltip_text = full_text
+	btn.custom_minimum_size = Vector2(46, 46)
+	btn.add_theme_font_size_override("font_size", 16)
 	btn.add_theme_color_override("font_color", Color("#f5ecd7"))
-	btn.add_theme_stylebox_override("normal", _style(Color("#261e18", 0.92), Color("#5c4632"), 1, 8, 6))
-	btn.add_theme_stylebox_override("hover", _style(Color("#3a2d22"), GOLD, 1, 8, 6))
-	btn.add_theme_stylebox_override("pressed", _style(Color("#1d1612"), GOLD, 1, 8, 6))
+	btn.add_theme_stylebox_override("normal", _style(Color(0.12, 0.09, 0.07, 0.72), Color(0.81, 0.51, 0.15, 0.65), 1.5, 8, 4))
+	btn.add_theme_stylebox_override("hover", _style(Color(0.22, 0.16, 0.12, 0.88), GOLD, 1.5, 8, 4))
+	btn.add_theme_stylebox_override("pressed", _style(Color(0.08, 0.06, 0.04, 0.95), CORAL, 1.5, 8, 4))
 	btn.pressed.connect(on_click)
 	parent.add_child(btn)
 	rail_buttons.append({"btn": btn, "full": full_text, "icon": icon_only})
 
-# 构建 S01 底部导航栏（5 项主导航）
+# 构建固定 UI 图例（P0: 固定于屏幕视口左侧，绝不随相机平移缩放错位，不遮挡任何城池）
+func _build_map_legend() -> void:
+	legend_panel = PanelContainer.new()
+	legend_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	legend_panel.add_theme_stylebox_override("panel", _style(Color(0.12, 0.09, 0.07, 0.78), Color(0.81, 0.51, 0.15, 0.65), 1, 6, 4))
+	map_shell.add_child(legend_panel)
+
+	var hbox := HBoxContainer.new()
+	hbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hbox.add_theme_constant_override("separation", 6)
+	legend_panel.add_child(hbox)
+
+	var tag_title := _label("势态：", 11, CREAM)
+	tag_title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hbox.add_child(tag_title)
+
+	var tags = [["🔴笔", CORAL], ["🔵墨", C_MOLAN], ["⚪中立", Color("#dfcaa7")]]
+	for t in tags:
+		var l := _label(str(t[0]), 11, t[1])
+		l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		hbox.add_child(l)
+
+# 构建 S01 底部导航栏（P0: 贴底通栏半透明条）
 func _build_bottom_dock() -> void:
 	bottom_dock = Panel.new()
-	bottom_dock.position = Vector2(340, 915)
-	bottom_dock.size = Vector2(720, 68)
-	bottom_dock.add_theme_stylebox_override("panel", _style(Color("#1a1511", 0.95), GOLD, 1, 16))
+	bottom_dock.position = Vector2(0, size.y - 60)
+	bottom_dock.size = Vector2(size.x, 60)
+	bottom_dock.add_theme_stylebox_override("panel", _style(Color(0.12, 0.09, 0.07, 0.85), Color(0.81, 0.51, 0.15, 0.7), 1, 0))
 	map_shell.add_child(bottom_dock)
 
 	dock_row = HBoxContainer.new()
-	dock_row.position = Vector2(8, 10)
-	dock_row.size = Vector2(704, 48)
 	dock_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	dock_row.add_theme_constant_override("separation", 6)
+	dock_row.add_theme_constant_override("separation", 8)
 	bottom_dock.add_child(dock_row)
 
 	_add_dock_tab(dock_row, "S01_MAP", "🗺️", "沙盘地图", func(): _navigate_to("S01_MAP"))
@@ -1155,41 +1237,54 @@ func _add_dock_tab(parent: Control, page_id: String, icon: String, title: String
 	parent.add_child(btn)
 	dock_tab_buttons[page_id] = btn
 
+# 抽屉显示状态与底部 Dock 避让让位联动
+func _toggle_city_drawer(is_show: bool) -> void:
+	if city_drawer == null:
+		return
+	city_drawer.visible = is_show
+	if legend_panel != null:
+		legend_panel.visible = not is_show
+	if bottom_dock != null:
+		var dock_h := bottom_dock.size.y
+		var target_y := size.y if is_show else (size.y - dock_h)
+		bottom_dock.position.y = target_y
+	_clamp_pan()
+
 # ---------------------------------------------------------------------------
-# S02 城池底部抽屉（轻触城池自底滑出的情报令案卡）
+# S02 城池底部抽屉（P1: 高度压至 28-30%，战术面板首屏优先）
 # ---------------------------------------------------------------------------
 
 func _build_city_drawer() -> void:
 	city_drawer = Panel.new()
-	city_drawer.position = Vector2(280, 640)
-	city_drawer.size = Vector2(840, 290)
-	city_drawer.add_theme_stylebox_override("panel", _style(Color("#201913", 0.98), Color("#a8864b"), 2, 16))
+	city_drawer.position = Vector2(280, 720)
+	city_drawer.size = Vector2(840, 280)
+	city_drawer.add_theme_stylebox_override("panel", _style(Color("#1e1712", 0.96), Color(0.81, 0.51, 0.15, 0.85), 2, 12))
 	city_drawer.visible = false
 	map_shell.add_child(city_drawer)
 
-	# 顶部抽屉拖拽把手（强化自底滑出抽屉的视觉暗喻）
+	# 顶部抽屉拖拽把手
 	city_drawer_handle = Panel.new()
-	city_drawer_handle.position = Vector2((city_drawer.size.x - 44) / 2.0, 4)
-	city_drawer_handle.size = Vector2(44, 4)
+	city_drawer_handle.position = Vector2((city_drawer.size.x - 44) / 2.0, 3)
+	city_drawer_handle.size = Vector2(44, 3)
 	city_drawer_handle.add_theme_stylebox_override("panel", _style(Color("#8a7862"), Color.TRANSPARENT, 0, 2))
 	city_drawer.add_child(city_drawer_handle)
 
 	city_drawer_margin = MarginContainer.new()
-	city_drawer_margin.position = Vector2(16, 12)
-	city_drawer_margin.size = Vector2(808, 266)
+	city_drawer_margin.position = Vector2(16, 8)
+	city_drawer_margin.size = Vector2(808, 264)
 	city_drawer.add_child(city_drawer_margin)
 
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 6)
 	city_drawer_margin.add_child(v)
 
-	# 1. 顶部城池标牌与关闭
+	# 1. 顶部城池标牌与功能按钮
 	var h_top := HBoxContainer.new()
 	h_top.add_theme_constant_override("separation", 10)
 	v.add_child(h_top)
 
 	city_avatar_box = Panel.new()
-	city_avatar_box.custom_minimum_size = Vector2(40, 40)
+	city_avatar_box.custom_minimum_size = Vector2(38, 38)
 	city_avatar_box.add_theme_stylebox_override("panel", _style(BAMBOO, GOLD, 1, 8))
 	h_top.add_child(city_avatar_box)
 
@@ -1200,7 +1295,7 @@ func _build_city_drawer() -> void:
 	city_avatar_box.add_child(city_avatar_icon)
 
 	var title_v := VBoxContainer.new()
-	title_v.add_theme_constant_override("separation", 2)
+	title_v.add_theme_constant_override("separation", 1)
 	title_v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	h_top.add_child(title_v)
 
@@ -1217,20 +1312,35 @@ func _build_city_drawer() -> void:
 	city_faction_badge = _label("归属：中立关塞", 12, Color("#d5c4a1"))
 	row_name.add_child(city_faction_badge)
 
+	# 右上角小“传”文脉按钮与关闭
+	var top_btns := HBoxContainer.new()
+	top_btns.add_theme_constant_override("separation", 8)
+	h_top.add_child(top_btns)
+
+	var lore_btn := Button.new()
+	lore_btn.text = "📜 传"
+	lore_btn.tooltip_text = "查看城池文脉与小传"
+	lore_btn.custom_minimum_size = Vector2(48, 32)
+	lore_btn.add_theme_font_size_override("font_size", 13)
+	lore_btn.add_theme_color_override("font_color", GOLD_LIGHT)
+	lore_btn.add_theme_stylebox_override("normal", _style(Color("#2d2218", 0.9), GOLD, 1, 6, 4))
+	lore_btn.pressed.connect(_open_city_lore_dialog)
+	top_btns.add_child(lore_btn)
+
 	var close_btn := Button.new()
 	close_btn.text = "✕"
-	close_btn.custom_minimum_size = Vector2(30, 30)
+	close_btn.custom_minimum_size = Vector2(32, 32)
 	close_btn.add_theme_font_size_override("font_size", 14)
 	close_btn.add_theme_stylebox_override("normal", _style(Color.TRANSPARENT, Color("#baa789"), 1, 15))
-	close_btn.pressed.connect(func(): city_drawer.visible = false)
-	h_top.add_child(close_btn)
+	close_btn.pressed.connect(func(): _toggle_city_drawer(false))
+	top_btns.add_child(close_btn)
 
-	# 2. 城池两列属性卡片（守备情报 + 驰道地理，C 宣纸纸卡内衬）
+	# 2. 战术属性卡片（守备+战力差 / 驰道+军令）
 	var info_row := HBoxContainer.new()
 	info_row.add_theme_constant_override("separation", 10)
 	v.add_child(info_row)
 
-	# 左卡：城防守备
+	# 左卡：城防守备与敌我战力差
 	var def_box := PanelContainer.new()
 	def_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	def_box.add_theme_stylebox_override("panel", _panel_style(C_XUANZHI, Color("#dfcaa7"), 1, 6, 8))
@@ -1240,10 +1350,12 @@ func _build_city_drawer() -> void:
 	def_box.add_child(def_v)
 	city_def_badge = _label("🛡️ 城防守备：3 / 3 点 · 坚固", 13, C_ZHUSHA)
 	def_v.add_child(city_def_badge)
-	city_garrison_label = _label("👥 驻防状态：守备严整", 12, Color("#554433"))
+	city_power_diff_label = _label("⚔️ 战意差：我方 0 vs 敌方 0", 12, Color("#554433"))
+	def_v.add_child(city_power_diff_label)
+	city_garrison_label = _label("👥 驻防状态：守备严整", 11, Color("#665544"))
 	def_v.add_child(city_garrison_label)
 
-	# 右卡：驰道地理与战术地位
+	# 右卡：驰道地理与今日军令
 	var route_box := PanelContainer.new()
 	route_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	route_box.add_theme_stylebox_override("panel", _panel_style(C_XUANZHI, Color("#dfcaa7"), 1, 6, 8))
@@ -1253,21 +1365,17 @@ func _build_city_drawer() -> void:
 	route_box.add_child(route_v)
 	city_routes_label = _label("🗺️ 连通驰道：--", 13, C_WOOD_DESK)
 	route_v.add_child(city_routes_label)
-	city_tactical_label = _label("🎯 战术地位：兵家必争，交锋要冲", 12, Color("#554433"))
+	city_order_hint = _label("📢 今日军令：待命中 · 请选下方指令", 12, C_MOLAN)
+	route_v.add_child(city_order_hint)
+	city_tactical_label = _label("🎯 战术地位：兵家必争，交锋要冲", 11, Color("#665544"))
 	route_v.add_child(city_tactical_label)
 
-	# 3. 今日军令状态条
-	var order_banner := PanelContainer.new()
-	order_banner.add_theme_stylebox_override("panel", _style(C_MOLAN, C_TENGHUANG, 1, 6, 6))
-	v.add_child(order_banner)
-	city_order_hint = _label("今日军令：待命中 · 请选择下方军略指令", 12, C_XUANZHI)
-	order_banner.add_child(city_order_hint)
-
-	# 4. 动作按钮组
+	# 3. 动作操作栏（首屏优先：主动作大按钮突出，次级动作紧凑排布）
 	var h_act := HBoxContainer.new()
 	h_act.add_theme_constant_override("separation", 8)
 	v.add_child(h_act)
 
+	# 主动作：进军与驻守
 	city_action_advance_btn = _button("⚔️ 进军攻打", C_ZHUSHA, 42)
 	city_action_advance_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	city_action_advance_btn.pressed.connect(_on_city_advance_pressed)
@@ -1278,28 +1386,69 @@ func _build_city_drawer() -> void:
 	city_action_defend_btn.pressed.connect(_on_city_defend_pressed)
 	h_act.add_child(city_action_defend_btn)
 
-	city_action_scout_btn = _button("🔍 斥候探报", C_MOLAN, 42)
-	city_action_scout_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	# 次级动作：斥候、补给、撤销
+	city_action_scout_btn = _button("🔍 斥候", Color("#33485c"), 42)
+	city_action_scout_btn.custom_minimum_size = Vector2(66, 42)
+	city_action_scout_btn.add_theme_font_size_override("font_size", 13)
 	city_action_scout_btn.pressed.connect(func(): _toast("【斥候急报】据点守备严整，敌军哨探在侧。"))
 	h_act.add_child(city_action_scout_btn)
 
-	city_action_supply_btn = _button("🌾 调度粮草", Color("#423429"), 42)
-	city_action_supply_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	city_action_supply_btn = _button("🌾 补给", Color("#423429"), 42)
+	city_action_supply_btn.custom_minimum_size = Vector2(66, 42)
+	city_action_supply_btn.add_theme_font_size_override("font_size", 13)
 	city_action_supply_btn.pressed.connect(func(): _toast("【军需官】本据点粮草充足，士饱马腾！"))
 	h_act.add_child(city_action_supply_btn)
 
 	city_action_withdraw_btn = _button("↩️ 撤销", Color("#5c4c3d"), 42)
-	city_action_withdraw_btn.custom_minimum_size = Vector2(72, 42)
+	city_action_withdraw_btn.custom_minimum_size = Vector2(66, 42)
+	city_action_withdraw_btn.add_theme_font_size_override("font_size", 13)
 	city_action_withdraw_btn.pressed.connect(_withdraw_order)
 	h_act.add_child(city_action_withdraw_btn)
 
-	# 5. 城池小传：填满抽屉底部，避免大块空面板
-	var lore_box := PanelContainer.new()
-	lore_box.add_theme_stylebox_override("panel", _panel_style(C_XUANZHI, Color("#dfcaa7"), 1, 6, 8))
-	v.add_child(lore_box)
-	city_lore_label = _label("城池小传：--", 12, Color("#443322"))
+	# 4. 独立城池小传弹窗（从抽屉首屏移出，点右上角【📜 传】打开）
+	_build_city_lore_dialog()
+
+func _build_city_lore_dialog() -> void:
+	city_lore_dialog = AcceptDialog.new()
+	city_lore_dialog.title = "城池文脉与小传"
+	city_lore_dialog.ok_button_text = "知悉"
+	city_lore_dialog.min_size = Vector2i(460, 240)
+
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 16)
+	margin.add_theme_constant_override("margin_right", 16)
+	margin.add_theme_constant_override("margin_top", 14)
+	margin.add_theme_constant_override("margin_bottom", 14)
+	city_lore_dialog.add_child(margin)
+
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 10)
+	margin.add_child(v)
+
+	city_lore_label = _label("城池小传：--", 14, Color("#443322"))
 	city_lore_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	lore_box.add_child(city_lore_label)
+	v.add_child(city_lore_label)
+
+	add_child(city_lore_dialog)
+
+func _open_city_lore_dialog() -> void:
+	if city_lore_dialog != null:
+		city_lore_dialog.popup_centered()
+
+func _my_faction_code() -> String:
+	var f: Variant = me.get("faction", null)
+	if typeof(f) == TYPE_DICTIONARY:
+		return str(f.get("code", "bamboo"))
+	elif typeof(f) == TYPE_STRING and str(f) != "":
+		return str(f)
+	return "bamboo"
+
+func _my_faction_name() -> String:
+	var f: Variant = me.get("faction", null)
+	if typeof(f) == TYPE_DICTIONARY:
+		return str(f.get("name", "笔"))
+	var code := _my_faction_code()
+	return "笔" if code == "bamboo" else ("墨" if code == "ink" else "中立")
 
 func _open_city_drawer(code: String) -> void:
 	var n: Dictionary = map.node_by_code(code)
@@ -1339,11 +1488,27 @@ func _open_city_drawer(code: String) -> void:
 	var def_points := int(n.get("defense", 3))
 	city_def_badge.text = "🛡️ 城防守备：%d / 3 点" % def_points
 	if is_mine:
-		city_garrison_label.text = "👥 驻防状态：本方青竹学子结阵据守"
-	elif typeof(owner) == TYPE_DICTIONARY:
-		city_garrison_label.text = "👥 驻防状态：敌对势力布防中"
+		city_garrison_label.text = "👥 驻防状态：我方据点 · 守备严整"
+	elif typeof(owner) == TYPE_DICTIONARY and str(owner.get("code", "")) != "" and str(owner.get("code", "")) != "neutral":
+		city_garrison_label.text = "👥 驻防状态：敌方据点 · 戒备森严"
 	else:
-		city_garrison_label.text = "👥 驻防状态：中立守军驻防"
+		city_garrison_label.text = "👥 驻防状态：中立关塞 · 虚席以待"
+
+	var pts_bamboo := int(n.get("points_bamboo", 0))
+	if pts_bamboo == 0:
+		pts_bamboo = int(n.get("points_bi", 0))
+	var pts_ink := int(n.get("points_ink", 0))
+	if pts_ink == 0:
+		pts_ink = int(n.get("points_mo", 0))
+	var my_fcode := _my_faction_code()
+	var diff_str := ""
+	if my_fcode == "bi" or my_fcode == "bamboo":
+		diff_str = "⚔️ 战意差：我方(笔) %d vs 敌方(墨) %d" % [pts_bamboo, pts_ink]
+	elif my_fcode == "mo" or my_fcode == "ink":
+		diff_str = "⚔️ 战意差：我方(墨) %d vs 敌方(笔) %d" % [pts_ink, pts_bamboo]
+	else:
+		diff_str = "⚔️ 战意差：笔阵营 %d vs 墨阵营 %d" % [pts_bamboo, pts_ink]
+	city_power_diff_label.text = diff_str
 
 	var neighbors := _neighbors(code)
 	city_routes_label.text = "🗺️ 连通驰道：%s" % ("、".join(neighbors) if neighbors.size() > 0 else "无")
@@ -1358,6 +1523,8 @@ func _open_city_drawer(code: String) -> void:
 		"B_START": lore = "鸿雁关山，塞下秋声。墨点精据此为营，与云麓关遥遥相望。"
 		_: lore = "山河要冲，兵家必争。"
 	city_lore_label.text = "城池小传：" + lore
+	if city_lore_dialog != null:
+		city_lore_dialog.title = "【%s】城池文脉与小传" % c_name
 
 	var role := str(me.get("role", "player"))
 	var can_edit := bool(state.get("can_edit", false)) and role == "player" and not order_submitting
@@ -1374,7 +1541,7 @@ func _open_city_drawer(code: String) -> void:
 	else:
 		city_order_hint.text = "今日军令：待命中 · 请选择下方军略指令"
 
-	city_drawer.visible = true
+	_toggle_city_drawer(true)
 	_layout_responsive()
 	focus_city(code)
 
@@ -1501,7 +1668,7 @@ func _open_order_confirm() -> void:
 func _on_confirm_order_pressed() -> void:
 	order_confirm_overlay.visible = false
 	if city_drawer != null:
-		city_drawer.visible = false
+		_toggle_city_drawer(false)
 	if confirm_action_type == "advance":
 		_submit_advance_direct(confirm_origin_code, confirm_target_code)
 	else:
