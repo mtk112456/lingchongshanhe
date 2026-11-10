@@ -1,0 +1,62 @@
+【GPT 复审：暂缓合并，先修 3 条】
+
+请读：
+
+```text
+art_src/gpt/LAYOUT_REREVIEW_GPT.md
+```
+
+P0 4/5、P1 4/5，主地图视口问题已解决。但合并前必须修：
+
+## 1. 手机横屏底部布局
+
+- S01：底部 Dock 应可见、可用；最低城（松风渡/雁回关）的城名和归属要留在安全区，不能被底边裁掉。
+- S02：主按钮、关闭入口、必要信息要完整显示，不能切掉按钮下半部。
+- 关闭抽屉后，Dock 必须恢复贴底。
+
+## 2. 最低节点 + 实际相邻路线验收
+
+- 手机竖屏、横屏分别点 **松风渡** 和 **雁回关**，各拍一张。
+- 截图必须同时看到：选中城、城名/归属、至少一条合法选中路线、主操作按钮。
+- 图例和悬浮入口不能盖住它们。
+- 路线高亮必须与实际邻接关系一致，不要出现“细直线 + 画中弯路”两套语言。
+
+## 3. 敌我标签写反
+
+新 S02 头部写“云麓关归属笔阵营”，玩家身份也是笔阵营，但战意差写：
+
+```text
+我方(墨) 0 vs 敌方(笔) 0
+```
+
+原因：`me.get("faction")` 是字典，不是字符串 `"bamboo"`。请改成：
+
+- 用 `me.faction.code`（`bi` / `mo`）或 `me.faction.name` 判断；
+- 或者直接改成“攻方 / 守方”标签，不写死笔/墨；
+- 用笔、墨两个身份各验一次。
+
+## 交付
+
+修完重跑：
+
+```text
+godot --headless --path client res://tests/ClientSmoke.tscn
+godot --headless --path client res://tests/ReplaySmoke.tscn
+godot --path client res://tests/CaptureScreenshots.tscn
+```
+
+重拍并保留：
+
+```text
+screenshot_tablet_s01_map.png
+screenshot_tablet_s02_drawer.png
+screenshot_tablet_s03_order_confirm.png
+screenshot_phone_portrait_s01_map.png
+screenshot_phone_portrait_s02_drawer.png
+screenshot_phone_landscape_s01_map.png
+screenshot_phone_landscape_s02_drawer.png
+```
+
+更新 `client/LAYOUT_FIX_REPORT.md`，注明这 3 条怎么修、截图路径。
+
+不要改 server/API；不要复制商业 UI/素材。

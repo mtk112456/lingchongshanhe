@@ -1,0 +1,41 @@
+【P0/P1 布局复审 · 只判断，不改代码】
+
+Antigravity 已完成 P0/P1，请对照你之前的 `art_src/gpt/LAYOUT_REVIEW_GPT.md` 复审。
+
+先读：
+
+```text
+client/LAYOUT_FIX_REPORT.md
+client/LAYOUT_REVIEW_ANTIGRAVITY.md
+PAGE_DESIGN.md（含 2026-11-10 修正）
+DECISIONS.md（ADR-009）
+```
+
+新截图：
+
+```text
+client/tests/screenshot_tablet_s01_map.png
+client/tests/screenshot_tablet_s02_drawer.png
+client/tests/screenshot_tablet_s03_order_confirm.png
+client/tests/screenshot_phone_portrait_s01_map.png
+client/tests/screenshot_phone_portrait_s02_drawer.png
+client/tests/screenshot_phone_landscape_s01_map.png
+client/tests/screenshot_phone_landscape_s02_drawer.png
+```
+
+请回答：
+
+1. P0 是否解决了你之前说的“桌游案台 vs 从战场上方观察”的核心问题？主地图重新打 1–5 分。
+2. 左右实心侧栏改悬浮图标、地图全屏、Dock 贴底、2px 纸边，是否成立？有没有新的可读性/触控问题？
+3. P1 城池抽屉压到 210px、小传收进“传”、Dock 让位，是否解决了“偏阅读、不像战术面板”的问题？重新打 1–5 分。
+4. 手机竖屏/横屏的最低节点、选中路线、抽屉遮挡，是否还有问题？
+5. 还剩哪些“大厂感”差距？（只列 P0/P1 范围内的，不要扩到战报/阵营/赛季）
+6. 是否建议合并？如果否，列出必须修的 1–3 条。
+
+输出写到：
+
+```text
+art_src/gpt/LAYOUT_REREVIEW_GPT.md
+```
+
+不要改 client/ 或 server/ 代码。不要复制商业 UI/素材。

@@ -1,0 +1,41 @@
+【AI-only 美术管线 · 第一包】
+
+请先读：
+
+```text
+ART_PIPELINE_AI.md
+```
+
+角色：GPT 负责全部美术；Antigravity 负责设计系统 + Godot；OpenCode 负责后处理/验收/合并。不引入人工。
+
+本轮只做第一包，不要改 client/server：
+
+## 1. 写 `art_src/gpt/STYLE_BIBLE.md`
+
+内容：
+
+- 混合路线：江南百景图的纸雕水墨底 + 率土/三战的地图可读性 + 忘川的班宠卡面；
+- 色板 token（宣纸/朱砂/墨蓝/竹青/藤黄/天青/深墨）；
+- 线宽/描边/纸纹/光照/阴影规则；
+- 城池/地标：透明、无底座、无文字、64px 可辨；
+- UI 材质：奶油纸卡、9-patch 边距、三态明度差；
+- 地图：地形底与城池/路线必须分层，不能烤死；
+- 不做什么：3D、写实、塑料金属、高饱和糖果色、可读文字；
+- AI-only 质量门：alpha 四角=0、64px、9-patch 拉伸、色板容差、APK 体积。
+
+## 2. 生成 `art_src/gpt/ai_pipeline_v1/map_terrain_base.png`
+
+- 2560×1600 RGB；
+- 只有地形：山川、河流、云雾、田野、树木；
+- **不要城池、不要路线、不要文字/字母/数字/伪文字**；
+- 参考 `art_src/gpt/style_c.png` / `keyart_c.png` 的水彩纸雕质感；
+- 构图要给 5 城留出可放置空间：左上关隘、右上亭台、中心草庐、左下渡口、右下关楼；
+- 边缘可裁切，适合全屏铺满。
+
+## 3. 可选：材质/光照板
+
+`art_src/gpt/ai_pipeline_v1/material_board.png`：纸纹、木纹、石墙、水面、金属描金、阴影；图中不要文字。
+
+输出后写 `art_src/gpt/ai_pipeline_v1/HANDOFF.md`：文件、尺寸、alpha、用途、下一步。
+
+不要 commit，不要改 client/server。
