@@ -30,14 +30,14 @@ declare(strict_types=1);
 final class BattleEngine
 {
     public const TICK_MAX = 60;
-    public const WALL_BASE = 1000;
+    public const WALL_BASE = 1400;
     public const SIEGE_INTERVAL = 6;
-    public const SIEGE_MULT = 1.5;
+    public const SIEGE_MULT = 1.2;
 
     public const TYPES = [
-        'cav'    => ['name' => '骑', 'atk' => 1.15, 'def' => 0.85, 'interval' => 4, 'row' => 'front'],
+        'cav'    => ['name' => '骑', 'atk' => 1.10, 'def' => 0.85, 'interval' => 4, 'row' => 'front'],
         'shield' => ['name' => '盾', 'atk' => 0.85, 'def' => 1.25, 'interval' => 5, 'row' => 'front'],
-        'arc'    => ['name' => '弓', 'atk' => 1.45, 'def' => 0.80, 'interval' => 5, 'row' => 'back'],
+        'arc'    => ['name' => '弓', 'atk' => 1.60, 'def' => 0.80, 'interval' => 5, 'row' => 'back'],
         'spear'  => ['name' => '枪', 'atk' => 1.05, 'def' => 1.00, 'interval' => 5, 'row' => 'front'],
     ];
 
