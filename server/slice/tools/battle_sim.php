@@ -2,52 +2,104 @@
 declare(strict_types=1);
 
 /**
- * 自动战斗原型 · 确定性模拟
+ * 将 · 兵 · 种 · 令 · 确定性模拟
+ *
+ * 兵力 = 班宠战力（四维 + 等级 + 成长）
+ * 3 张将令 = 3 支队伍，平分兵力
+ * 兵种 = 步/骑/弓/器，修正攻防，不改兵力
  *
  * 用法：
- *   php battle_sim.php          跑 4096 组合，输出平衡矩阵
- *   php battle_sim.php demo     输出一场示例战斗的 JSON 回放
- *
- * 设计：
- *   - 3 路，每路 1 攻 1 守；
- *   - 攻方从 0 出发，守方固定在 4，城门在 5；
- *   - 60 tick，无随机数，同部署同结果；
- *   - 服务端算结果，客户端只回放事件。
+ *   php battle_sim.php          64×64 兵种组合矩阵
+ *   php battle_sim.php general  4×4 将军角色矩阵
+ *   php battle_sim.php demo     一场示例战斗的回放 JSON
  */
 
 const TICK_MAX = 60;
-const GATE_HP = 16;
+const WALL_BASE = 2400;
 
-const UNIT_TYPES = [
-    'atk' => ['name' => '攻', 'hp' => 6,  'atk' => 4, 'interval' => 4, 'range' => 1],
-    'def' => ['name' => '守', 'hp' => 12, 'atk' => 1, 'interval' => 5, 'range' => 1, 'armor' => 1],
-    'tac' => ['name' => '谋', 'hp' => 4,  'atk' => 1, 'interval' => 4, 'range' => 2, 'debuff' => 1],
-    'sup' => ['name' => '运', 'hp' => 7,  'atk' => 2, 'interval' => 5, 'range' => 1, 'heal' => 4],
+// 班宠四维（对应 pet_templates）
+const PET_BASE_HP = 1000;
+const PET_BASE_ATK = 100;
+const PET_BASE_DEF = 100;
+const PET_BASE_SPD = 100;
+const PET_GROWTH = 1.00;
+const PET_LEVEL = 10;
+
+const TROOP_TYPES = [
+    'inf'   => ['name' => '步', 'atk' => 1.0, 'def' => 1.1, 'interval' => 5, 'range' => 1, 'tactic' => 'hold'],
+    'cav'   => ['name' => '骑', 'atk' => 1.0, 'def' => 0.85, 'interval' => 4, 'range' => 1, 'tactic' => 'raid'],
+    'arc'   => ['name' => '弓', 'atk' => 1.1, 'def' => 0.75, 'interval' => 5, 'range' => 2, 'tactic' => 'scout'],
+    'siege' => ['name' => '器', 'atk' => 1.0, 'def' => 1.0, 'interval' => 5, 'range' => 1, 'tactic' => 'fire'],
 ];
 
-function makeUnit(string $id, string $side, int $lane, string $type): array
+const GENERALS = [
+    'atk' => ['name' => '攻将', 'atk' => 1.10, 'def' => 1.00],
+    'def' => ['name' => '守将', 'atk' => 1.00, 'def' => 1.10],
+    'tac' => ['name' => '谋将', 'atk' => 1.00, 'def' => 1.00, 'enemy_atk' => 0.95],
+    'sup' => ['name' => '运将', 'atk' => 1.00, 'def' => 1.00, 'heal' => 0.05],
+];
+
+function petPower(): float
 {
-    $t = UNIT_TYPES[$type];
+    $base = (PET_BASE_HP + PET_BASE_ATK * 2 + PET_BASE_DEF * 2 + PET_BASE_SPD) / 2;
+    return $base * (1 + 0.05 * (PET_LEVEL - 1)) * PET_GROWTH;
+}
+
+function counter(string $attacker, string $defender): float
+{
+    if ($attacker === 'siege') {
+        return 0.7;
+    }
+    if ($defender === 'siege') {
+        return 1.2;
+    }
+    $map = [
+        'inf' => ['arc' => 1.2, 'cav' => 0.8],
+        'cav' => ['inf' => 1.2, 'arc' => 0.8],
+        'arc' => ['cav' => 1.2, 'inf' => 0.8],
+    ];
+    return $map[$attacker][$defender] ?? 1.0;
+}
+
+function makeUnit(string $id, string $side, int $lane, string $type, string $general): array
+{
+    $t = TROOP_TYPES[$type];
+    $g = GENERALS[$general];
+    $total = petPower();
+    $troops = $total / 3;
+    if ($side === 'def') {
+        $troops *= 1.10;
+    }
+    $baseAtk = $troops * 0.05 + 10;
+
     return [
         'id' => $id,
         'side' => $side,
         'lane' => $lane,
         'type' => $type,
-        'hp' => $t['hp'],
-        'max_hp' => $t['hp'],
-        'atk' => $t['atk'],
+        'general' => $general,
+        'troops' => $troops,
+        'max_troops' => $troops,
+        'atk' => $baseAtk * $t['atk'] * ($g['atk'] ?? 1.0),
+        'def_mult' => $t['def'] * ($g['def'] ?? 1.0),
         'interval' => $t['interval'],
-        'range' => ($side === 'def' && $type === 'def') ? 2 : $t['range'],
-        'armor' => $t['armor'] ?? 0,
-        'debuff' => $t['debuff'] ?? 0,
-        'heal' => $t['heal'] ?? 0,
+        'range' => $side === 'def' ? max($t['range'], 2) : $t['range'],
+        'tactic' => $t['tactic'],
         'pos' => $side === 'att' ? 0 : 4,
         'alive' => true,
-        'debuff_until' => 0,
     ];
 }
 
-function act(string $uid, array &$units, int $lane, int $tick, int &$gate, array &$events): void
+function attackMultiplier(array $u, int $tick, string $targetType): float
+{
+    $m = 1.0;
+    if ($u['tactic'] === 'raid' && $tick <= 10) {
+        $m *= 1.2;
+    }
+    return $m * counter($u['type'], $targetType);
+}
+
+function act(string $uid, array &$units, int $lane, int $tick, float &$wall, array &$events): void
 {
     $u = &$units[$uid];
     if (!$u['alive']) {
@@ -55,76 +107,46 @@ function act(string $uid, array &$units, int $lane, int $tick, int &$gate, array
         return;
     }
 
-    // 运：优先治疗同路残血友军
-    if ($u['heal'] > 0) {
-        $ally = null;
-        $ratio = 0.7;
-        foreach ($units as $aid => &$a) {
-            if ($a['side'] !== $u['side'] || $a['lane'] !== $lane || !$a['alive'] || $aid === $uid) {
-                continue;
-            }
-            $r = $a['hp'] / $a['max_hp'];
-            if ($r < $ratio) {
-                $ratio = $r;
-                $ally = $aid;
-            }
-        }
-        unset($a);
-        if ($ally !== null) {
-            $before = $units[$ally]['hp'];
-            $units[$ally]['hp'] = min($units[$ally]['max_hp'], $before + $u['heal']);
-            $buffed = false;
-            if (($units[$ally]['buffs'] ?? 0) < 2) {
-                $units[$ally]['atk'] += 1;
-                $units[$ally]['buffs'] = ($units[$ally]['buffs'] ?? 0) + 1;
-                $buffed = true;
-            }
-            $events[] = [
-                't' => $tick, 'lane' => $lane, 'unit' => $uid, 'action' => 'heal',
-                'target' => $ally, 'amount' => $units[$ally]['hp'] - $before,
-                'target_hp' => $units[$ally]['hp'], 'buffed' => $buffed,
-            ];
-            unset($u);
-            return;
-        }
+    // 运将光环：每 15 tick 回 5%
+    if ($u['general'] === 'sup' && $tick % 15 === 0) {
+        $heal = $u['max_troops'] * 0.05;
+        $before = $u['troops'];
+        $u['troops'] = min($u['max_troops'], $u['troops'] + $heal);
+        $events[] = [
+            't' => $tick, 'lane' => $lane, 'unit' => $uid, 'action' => 'general_heal',
+            'amount' => round($u['troops'] - $before), 'troops' => round($u['troops']),
+        ];
     }
 
-    // 找同路最近的敌人
     $enemy = null;
-    $bestDist = PHP_INT_MAX;
+    $best = PHP_INT_MAX;
     foreach ($units as $eid => &$e) {
         if ($e['side'] === $u['side'] || $e['lane'] !== $lane || !$e['alive']) {
             continue;
         }
         $d = abs($e['pos'] - $u['pos']);
-        if ($d < $bestDist) {
-            $bestDist = $d;
+        if ($d < $best) {
+            $best = $d;
             $enemy = $eid;
         }
     }
     unset($e);
 
     if ($enemy !== null) {
-        if ($bestDist <= $u['range']) {
-            $dmg = $u['atk'] - $units[$enemy]['armor'];
-            if ($u['debuff_until'] >= $tick) {
-                $dmg -= 1;
-            }
-            $dmg = max(1, $dmg);
-            $units[$enemy]['hp'] -= $dmg;
-            $killed = $units[$enemy]['hp'] <= 0;
+        if ($best <= $u['range']) {
+            $dmg = $u['atk'] * attackMultiplier($u, $tick, $units[$enemy]['type']);
+            $dmg /= max(0.5, $units[$enemy]['def_mult']);
+            $units[$enemy]['troops'] -= $dmg;
+            $killed = $units[$enemy]['troops'] <= 0;
             if ($killed) {
-                $units[$enemy]['hp'] = 0;
+                $units[$enemy]['troops'] = 0;
                 $units[$enemy]['alive'] = false;
             }
             $events[] = [
                 't' => $tick, 'lane' => $lane, 'unit' => $uid, 'action' => 'attack',
-                'target' => $enemy, 'damage' => $dmg,
-                'target_hp' => $units[$enemy]['hp'], 'killed' => $killed,
+                'target' => $enemy, 'damage' => round($dmg),
+                'target_troops' => round($units[$enemy]['troops']), 'killed' => $killed,
             ];
-            if ($u['debuff'] > 0 && !$killed) {
-                $units[$enemy]['debuff_until'] = $tick + 3;
-            }
         } elseif ($u['side'] === 'att') {
             $next = min($units[$enemy]['pos'] - 1, $u['pos'] + 1);
             if ($next > $u['pos']) {
@@ -140,7 +162,6 @@ function act(string $uid, array &$units, int $lane, int $tick, int &$gate, array
         return;
     }
 
-    // 同路没有敌人
     if ($u['side'] === 'att') {
         if ($u['pos'] < 5) {
             $from = $u['pos'];
@@ -150,99 +171,83 @@ function act(string $uid, array &$units, int $lane, int $tick, int &$gate, array
                 'from' => $from, 'to' => $u['pos'],
             ];
         } else {
-            $dmg = max(1, $u['atk'] - ($u['debuff_until'] >= $tick ? 1 : 0));
-            $gate -= $dmg;
+            $m = $u['type'] === 'siege' ? 2.0 : 1.0;
+            if ($u['tactic'] === 'fire') {
+                $m *= 1.5;
+            }
+            $dmg = $u['atk'] * $m;
+            $wall -= $dmg;
             $events[] = [
-                't' => $tick, 'lane' => $lane, 'unit' => $uid, 'action' => 'gate',
-                'damage' => $dmg, 'gate_hp' => max(0, $gate),
+                't' => $tick, 'lane' => $lane, 'unit' => $uid, 'action' => 'wall',
+                'damage' => round($dmg), 'wall' => max(0, round($wall)),
             ];
         }
     }
     unset($u);
 }
 
-function gateTurret(array &$units, int $tick, array &$events): void
+function runBattle(array $attComp, string $attGeneral, array $defComp, string $defGeneral, ?float $wall = null): array
 {
-    $target = null;
-    $best = -1;
-    foreach ($units as $uid => $u) {
-        if ($u['side'] !== 'att' || !$u['alive'] || $u['pos'] < 2) {
-            continue;
-        }
-        if ($u['pos'] > $best) {
-            $best = $u['pos'];
-            $target = $uid;
-        }
-    }
-    if ($target === null) {
-        return;
-    }
-    $dmg = 1;
-    $units[$target]['hp'] -= $dmg;
-    $killed = $units[$target]['hp'] <= 0;
-    if ($killed) {
-        $units[$target]['hp'] = 0;
-        $units[$target]['alive'] = false;
-    }
-    $events[] = [
-        't' => $tick, 'lane' => $units[$target]['lane'], 'unit' => 'GATE', 'action' => 'turret',
-        'target' => $target, 'damage' => $dmg,
-        'target_hp' => $units[$target]['hp'], 'killed' => $killed,
-    ];
-}
-
-function runBattle(array $att, array $def): array
-{
+    $wall = $wall ?? WALL_BASE;
     $units = [];
     foreach ([1, 2, 3] as $lane) {
-        $units["A$lane"] = makeUnit("A$lane", 'att', $lane, $att[$lane]);
-        $units["D$lane"] = makeUnit("D$lane", 'def', $lane, $def[$lane]);
+        $units["A$lane"] = makeUnit("A$lane", 'att', $lane, $attComp[$lane], $attGeneral);
+        $units["D$lane"] = makeUnit("D$lane", 'def', $lane, $defComp[$lane], $defGeneral);
     }
-    $gate = GATE_HP;
+
+    // 谋将：敌方全军攻击 -5%
+    if ($attGeneral === 'tac') {
+        foreach ($units as &$u) {
+            if ($u['side'] === 'def') $u['atk'] *= 0.95;
+        }
+        unset($u);
+    }
+    if ($defGeneral === 'tac') {
+        foreach ($units as &$u) {
+            if ($u['side'] === 'att') $u['atk'] *= 0.95;
+        }
+        unset($u);
+    }
+
     $events = [];
     $tick = 0;
-
     for ($tick = 1; $tick <= TICK_MAX; $tick++) {
-        if ($gate > 0 && $tick % 8 === 0) {
-            $gate = min(GATE_HP, $gate + 1);
-        }
-        if ($gate > 0 && $tick % 4 === 0) {
-            gateTurret($units, $tick, $events);
-        }
         foreach ([1, 2, 3] as $lane) {
-            foreach (["A$lane", "D$lane"] as $uid) {
-                act($uid, $units, $lane, $tick, $gate, $events);
-                if ($gate <= 0) {
+            foreach (["D$lane", "A$lane"] as $uid) {
+                act($uid, $units, $lane, $tick, $wall, $events);
+                if ($wall <= 0) {
                     break 3;
                 }
             }
         }
     }
 
-    if ($gate <= 0) {
+    $ratio = $wall / WALL_BASE;
+    if ($wall <= 0) {
         $score = 2;
-    } elseif ($gate <= 3) {
+    } elseif ($ratio < 0.5) {
         $score = 1;
-    } elseif ($gate <= 7) {
+    } elseif ($ratio < 0.8) {
         $score = 0;
     } else {
         $score = -1;
     }
 
     return [
-        'att' => $att,
-        'def' => $def,
-        'gate_hp' => max(0, $gate),
+        'att' => $attComp,
+        'att_general' => $attGeneral,
+        'def' => $defComp,
+        'def_general' => $defGeneral,
+        'wall' => max(0, round($wall)),
         'score' => $score,
         'ticks' => $tick,
         'events' => $events,
-        'units' => $units,
     ];
 }
 
 function compositions(): array
 {
-    $types = array_keys(UNIT_TYPES);
+    $types = array_keys(TROOP_TYPES);
     $out = [];
     foreach ($types as $a) {
         foreach ($types as $b) {
@@ -259,101 +264,111 @@ function avg(array $xs): float
     return count($xs) === 0 ? 0.0 : array_sum($xs) / count($xs);
 }
 
-function demo(): void
-{
-    $att = [1 => 'atk', 2 => 'tac', 3 => 'sup'];
-    $def = [1 => 'def', 2 => 'atk', 3 => 'def'];
-    $r = runBattle($att, $def);
-    echo json_encode([
-        'tick_max' => TICK_MAX,
-        'gate_hp' => GATE_HP,
-        'att' => $att,
-        'def' => $def,
-        'result' => [
-            'gate_hp' => $r['gate_hp'],
-            'score' => $r['score'],
-            'ticks' => $r['ticks'],
-        ],
-        'events' => $r['events'],
-    ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) . PHP_EOL;
-}
-
 function matrix(): void
 {
     $comps = compositions();
     $rows = [];
     $typeScores = [];
     $typeWins = [];
-    $typeCounts = [];
+    $allScores = [];
+    $allWalls = [];
+    $allTicks = [];
 
     foreach ($comps as $att) {
-        $key = implode('-', $att);
-        $rows[$key] = ['scores' => [], 'gates' => [], 'ticks' => [], 'wins' => 0];
-
+        $key = implode('-', array_map(fn($t) => TROOP_TYPES[$t]['name'], $att));
+        $rows[$key] = ['scores' => [], 'walls' => [], 'ticks' => [], 'wins' => 0];
         foreach ($comps as $def) {
-            $r = runBattle($att, $def);
+            $r = runBattle($att, 'def', $def, 'def');
             $rows[$key]['scores'][] = $r['score'];
-            $rows[$key]['gates'][] = $r['gate_hp'];
+            $rows[$key]['walls'][] = $r['wall'];
             $rows[$key]['ticks'][] = $r['ticks'];
-            if ($r['score'] >= 1) {
-                $rows[$key]['wins']++;
-            }
+            $rows[$key]['wins'] += $r['score'] >= 1 ? 1 : 0;
+            $allScores[] = $r['score'];
+            $allWalls[] = $r['wall'];
+            $allTicks[] = $r['ticks'];
             foreach ($att as $t) {
                 $typeScores[$t][] = $r['score'];
                 $typeWins[$t][] = $r['score'] >= 1 ? 1 : 0;
-                $typeCounts[$t] = ($typeCounts[$t] ?? 0) + 1;
             }
         }
     }
 
     uasort($rows, fn($a, $b) => avg($b['scores']) <=> avg($a['scores']));
 
-    echo "== 攻方组合排名（对全部 64 种守方）==\n";
-    printf("%-14s %8s %8s %8s %8s\n", '组合', '均分', '胜率', '平均城门', '平均tick');
+    echo "== 攻方编成排名（对全部 64 种守方，双方守将）==\n";
+    printf("%-10s %8s %8s %8s %8s\n", '编成', '均分', '胜率', '平均城墙', '平均tick');
     $i = 0;
     foreach ($rows as $key => $d) {
-        if ($i++ >= 12) {
-            break;
-        }
-        printf(
-            "%-14s %8.2f %7.1f%% %8.1f %8.1f\n",
-            $key,
-            avg($d['scores']),
-            $d['wins'] / 64 * 100,
-            avg($d['gates']),
-            avg($d['ticks'])
-        );
+        if ($i++ >= 12) break;
+        printf("%-10s %8.2f %7.1f%% %8.0f %8.1f\n", $key, avg($d['scores']), $d['wins'] / 64 * 100, avg($d['walls']), avg($d['ticks']));
     }
 
-    echo "\n== 单位类型平均表现 ==\n";
-    printf("%-6s %8s %8s %8s\n", '类型', '均分', '胜率', '样本');
-    foreach (['atk', 'def', 'tac', 'sup'] as $t) {
-        printf(
-            "%-6s %8.2f %7.1f%% %8d\n",
-            UNIT_TYPES[$t]['name'],
-            avg($typeScores[$t] ?? [0]),
-            avg($typeWins[$t] ?? [0]) * 100,
-            $typeCounts[$t] ?? 0
-        );
+    echo "\n== 兵种平均表现 ==\n";
+    printf("%-6s %8s %8s\n", '兵种', '均分', '胜率');
+    foreach (['inf', 'cav', 'arc', 'siege'] as $t) {
+        printf("%-6s %8.2f %7.1f%%\n", TROOP_TYPES[$t]['name'], avg($typeScores[$t] ?? [0]), avg($typeWins[$t] ?? [0]) * 100);
     }
 
-    $allScores = [];
-    $allGates = [];
-    foreach ($rows as $d) {
-        $allScores = array_merge($allScores, $d['scores']);
-        $allGates = array_merge($allGates, $d['gates']);
-    }
     echo "\n== 总体 ==\n";
+    printf("宠物战力：%.0f（%.1f 级）\n", petPower(), PET_LEVEL);
+    printf("每队兵力：%.0f\n", petPower() / 3);
     printf("对局数：%d\n", count($allScores));
     printf("平均分：%.2f\n", avg($allScores));
-    printf("平均城门：%.1f\n", avg($allGates));
+    printf("平均城墙：%.0f / %d\n", avg($allWalls), WALL_BASE);
+    printf("平均时长：%.1f tick\n", avg($allTicks));
     printf("攻方胜率（分>=1）：%.1f%%\n", count(array_filter($allScores, fn($s) => $s >= 1)) / count($allScores) * 100);
+}
+
+function generalMatrix(): void
+{
+    $comp = [1 => 'inf', 2 => 'cav', 3 => 'arc'];
+    $roles = array_keys(GENERALS);
+    echo "== 将军角色矩阵（固定 步-骑-弓 编成，各 200 局）==\n";
+    printf("%-8s", '攻\\守');
+    foreach ($roles as $r) printf("%8s", GENERALS[$r]['name']);
+    echo "\n";
+    foreach ($roles as $a) {
+        printf("%-8s", GENERALS[$a]['name']);
+        foreach ($roles as $d) {
+            $wins = 0;
+            $n = 200;
+            for ($i = 0; $i < $n; $i++) {
+                $r = runBattle($comp, $a, $comp, $d);
+                $wins += $r['score'] >= 1 ? 1 : 0;
+            }
+            printf("%7.1f%%", $wins / $n * 100);
+        }
+        echo "\n";
+    }
+}
+
+function demo(): void
+{
+    $r = runBattle(
+        [1 => 'cav', 2 => 'inf', 3 => 'siege'],
+        'def',
+        [1 => 'inf', 2 => 'inf', 3 => 'arc'],
+        'atk'
+    );
+    echo json_encode([
+        'tick_max' => TICK_MAX,
+        'pet_power' => round(petPower()),
+        'troops_per_lane' => round(petPower() / 3),
+        'wall_base' => WALL_BASE,
+        'att' => $r['att'],
+        'att_general' => $r['att_general'],
+        'def' => $r['def'],
+        'def_general' => $r['def_general'],
+        'result' => ['wall' => $r['wall'], 'score' => $r['score'], 'ticks' => $r['ticks']],
+        'events' => $r['events'],
+    ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) . PHP_EOL;
 }
 
 $mode = $argv[1] ?? 'matrix';
 if ($mode === 'demo') {
     demo();
+} elseif ($mode === 'general') {
+    generalMatrix();
 } else {
     matrix();
 }
-
