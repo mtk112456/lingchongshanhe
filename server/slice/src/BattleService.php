@@ -9,10 +9,12 @@ require_once __DIR__ . '/BattleEngine.php';
 final class BattleService
 {
     private BattleEngine $engine;
+    private ?PDO $pdo;
 
-    public function __construct(?BattleEngine $engine = null)
+    public function __construct(?BattleEngine $engine = null, ?PDO $pdo = null)
     {
         $this->engine = $engine ?? new BattleEngine();
+        $this->pdo = $pdo;
     }
 
     /**
@@ -83,5 +85,77 @@ final class BattleService
             $sum += self::petPower($pet) / 3;
         }
         return $sum * self::supportMultiplier($supporters);
+    }
+
+    /**
+     * 保存一场战斗：完整 log + 结果摘要。
+     */
+    public function saveBattle(
+        int $gameId,
+        int $turnId,
+        string $nodeCode,
+        ?int $attFactionId,
+        ?int $defFactionId,
+        array $attacker,
+        array $defender,
+        array $result
+    ): int {
+        if ($this->pdo === null) {
+            throw new RuntimeException('PDO_REQUIRED');
+        }
+        $stmt = $this->pdo->prepare(
+            'INSERT INTO slice_battles
+                (game_id, turn_id, node_code, att_faction_id, def_faction_id,
+                 attacker_json, defender_json, log_json, result_json)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        );
+        $stmt->execute([
+            $gameId,
+            $turnId,
+            $nodeCode,
+            $attFactionId,
+            $defFactionId,
+            $this->encode($attacker),
+            $this->encode($defender),
+            $this->encode($result),
+            $this->encode([
+                'wall' => $result['wall'],
+                'score' => $result['score'],
+                'ticks' => $result['ticks'],
+            ]),
+        ]);
+        return (int)$this->pdo->lastInsertId();
+    }
+
+    public function getBattle(int $id): ?array
+    {
+        if ($this->pdo === null) {
+            throw new RuntimeException('PDO_REQUIRED');
+        }
+        $stmt = $this->pdo->prepare('SELECT * FROM slice_battles WHERE id = ?');
+        $stmt->execute([$id]);
+        $row = $stmt->fetch();
+        if (!$row) {
+            return null;
+        }
+        return [
+            'id' => (int)$row['id'],
+            'game_id' => (int)$row['game_id'],
+            'turn_id' => (int)$row['turn_id'],
+            'node_code' => (string)$row['node_code'],
+            'attacker' => json_decode((string)$row['attacker_json'], true),
+            'defender' => json_decode((string)$row['defender_json'], true),
+            'log' => json_decode((string)$row['log_json'], true),
+            'result' => json_decode((string)$row['result_json'], true),
+        ];
+    }
+
+    private function encode(array $data): string
+    {
+        $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if ($json === false) {
+            throw new RuntimeException('JSON_ENCODE_FAILED');
+        }
+        return $json;
     }
 }
