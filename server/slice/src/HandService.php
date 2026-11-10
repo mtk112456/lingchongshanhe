@@ -123,6 +123,8 @@ final class HandService
             throw new InvalidArgumentException('BAD_REQUEST_KEY');
         }
 
+        $this->assertSeasonTarget($gameId, $turnId, $targetNodeCode);
+
         $hand = $this->getOrCreateHand($gameId, $turnId, $playerId);
         $orders = $this->getOrders($turnId, $playerId);
 
@@ -237,6 +239,61 @@ final class HandService
         $stmt->execute([$gameId, $playerId, $weekNo, $this->encode(array_values($types))]);
 
         return ['types' => array_values($types), 'changed_once' => $row !== false];
+    }
+
+    /**
+     * 12+1 城赛季规则：
+     *   - 长安第 3 周才开放；
+     *   - 第 4 周只能打长安或长安邻城。
+     * 5 节点切片没有 king 节点，直接跳过。
+     */
+    private function assertSeasonTarget(int $gameId, int $turnId, string $target): void
+    {
+        $stmt = $this->pdo->prepare('SELECT turn_no FROM slice_turns WHERE id = ? AND game_id = ?');
+        $stmt->execute([$turnId, $gameId]);
+        $turnNo = $stmt->fetchColumn();
+        if ($turnNo === false) {
+            return;
+        }
+        $week = Clock::weekOfTurn((int)$turnNo);
+
+        $stmt = $this->pdo->prepare('SELECT node_type FROM slice_nodes WHERE game_id = ? AND node_code = ?');
+        $stmt->execute([$gameId, $target]);
+        $nodeType = $stmt->fetchColumn();
+        if ($nodeType === false) {
+            throw new InvalidArgumentException('UNKNOWN_TARGET');
+        }
+
+        $stmt = $this->pdo->prepare(
+            "SELECT node_code FROM slice_nodes WHERE game_id = ? AND node_type = 'king' LIMIT 1"
+        );
+        $stmt->execute([$gameId]);
+        $kingCode = $stmt->fetchColumn();
+        if ($kingCode === false) {
+            return;
+        }
+        $kingCode = (string)$kingCode;
+
+        if ($week < 3 && $target === $kingCode) {
+            throw new InvalidArgumentException('CHANGAN_LOCKED');
+        }
+
+        if ($week >= 4) {
+            $allowed = [$kingCode];
+            $stmt = $this->pdo->prepare(
+                'SELECT a_node_code, b_node_code FROM slice_edges
+                 WHERE game_id = ? AND (a_node_code = ? OR b_node_code = ?)'
+            );
+            $stmt->execute([$gameId, $kingCode, $kingCode]);
+            foreach ($stmt->fetchAll() as $edge) {
+                $allowed[] = (string)$edge['a_node_code'] === $kingCode
+                    ? (string)$edge['b_node_code']
+                    : (string)$edge['a_node_code'];
+            }
+            if (!in_array($target, $allowed, true)) {
+                throw new InvalidArgumentException('SEASON_FINAL_WEEK');
+            }
+        }
     }
 
     private function encode(array $data): string
