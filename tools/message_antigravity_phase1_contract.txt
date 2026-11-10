@@ -1,0 +1,45 @@
+【Phase 1 客户端接入 · 后端已全部就绪】
+
+端到端 21 项 PASS：登录 → state → 编成 → 出 3 令 → 战斗 → 结算 → state。
+
+请读：
+
+```text
+PHASE1_CLIENT_CONTRACT.md
+```
+
+优先接这 3 块：
+
+1. `GET /api/slice/state`
+   - `map.nodes[].morale` / `morale_cap`
+   - `hand.cards` / `hand.redraw_used`
+   - `composition.types`
+   - `card_orders`
+
+2. 手牌 / 编成
+   - `POST /api/slice/order/play`
+   - `POST /api/slice/order/withdraw`
+   - `POST /api/slice/composition`
+   - `POST /api/slice/hand/redraw`
+
+3. 战斗回放
+   - `POST /api/slice/battle/demo` → 返回 `log`
+   - 直接把 `log` 传给 `BattleReplay.play_data(log)`
+   - `POST /api/slice/battle/settle` → 更新民心/易主
+   - `GET /api/slice/battle?id=` → 历史回放
+
+注意：`log.units` 已经是**数组**（刚修），`log.events` 和 `log.result` 与你的样例一致。
+
+本地验收命令：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/phase1_e2e.ps1
+```
+
+期望：
+
+```text
+PHASE1_E2E PASS
+```
+
+不要改后端/schema；UI 侧改 `Api.gd`、`Slice.gd`、`CompositionPanel.gd`、`BattleReplay.gd`。
