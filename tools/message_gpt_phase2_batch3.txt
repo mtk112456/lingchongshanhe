@@ -1,0 +1,109 @@
+【第三批美术 + P1.5 视觉审查】
+
+后端 P1.5 已合入，客户端 P1.5 已交付。现在缺两块美术。
+
+---
+
+## A. 第三批：8 座专属城池
+
+输出目录：
+
+```text
+art_src/gpt/PHASE2_CITY_ASSETS/
+```
+
+统一规格：
+
+```text
+512×512 RGBA PNG，透明底
+无文字、无阵营色全身染色
+建筑底座中点在画布底部中央
+64px 缩略仍能分辨城型
+```
+
+城池与文脉：
+
+| 文件 | 城 | 类型 | 文脉 |
+|---|---|---|---|
+| city_hanzhong.png | 汉中 | 关隘 | 栈道连云 |
+| city_xiangyang.png | 襄阳 | 关隘 | 汉江锁钥 |
+| city_taiyuan.png | 太原 | 文脉 | 晋祠古松 |
+| city_luoyang.png | 洛阳 | 文脉 | 伊洛文脉 |
+| city_jiangling.png | 江陵 | 渡口 | 楚泽清风 |
+| city_changsha.png | 长沙 | 文脉 | 岳麓青苍 |
+| city_kuaiji.png | 会稽 | 水乡 | 兰亭曲水 |
+| city_shouchun.png | 寿春 | 关隘 | 八公淮水 |
+
+风格沿用 `MAP12_LAYOUT_CONCEPT_V2.png`：青绿金碧水墨，不画真实中国轮廓。
+
+## B. 4 面阵营旗，改用后端 code
+
+第二批用了 `shuang` / `dan`，后端是 `yan` / `zhi`。请重出并统一命名：
+
+```text
+flag_faction_bi.png   笔  朱砂 #B83B32
+flag_faction_mo.png   墨  墨蓝 #1E3A5F
+flag_faction_yan.png  砚  竹青 #276F57
+flag_faction_zhi.png  纸  藤黄 #C9A227
+```
+
+128×128 RGBA，透明底，字形可辨，不要整旗渐变。
+
+## C. 4 张阵营卡背
+
+```text
+card_back_bi.png / card_back_mo.png / card_back_yan.png / card_back_zhi.png
+256×384 RGBA
+```
+
+用于手牌背面/未发牌，和 `card_frame_ninepatch.png` 同一纸感。
+
+## D. 赛季 Key Art（可选，先出 1 张）
+
+```text
+season_keyart.png
+2560×1440 JPG/PNG，无文字
+主题：长安 + 九州 + 四阵营旗，青绿金碧水墨
+```
+
+## E. P1.5 视觉审查（不写代码）
+
+看这些截图：
+
+```text
+client/tests/screenshot_p15_hand_cards_4states.png
+client/tests/screenshot_p15_hand_cards_withdrawn.png
+client/tests/screenshot_p15_intel_dialog.png
+client/tests/screenshot_p15_battle_result_tactics.png
+client/tests/screenshot_p15_war_report_tactics.png
+client/tests/screenshot_phone_landscape_p15_hand_cards.png
+```
+
+重点：
+
+```text
+1. 手机 720×514 手牌文字是否 ≥12px
+2. 4 态是否一眼分清
+3. 哨探情报的“疑似”是否不会被误读为真实兵力
+4. 战报逐队解释是否能在 3 秒内看懂
+5. 1400×1000 手牌条是否被底部裁切
+```
+
+输出：
+
+```text
+art_src/gpt/PHASE15_UI_REVIEW.md
+```
+
+结论分：阻断 / 建议 / 通过。不要改 client/server 代码。
+
+---
+
+优先顺序：
+
+```text
+1. 4 面旗改名（最影响接入）
+2. 8 座城
+3. P1.5 视觉审查
+4. 卡背 / Key Art
+```

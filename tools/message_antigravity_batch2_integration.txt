@@ -1,0 +1,82 @@
+【P2 美术接入 + P1.5 截图复核】
+
+## 1. 接入第二批美术（现在还在 art_src，没进 client）
+
+源目录：
+
+```text
+art_src/gpt/PHASE1_BATTLE_ASSETS_BATCH2/
+```
+
+接入清单：
+
+```text
+3 张战场背景
+  bg_battle_plain.png / bg_battle_pass.png / bg_battle_ferry.png
+  → BattleReplay 按城型选背景（平原/关隘/渡口）
+
+九宫格卡框
+  card_frame_ninepatch.png
+  → 手牌卡面、战术卡、战报折页统一用九宫格拉伸
+
+12 张战术图标
+  tactics_*.png
+  → 手牌、编成、战报逐队
+
+4 面阵营旗
+  flag_faction_bi.png / flag_faction_mo.png / flag_faction_shuang.png / flag_faction_dan.png
+  → 后端阵营 code 是 bi / mo / yan / zhi
+  → 接旗时 shuang 映射 yan（砚），dan 映射 zhi（纸），不要改后端
+
+4 张单位头像
+  unit_icon_cav / shield / arc / spear
+  → 编成面板、战报队伍行
+```
+
+要求：
+
+```text
+不改 server / schema / API
+图片放 client/assets/art/ 对应子目录
+所有资源走 Godot import，不写绝对路径
+手机 720×514 下卡框、图标不糊
+```
+
+## 2. 截图问题复核
+
+窗口模式重跑：
+
+```text
+1400×1000：手牌条被底部裁掉，Dock 不见
+720×514 ：截图只占左上角一半，其余黑
+```
+
+Headless 功能全过。请检查：
+
+```text
+scene.size 是否等于真实窗口内容尺寸
+_set_viewport_size() 是否只改 viewport、没改窗口
+Capture 是否在 _layout_responsive() 之后等一帧
+```
+
+修好后重新生成 p15 截图，确认手牌条和 Dock 都完整。
+
+## 3. 验收
+
+```text
+ClientSmoke
+ReplaySmoke
+Phase1ClientSmoke
+Phase15ValidationSuite
+```
+
+外加：
+
+```text
+战斗回放：3 张背景按城型切换
+手牌：九宫格卡框 + 12 图标
+编成：4 个单位头像
+地图：4 面阵营旗与后端 code 对齐
+```
+
+回报格式：改了什么 / 文件 / 验收 / 截图 / 没做。
