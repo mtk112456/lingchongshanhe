@@ -230,6 +230,12 @@ func get_battle(battle_id: int, callback: Callable) -> void:
 func getBattle(battle_id: int, callback: Callable) -> void:
 	get_battle(battle_id, callback)
 
+func get_intel(node_code: String, turn_id: int, callback: Callable) -> void:
+	request("GET", "/api/slice/intel?node=" + node_code + "&turn_id=" + str(turn_id), null, callback)
+
+func getIntel(node_code: String, turn_id: int, callback: Callable) -> void:
+	get_intel(node_code, turn_id, callback)
+
 # ---------------------------------------------------------------------------
 # 教师
 # ---------------------------------------------------------------------------

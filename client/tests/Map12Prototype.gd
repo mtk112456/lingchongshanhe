@@ -204,11 +204,20 @@ func _layout_responsive() -> void:
 	var is_compact_h := h < 650.0
 	var is_compact_w := w < 850.0
 
-	# 顶部 HUD
-	var top_h := 42.0 if is_compact_h else 50.0
+	# 接入 DisplayServer.get_display_safe_area() 避让刘海屏/挖孔屏
+	var safe_top := 0.0
+	var safe_rect: Rect2i = DisplayServer.get_display_safe_area()
+	var win_size: Vector2i = DisplayServer.window_get_size()
+	if win_size.y > 0 and safe_rect.position.y > 0:
+		safe_top = float(safe_rect.position.y) * (h / float(win_size.y))
+
+	# 顶部 HUD：保证触控高度与刘海避让
+	var top_h := (48.0 if is_compact_h else 54.0) + safe_top
 	if top_hud != null:
 		top_hud.position = Vector2(0, 0)
 		top_hud.size = Vector2(w, top_h)
+		if top_hud.has_theme_constant_override("margin_top"):
+			top_hud.add_theme_constant_override("margin_top", int(safe_top))
 
 	if is_compact_w:
 		if title_label != null:
@@ -218,19 +227,19 @@ func _layout_responsive() -> void:
 			zoom_label.add_theme_font_size_override("font_size", 11)
 		if btn_035 != null:
 			btn_035.text = "全图"
-			btn_035.custom_minimum_size = Vector2(52, 28)
+			btn_035.custom_minimum_size = Vector2(64, 44)
 			btn_035.add_theme_font_size_override("font_size", 11)
 		if btn_water != null:
 			btn_water.text = "水网"
-			btn_water.custom_minimum_size = Vector2(52, 28)
+			btn_water.custom_minimum_size = Vector2(64, 44)
 			btn_water.add_theme_font_size_override("font_size", 11)
 		if btn_ca != null:
 			btn_ca.text = "长安"
-			btn_ca.custom_minimum_size = Vector2(52, 28)
+			btn_ca.custom_minimum_size = Vector2(64, 44)
 			btn_ca.add_theme_font_size_override("font_size", 11)
 		if btn_reset != null:
 			btn_reset.text = "重置"
-			btn_reset.custom_minimum_size = Vector2(52, 28)
+			btn_reset.custom_minimum_size = Vector2(64, 44)
 			btn_reset.add_theme_font_size_override("font_size", 11)
 	else:
 		if title_label != null:
@@ -240,19 +249,19 @@ func _layout_responsive() -> void:
 			zoom_label.add_theme_font_size_override("font_size", 12)
 		if btn_035 != null:
 			btn_035.text = "全图 0.35x"
-			btn_035.custom_minimum_size = Vector2(96, 32)
+			btn_035.custom_minimum_size = Vector2(96, 44)
 			btn_035.add_theme_font_size_override("font_size", 12)
 		if btn_water != null:
 			btn_water.text = "东南水网 0.50x"
-			btn_water.custom_minimum_size = Vector2(104, 32)
+			btn_water.custom_minimum_size = Vector2(104, 44)
 			btn_water.add_theme_font_size_override("font_size", 12)
 		if btn_ca != null:
 			btn_ca.text = "👑 长安王城"
-			btn_ca.custom_minimum_size = Vector2(96, 32)
+			btn_ca.custom_minimum_size = Vector2(96, 44)
 			btn_ca.add_theme_font_size_override("font_size", 12)
 		if btn_reset != null:
 			btn_reset.text = "重置视野"
-			btn_reset.custom_minimum_size = Vector2(88, 32)
+			btn_reset.custom_minimum_size = Vector2(88, 44)
 			btn_reset.add_theme_font_size_override("font_size", 12)
 
 	# 底部战术信息条
@@ -302,15 +311,17 @@ func _select_city(code: String) -> void:
 	tactical_desc_label.text = "连通据点：%s | 文脉：%s" % [neigh_str, verse]
 
 func reset_view() -> void:
+	set_full_bleed_view()
+
+func set_full_bleed_view() -> void:
 	var w := size.x
 	var h := size.y
 	if w <= 0.0 or h <= 0.0:
 		return
 	var scale_x := w / MAP_W
 	var scale_y := h / MAP_H
+	# Full-Bleed Cover: 填满视口长短边，有效面积 100%，0 深色留白画框
 	map_zoom = maxf(scale_x, scale_y)
-	if map_zoom < 0.35:
-		map_zoom = 0.35
 	map_pan = (Vector2(w, h) - Vector2(MAP_W, MAP_H) * map_zoom) / 2.0
 	_apply_view()
 
@@ -352,7 +363,9 @@ func focus_region(reg: String) -> void:
 
 func _zoom_at(focus_point: Vector2, factor: float) -> void:
 	var old_zoom := map_zoom
-	var new_zoom := clampf(map_zoom * factor, 0.35, 2.5)
+	var min_cover := maxf(size.x / MAP_W, size.y / MAP_H) if (size.x > 0.0 and size.y > 0.0) else 0.35
+	var min_limit := minf(min_cover * 0.96, 0.55)
+	var new_zoom := clampf(map_zoom * factor, min_limit, 2.5)
 	if is_equal_approx(old_zoom, new_zoom):
 		return
 	var world_pt := (focus_point - map_pan) / old_zoom

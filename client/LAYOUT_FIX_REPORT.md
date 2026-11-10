@@ -344,3 +344,98 @@ CAPTURED: screenshot_phone_landscape_dock_restored.png (720x514)
 CAPTURE_SUITE COMPLETE (LANDSCAPE ONLY: TABLET 1400x1000 & PHONE 720x514)
 ```
 
+---
+
+## 4. Phase 1.5 客户端实装专项汇报：让牌和站位看得见
+
+> 依据指令：【P1.5 客户端任务：让牌和站位看得见】（后端 `fc5211d` 合入后全面生效）  
+> 执笔：Antigravity (Godot 前端主责)  
+> 核心原则：不改 server、不改 schema、不改 API 字段；纯横屏全适配（平板 1400×1000 与手机横屏 720×514）。
+
+### 1. 任务 1：手牌条显示“已出 / 未出 / 去向 / 今日不用”
+- **四态清晰可读**：
+  1. **已出的牌 (`is_played`)**：
+     - 采用烫金细边框与灰底水墨面板 (`Color("#2d2621")`)，顶栏带 `[已出]` 状态绿标；
+     - 详细展示去向：队伍牌显示 `【城名】X路·前/后`（例如：`【听雨台】1路·前`），特策支援牌显示 `【城名】特策支援`；
+     - 配备明确的 `[↩️ 撤回将令]` 按钮，一键撤回对应槽位。
+  2. **未出的牌 (`normal`)**：
+     - 保持正常卡面与阵营四色边框（朱砂/墨蓝/竹青/藤黄），高亮牌名；
+     - 选中城池时显示 `出令➔【城名】`，未选时提示 `点城出令`；
+     - 支持长按/悬停查看完整战术卡牌说明（Tooltip）。
+  3. **当天弃牌 (`is_discarded`)**：
+     - 4 抽 3 机制下，当 3 个槽位全部打出后，剩下的第 4 张牌自动判定为当天弃牌；
+     - 样式：暗沉低对比度面板 (`Color("#171311")`)，字体调暗，右下角盖朱红印章 `[今日不用]`；
+     - 出令按钮置灰禁用（`disabled = true`，显示 `今日不用`），不可再拖、不可点击出令。
+  4. **撤回即时恢复**：
+     - 学生点击任一已出牌的 `[↩️ 撤回将令]` 后，后端更新，`card_orders` 减为 2；
+     - 原本置灰的弃牌立即解除 `is_discarded` 状态，恢复为正常卡面与启用按钮，可随时改打出战。
+
+### 2. 任务 2：战报折页逐队解释
+- **回答“我的牌干了什么”**：
+  - 数据源直连 `GET /api/slice/battle?id=` 的 `attacker.teams` / `units[].card` 与 `events[]`；
+  - 格式化标准：每队一行：`兵种 · 路 · 前或后 · 带的牌 · 实际效果`；
+  - 严格映射 12 张战术牌实装效果：
+    - `夜袭`: 攻击 +20%（本城未侦察）
+    - `急行`: 先手行动，免疫断粮
+    - `火攻`: 器械攻墙 +50%
+    - `坚壁`: 防御 +20%
+    - `犄角`: 相邻路友军防御 +10%
+    - `空城`: 敌全军攻击 -10%
+    - `死守`: 致命伤留 1 兵
+    - `哨探`: 解锁情报并压制夜袭
+    - `反间`: 敌全军攻击 -10%
+    - `疑兵`: 敌方情报显示集结兵力 1.5 倍
+    - `运粮`: 每 15 候回复 5% 兵力
+    - `断粮`: 敌军每 15 候损失 3% 兵力
+    - 不带牌时显示：`无战术`；
+  - **展示位置**：
+    1. `BattleReplay.gd` 演武决战结算三折页的第 2 帧【⚔️ 诸队战术与三路实效】；
+    2. `Slice.gd` 战争日报页（S04）的【个人出征演武】折页中，详列诸队战术推演实效。
+
+### 3. 任务 3：哨探情报面板 (Intel)
+- **城池抽屉联动**：
+  - 调用 `GET /api/slice/intel?node={code}&turn_id={id}`；
+  - 前提判断：当学生对当前城池打出「哨探」将令时，城池抽屉动作栏才显现【🔍 哨探军报】入口；
+  - 未打出哨探时不显示入口；当撤回哨探后，入口即时消失，且若情报面板处于打开状态自动关闭。
+- **情报面板内容**：
+  1. **敌军守阵探报（侦得一路部属）**：
+     - 展示兵种图标与名称（如 `🗡️ 枪兵`）、路号（如 `2 路`）、排位（`前排/后排`）以及驻防兵力（如 `366 兵`）；
+  2. **诸军动向与集结态势 (`massing`)**：
+     - 显示各阵营名称/旗帜、参战学子数、战队数、集结兵力；
+     - **疑兵虚假判定**：若 `feint == true`，兵力显式标为 `[疑似 XXX 兵]`，采用暗色金红警告框包裹，并在下方显眼警示 `⚠️【疑兵虚张】情报兵力已被虚夸1.5倍，非真实数字！`，杜绝误导决策。
+
+### 4. 两条 UI 红线落实
+1. **触控目标 ≥44px**：
+   - 顶部 HUD 按钮（`mail_btn`、`settings_btn`、`logout_btn`）全部提升至 `Vector2(44, 44)`；
+   - 城池抽屉全部动作按钮高度统一为 `44px`；
+   - 12 城原型 (`Map12Prototype.gd`) 紧凑横屏按钮从 `52×28` 调整为 `64×44`，标准横屏按钮从 `96×32` 调整为 `96×44`。
+2. **异形屏/刘海屏安全内缩**：
+   - 全面接入 `DisplayServer.get_display_safe_area()`；
+   - 顶部 HUD (`top_bar`) 及内部组件自适应下移 `safe_top`，避让物理挖孔与刘海，零遮挡。
+
+### 5. 验收结果与截图产物
+```powershell
+# 1. 后端 14 项全量测试
+php server/slice/tests/run.php -> 14 passed, 0 failed
+
+# 2. 客户端三大基准冒烟测试
+godot --headless --path client res://tests/ClientSmoke.tscn -> CLIENT_SMOKE PASS
+godot --headless --path client res://tests/ReplaySmoke.tscn -> REPLAY_SMOKE PASS
+godot --headless --path client res://tests/Phase1ClientSmoke.tscn -> PHASE1_CLIENT_SMOKE PASS
+
+# 3. Phase 1.5 专项自动化闭环测试
+godot --headless --path client res://tests/Phase15ValidationSuite.tscn -> ALL P1.5 VERIFICATIONS PASSED SUCCESSFULLY!
+
+# 4. Phase 1.5 全分辨率渲染截图套件
+godot --path client res://tests/RunPhase15Capture.tscn -> 6 张高清截图全部生成完毕
+```
+
+**产物清单**：
+- `client/tests/screenshot_p15_hand_cards_4states.png` (平板 1400×1000：手牌条 4 态一眼分清)
+- `client/tests/screenshot_p15_hand_cards_withdrawn.png` (平板 1400×1000：撤回后恢复可拖状态)
+- `client/tests/screenshot_p15_intel_dialog.png` (平板 1400×1000：哨探敌情密报 + 疑兵疑似虚线框)
+- `client/tests/screenshot_p15_battle_result_tactics.png` (平板 1400×1000：战斗结算折页逐队解释)
+- `client/tests/screenshot_p15_war_report_tactics.png` (平板 1400×1000：每日战报折页逐队解释)
+- `client/tests/screenshot_phone_landscape_p15_hand_cards.png` (手机横屏 720×514：移动端手牌条与抽屉自适应)
+
+

@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://phase15_validation_suite_001"]
+
+[ext_resource type="Script" path="res://tests/Phase15ValidationSuite.gd" id="1_p15"]
+
+[node name="Phase15ValidationSuite" type="Node"]
+script = ExtResource("1_p15")

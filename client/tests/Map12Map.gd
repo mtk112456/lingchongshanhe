@@ -133,6 +133,7 @@ var textures_cache: Dictionary = {}
 var zoom_level: float = 1.0
 var selected_node: String = "changan"
 var pulse: float = 0.0
+var show_labels: bool = true
 
 func _ready() -> void:
 	if ResourceLoader.exists(FONT_PATH):
@@ -257,11 +258,14 @@ func _draw_city_node(code: String) -> void:
 	var is_capital: bool = data.get("is_capital", false)
 	var is_selected := (code == selected_node)
 
-	# 1. 城池建筑尺寸（长安为王城，设定显著更大尺寸）
+	# 1. 城池建筑尺寸（长安为王城，设定显著更大尺寸，绝不缩小）
 	var target_h := 136.0 if is_changan else (106.0 if is_capital else 92.0)
 	if code == "liangzhou":
 		target_h = 78.0 # 凉州为长横截关隘，适度缩减高度保持自然比例
 	var target_w := target_h * 1.35
+
+	# 0. 浅色落点与各城池的有机暗色自然衬底（柳荫、青石、松影、苔藓湿地，打破死板圆斑）
+	_draw_natural_ground_shadow(code, pos, target_w)
 
 	# 2. 独立 Trim Sprite 叠放（底边中点精确对齐锚点 pos，等比缩放不拉伸）
 	if textures_cache.has(code) and textures_cache[code] != null:
@@ -274,8 +278,8 @@ func _draw_city_node(code: String) -> void:
 
 	# 3. 阵营地基光环与选中动效
 	if is_changan:
-		# 长安天下王城：极度尊贵的帝王双金环 + 八宝光环脉冲
-		var r_ca := 46.0 if zoom_level < 0.45 else 54.0
+		# 长安天下王城：极度尊贵的帝王双金环 + 八宝光环脉冲（保持 54px 尊贵规格，绝不缩小成普通城）
+		var r_ca := 54.0
 		var r_pulse := r_ca + sin(pulse * 3.5) * 4.0
 		draw_circle(pos, r_pulse, Color(C_CHANGAN_GOLD.r, C_CHANGAN_GOLD.g, C_CHANGAN_GOLD.b, 0.22))
 		draw_arc(pos, r_pulse, 0.0, TAU, 64, C_CHANGAN_GOLD, 4.0, true)
@@ -289,8 +293,8 @@ func _draw_city_node(code: String) -> void:
 	else:
 		var r_base := 32.0 if is_capital else 26.0
 		if zoom_level < 0.45:
-			r_base = 28.0 # 0.35x 全图视野下适当凸显光环，便于一眼数清
-		draw_circle(pos, r_base, Color(faction_color.r, faction_color.g, faction_color.b, 0.12))
+			r_base = 28.0 # 远景下适当凸显光环，便于一眼数清
+		draw_circle(pos, r_base, Color(faction_color.r, faction_color.g, faction_color.b, 0.14))
 		draw_arc(pos, r_base, 0.0, TAU, 36, faction_color, 2.5, true)
 		draw_arc(pos, r_base + 3.0, 0.0, TAU, 36, Color(C_XUANZHI.r, C_XUANZHI.g, C_XUANZHI.b, 0.75), 1.2, true)
 
@@ -314,13 +318,13 @@ func _draw_city_node(code: String) -> void:
 
 	# 5. LOD 文字信息分级渲染
 	# -----------------------------------------------------------------------
-	# LOD 0 (< 0.45x，如 0.35x 全景)：彻底隐藏纸签，保证大局观清晰不拥挤
-	if zoom_level < 0.45:
+	# 若全局禁用标签或处于宏观全景态（LOD 0，全景全图）：彻底隐藏纸签，保证大局观清晰不拥挤
+	if not show_labels or zoom_level < 0.45:
 		return
 
 	# LOD 1 (0.45x ~ 0.75x，如 0.50x 手机横屏/区域视野)：精简单行城名纸签，隐藏归属签
 	if zoom_level < 0.75:
-		_draw_compact_city_label(pos, data["name"], faction_color, is_changan)
+		_draw_compact_city_label(pos, data["name"], faction_color, is_changan, is_selected)
 		return
 
 	# LOD 2 (0.75x ~ 1.30x，战术常规近景)：完整城名纸签 + 阵营归属副签
@@ -329,18 +333,124 @@ func _draw_city_node(code: String) -> void:
 	# LOD 3 (>= 1.30x，文化特写)：文化地标与诗词文脉
 	_draw_cultural_tag(pos, data.get("tag", ""), data.get("verse", ""))
 
+# 自然有机暗色地基衬底（柳荫、青石、松影、苔藓湿地，打破机械圆斑）
+func _draw_natural_ground_shadow(code: String, pos: Vector2, target_w: float) -> void:
+	var hw := target_w * 0.55
+	if code in ["jianye", "kuaiji", "shouchun"]:
+		# 东南浅沙洲水网：江岸垂柳绿荫 + 渚头湿石倒影（墨绿色系，向下浸润向江面）
+		var col_dark := Color(0.08, 0.16, 0.13, 0.38)
+		var col_soft := Color(0.05, 0.12, 0.10, 0.20)
+		var poly1 := PackedVector2Array([
+			pos + Vector2(-hw * 0.95, 4.0),
+			pos + Vector2(-hw * 0.50, -8.0),
+			pos + Vector2(hw * 0.40, -10.0),
+			pos + Vector2(hw * 1.10, 2.0),
+			pos + Vector2(hw * 0.90, 16.0),
+			pos + Vector2(hw * 0.30, 22.0),
+			pos + Vector2(-hw * 0.40, 18.0),
+			pos + Vector2(-hw * 0.85, 12.0),
+		])
+		draw_colored_polygon(poly1, col_dark)
+		# 外围柳丝轻影羽化
+		var poly2 := PackedVector2Array([
+			pos + Vector2(-hw * 1.15, 6.0),
+			pos + Vector2(-hw * 0.60, -14.0),
+			pos + Vector2(hw * 0.55, -16.0),
+			pos + Vector2(hw * 1.25, 4.0),
+			pos + Vector2(hw * 1.05, 22.0),
+			pos + Vector2(hw * 0.20, 28.0),
+			pos + Vector2(-hw * 0.65, 24.0),
+		])
+		draw_colored_polygon(poly2, col_soft)
+	elif code in ["taiyuan", "luoyang"]:
+		# 东北浅麦田台地：古祠苍松影 + 晋祠伊洛青石基（墨褐色系，向右后侧斜向散布松影齿）
+		var col_pine := Color(0.18, 0.12, 0.08, 0.42)
+		var col_pine_soft := Color(0.12, 0.08, 0.05, 0.22)
+		var poly1 := PackedVector2Array([
+			pos + Vector2(-hw * 0.90, -4.0),
+			pos + Vector2(-hw * 0.20, -12.0),
+			pos + Vector2(hw * 0.70, -6.0),
+			pos + Vector2(hw * 1.15, 10.0),
+			pos + Vector2(hw * 0.75, 20.0),
+			pos + Vector2(hw * 0.10, 16.0),
+			pos + Vector2(-hw * 0.50, 14.0),
+			pos + Vector2(-hw * 0.85, 6.0),
+		])
+		draw_colored_polygon(poly1, col_pine)
+		var poly2 := PackedVector2Array([
+			pos + Vector2(-hw * 1.05, -2.0),
+			pos + Vector2(hw * 0.10, -18.0),
+			pos + Vector2(hw * 1.30, 12.0),
+			pos + Vector2(hw * 0.80, 26.0),
+			pos + Vector2(-hw * 0.70, 20.0),
+		])
+		draw_colored_polygon(poly2, col_pine_soft)
+	elif code == "changan":
+		# 长安王城：九重宫阙紫金石基台影（恢弘沉着，深墨紫金）
+		var col_ca := Color(0.16, 0.09, 0.04, 0.45)
+		var poly_ca := PackedVector2Array([
+			pos + Vector2(-hw * 1.05, -2.0),
+			pos + Vector2(-hw * 0.60, -14.0),
+			pos + Vector2(hw * 0.60, -14.0),
+			pos + Vector2(hw * 1.05, -2.0),
+			pos + Vector2(hw * 0.95, 18.0),
+			pos + Vector2(0.0, 24.0),
+			pos + Vector2(-hw * 0.95, 18.0),
+		])
+		draw_colored_polygon(poly_ca, col_ca)
+	else:
+		# 西北山地与西南竹林：水墨岩崖苍石影
+		var col_std := Color(0.14, 0.12, 0.10, 0.32)
+		var poly_std := PackedVector2Array([
+			pos + Vector2(-hw * 0.85, 0.0),
+			pos + Vector2(-hw * 0.30, -10.0),
+			pos + Vector2(hw * 0.50, -8.0),
+			pos + Vector2(hw * 0.95, 6.0),
+			pos + Vector2(hw * 0.60, 16.0),
+			pos + Vector2(-hw * 0.40, 14.0),
+		])
+		draw_colored_polygon(poly_std, col_std)
+
 # 精简单行城名纸签（LOD 1）
-func _draw_compact_city_label(pos: Vector2, city_name: String, faction_color: Color, is_changan: bool) -> void:
+# 采用逆向缩放补偿（Screen-Space Invariant），保证屏幕视觉字号严格 ≥12px (实测 13.0px)
+func _draw_compact_city_label(pos: Vector2, city_name: String, faction_color: Color, is_changan: bool, is_selected: bool) -> void:
 	if font == null:
 		return
-	var tw := 62.0 if not is_changan else 76.0
-	var th := 20.0
-	var rect := Rect2(pos + Vector2(-tw / 2.0, 8.0), Vector2(tw, th))
-	draw_rect(rect.grow(1.5), Color(0, 0, 0, 0.25))
-	draw_rect(rect, C_XUANZHI)
-	draw_rect(rect, faction_color, false, 2.0)
-	var text_col := Color("#7e2018") if is_changan else Color("#1a120c")
-	draw_string(font, rect.position + Vector2(0, th - 4.5), city_name, HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 13, text_col)
+	
+	# 屏幕基准尺寸 (Screen Pixels)
+	var screen_font_size := 13.0
+	var screen_w := 76.0 if not is_changan else 90.0
+	var screen_h := 22.0
+	
+	# 逆向补偿到世界坐标系
+	var z := maxf(zoom_level, 0.1)
+	var world_font_size := int(round(screen_font_size / z))
+	var tw := screen_w / z
+	var th := screen_h / z
+	var y_gap := 10.0 / z
+	var border_w := (2.5 if is_selected else 1.8) / z
+	var shadow_pad := 1.8 / z
+	
+	var rect := Rect2(pos + Vector2(-tw / 2.0, y_gap), Vector2(tw, th))
+	
+	# 1. 软宣纸暗部投影
+	draw_rect(rect.grow(shadow_pad), Color(0, 0, 0, 0.28))
+	
+	# 2. 宣纸底衬 (选中时象牙微亮，未选中时温润宣纸色)
+	var bg_color := Color("#fffef7") if is_selected else C_XUANZHI
+	draw_rect(rect, bg_color)
+	
+	# 3. 描边体系 (选中时加粗烫金 + 阵营双线，未选中时阵营描边)
+	if is_selected:
+		draw_rect(rect, GOLD_LIGHT, false, border_w)
+		draw_rect(rect.grow(-border_w * 0.7), faction_color, false, 1.2 / z)
+	else:
+		draw_rect(rect, faction_color, false, border_w)
+		
+	# 4. 苍劲书法城名 (严格居中，高对比)
+	var text_col := Color("#801b12") if (is_selected or is_changan) else Color("#1a110a")
+	var text_y := rect.position.y + th - (5.0 / z)
+	draw_string(font, Vector2(rect.position.x, text_y), city_name, HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, world_font_size, text_col)
 
 # 完整城名纸签与归属副签（LOD 2）
 func _draw_full_city_label(pos: Vector2, city_name: String, region: String, faction_color: Color, is_changan: bool) -> void:

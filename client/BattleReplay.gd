@@ -329,6 +329,36 @@ func _finish_replay() -> void:
 	_show_result_overlay()
 	replay_finished.emit(battle_result)
 
+const CARD_NAMES: Dictionary = {
+	"night_raid": "夜袭",
+	"forced_march": "急行",
+	"fire_attack": "火攻",
+	"fortify": "坚壁",
+	"mutual_support": "犄角",
+	"empty_fort": "空城",
+	"last_stand": "死守",
+	"scout": "哨探",
+	"counter_intel": "反间",
+	"feint": "疑兵",
+	"supply": "运粮",
+	"cut_supply": "断粮",
+}
+
+const CARD_EFFECTS: Dictionary = {
+	"night_raid": "攻击 +20%（本城未侦察）",
+	"forced_march": "先手行动，免疫断粮",
+	"fire_attack": "器械攻墙 +50%",
+	"fortify": "防御 +20%",
+	"mutual_support": "相邻路友军防御 +10%",
+	"empty_fort": "敌全军攻击 -10%",
+	"last_stand": "致命伤留 1 兵",
+	"scout": "解锁情报并压制夜袭",
+	"counter_intel": "敌全军攻击 -10%",
+	"feint": "敌方情报显示集结兵力 1.5 倍",
+	"supply": "每 15 候回复 5% 兵力",
+	"cut_supply": "敌军每 15 候损失 3% 兵力",
+}
+
 func _show_result_overlay() -> void:
 	if not result_overlay:
 		return
@@ -375,7 +405,61 @@ func _show_result_overlay() -> void:
 				t_val
 			]
 	
+	# 更新第二折诸队战术实效（Phase 1.5：逐队解释）
+	if page_frame_2 and page_frame_2.get_child_count() >= 2:
+		var desc2_node = page_frame_2.get_child(1)
+		if desc2_node is Label:
+			desc2_node.text = _format_team_tactics_lines()
+	
 	_show_page_frame(0)
+
+func _format_team_tactics_lines() -> String:
+	var lines: Array[String] = []
+	var teams: Array = []
+	
+	# 1. 优先从 attacker.teams 读取
+	var raw_att: Variant = replay_data.get("attacker", {})
+	if typeof(raw_att) == TYPE_DICTIONARY and raw_att.has("teams"):
+		var raw_teams: Variant = raw_att.get("teams", [])
+		if typeof(raw_teams) == TYPE_ARRAY and not raw_teams.is_empty():
+			teams = raw_teams
+			
+	# 2. 若未从 attacker.teams 读取，则从 units_data 中提取攻方单位
+	if teams.is_empty():
+		var att_units: Array = []
+		for u in units_data.values():
+			if typeof(u) == TYPE_DICTIONARY and str(u.get("side", "")) == "att":
+				att_units.append(u)
+		att_units.sort_custom(func(a, b): return int(a.get("lane", 1)) < int(b.get("lane", 1)))
+		teams = att_units
+
+	# 3. 兜底默认三队
+	if teams.is_empty():
+		lines.append("• 骑 · 1 路前 · 夜袭 · 攻击 +20%（本城未侦察）")
+		lines.append("• 盾 · 2 路前 · 坚壁 · 防御 +20%")
+		lines.append("• 弓 · 3 路后 · 火攻 · 器械攻墙 +50%")
+		return "\n".join(lines)
+
+	var type_names := {"cav": "骑", "shield": "盾", "arc": "弓", "spear": "枪"}
+	for t in teams:
+		if typeof(t) != TYPE_DICTIONARY:
+			continue
+		var raw_type := str(t.get("type", "cav"))
+		var t_name := str(type_names.get(raw_type, raw_type))
+		var lane_num := int(t.get("lane", 1))
+		var row_val := str(t.get("row", "front"))
+		var row_str := "后" if row_val == "back" else "前"
+		var card_code := str(t.get("card", "") if t.get("card") != null else "")
+		
+		var card_title := "无"
+		var effect_desc := "无战术"
+		if card_code != "" and card_code != "null":
+			card_title = str(CARD_NAMES.get(card_code, card_code))
+			effect_desc = str(CARD_EFFECTS.get(card_code, "战术生效"))
+		
+		lines.append("• %s · %d 路%s · %s · %s" % [t_name, lane_num, row_str, card_title, effect_desc])
+
+	return "\n".join(lines)
 
 func _show_page_frame(page_idx: int) -> void:
 	current_page_idx = page_idx
@@ -942,20 +1026,20 @@ func _build_result_overlay() -> void:
 	desc1.add_theme_font_size_override("font_size", 12)
 	page_frame_1.add_child(desc1)
 	
-	# 帧 2: 三路对撞与伤亡详表
+	# 帧 2: 诸队战术实效与三路详表
 	page_frame_2 = VBoxContainer.new()
 	page_frame_2.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	page_frame_2.visible = false
 	content_box.add_child(page_frame_2)
 	
 	var h2 := Label.new()
-	h2.text = "⚔️ 三路对撞战损详表 (第 2 帧/共 3 帧)"
+	h2.text = "⚔️ 诸队战术与三路实效 (第 2 帧/共 3 帧)"
 	h2.add_theme_color_override("font_color", Color("#231c17"))
 	h2.add_theme_font_size_override("font_size", 14)
 	page_frame_2.add_child(h2)
 	
 	var desc2 := Label.new()
-	desc2.text = "• 上路 [骑兵 vs 盾兵]：骑兵冲锋破坚盾，克制加成 x1.2！\n• 中路 [盾兵 vs 枪兵]：枪兵拒马御坚盾，中路互有折损。\n• 下路 [枪兵 vs 骑兵]：长枪如林压制敌骑，破敌 120 兵。"
+	desc2.text = "• 骑 · 1 路前 · 夜袭 · 攻击 +20%（本城未侦察）\n• 盾 · 2 路前 · 坚壁 · 防御 +20%\n• 弓 · 3 路后 · 火攻 · 器械攻墙 +50%"
 	desc2.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	desc2.add_theme_color_override("font_color", Color("#4a3e35"))
 	desc2.add_theme_font_size_override("font_size", 12)

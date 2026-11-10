@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://run_phase15_capture_001"]
+
+[ext_resource type="Script" path="res://tests/RunPhase15Capture.gd" id="1_r15"]
+
+[node name="RunPhase15Capture" type="Node"]
+script = ExtResource("1_r15")
