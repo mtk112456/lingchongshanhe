@@ -424,6 +424,22 @@ func _show_result_overlay() -> void:
 func _format_team_tactics_lines() -> String:
 	var lines: Array[String] = []
 	var teams: Array = []
+
+	# 0. 首行总揽：结果 / 队数 / 城墙
+	var score_val := int(battle_result.get("score", 0))
+	var wall_val := float(battle_result.get("wall", current_wall))
+	var wall_pct := int(round(clampf(wall_val / float(max(1, wall_base)), 0.0, 1.0) * 100.0))
+	var result_label: String = str({2: "破墙", 1: "撼城", 0: "对峙", -1: "被挡"}.get(score_val, "战报"))
+	var def_count := 0
+	var raw_def: Variant = replay_data.get("defender", {})
+	if typeof(raw_def) == TYPE_DICTIONARY and raw_def.has("teams"):
+		var raw_def_teams: Variant = raw_def.get("teams", [])
+		if typeof(raw_def_teams) == TYPE_ARRAY:
+			def_count = raw_def_teams.size()
+	if def_count == 0:
+		for u in units_data.values():
+			if typeof(u) == TYPE_DICTIONARY and str(u.get("side", "")) == "def":
+				def_count += 1
 	
 	# 1. 优先从 attacker.teams 读取
 	var raw_att: Variant = replay_data.get("attacker", {})
@@ -441,15 +457,15 @@ func _format_team_tactics_lines() -> String:
 		att_units.sort_custom(func(a, b): return int(a.get("lane", 1)) < int(b.get("lane", 1)))
 		teams = att_units
 
-	# 3. 兜底默认三队（严格覆盖战术生效与未佩战策样本）
+	lines.append("⚔️【战况总揽】%s · %d 队攻 / %d 队守 · 城墙剩余 %d%%" % [
+		result_label, teams.size(), def_count, wall_pct
+	])
+
+	# 3. 没有任何队伍数据时不要编造
 	if teams.is_empty():
-		lines.append("⚔️【战况交锋总揽】先锋夜袭突防，中军重盾破关，城防大幅瓦解！")
-		lines.append("• ⚡夜袭生效 · 骑兵 · 1路前 · 攻击 +20%（本城未侦察）")
-		lines.append("• ⚡坚壁生效 · 盾兵 · 2路前 · 防御 +20%（守备稳固）")
-		lines.append("• 常规突进 · 弓兵 · 3路后 · (未佩战策)")
+		lines.append("• 本场未记录队伍编成。")
 		return "\n".join(lines)
 
-	lines.append("⚔️【战况交锋总揽】先锋夜袭突防，中军重盾破关，城防大幅瓦解！")
 	var type_names := {"cav": "骑", "shield": "盾", "arc": "弓", "spear": "枪"}
 	for t in teams:
 		if typeof(t) != TYPE_DICTIONARY:

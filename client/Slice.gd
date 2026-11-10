@@ -2478,6 +2478,7 @@ const TACTICAL_NAMES := {
 
 func _parse_tactics_lines_from_teams(teams: Array) -> Array[String]:
 	var lines: Array[String] = []
+	lines.append("⚔️【诸队战术与实效】")
 	var type_names := {"cav": "骑", "shield": "盾", "arc": "弓", "spear": "枪"}
 	for t in teams:
 		if typeof(t) != TYPE_DICTIONARY:
@@ -2488,16 +2489,17 @@ func _parse_tactics_lines_from_teams(teams: Array) -> Array[String]:
 		var row_val := str(t.get("row", "front"))
 		var row_str := "后" if row_val == "back" or row_val == "后" else "前"
 		var card_code := str(t.get("card", "") if t.get("card") != null else "")
-		var card_title := "无"
-		var effect_desc := "无战术"
 		if card_code != "" and card_code != "null":
-			card_title = str(TACTICAL_NAMES.get(card_code, card_code))
-			effect_desc = str(TACTICAL_EFFECTS.get(card_code, "战术生效"))
-		lines.append("• %s · %d 路%s · %s · %s" % [t_name, lane_num, row_str, card_title, effect_desc])
+			var card_title := str(TACTICAL_NAMES.get(card_code, card_code))
+			var effect_desc := str(TACTICAL_EFFECTS.get(card_code, "战术生效"))
+			lines.append("• ⚡%s生效 · %s兵 · %d路%s · %s" % [card_title, t_name, lane_num, row_str, effect_desc])
+		else:
+			lines.append("• 常规突进 · %s兵 · %d路%s · (未佩战策)" % [t_name, lane_num, row_str])
 	return lines
 
 func _parse_tactics_lines_from_orders(orders: Array) -> Array[String]:
 	var lines: Array[String] = []
+	lines.append("⚔️【诸队战术与实效】")
 	var comp_types: Array = state.get("composition", {}).get("types", ["cav", "shield", "arc"])
 	var type_names := {"cav": "骑", "shield": "盾", "arc": "弓", "spear": "枪"}
 	
@@ -2521,9 +2523,9 @@ func _parse_tactics_lines_from_orders(orders: Array) -> Array[String]:
 			var row_str := "后" if row_val == "back" or row_val == "后" else "前"
 			var c_name := str(TACTICAL_NAMES.get(c_code, c_code))
 			var eff := str(TACTICAL_EFFECTS.get(c_code, "战术生效"))
-			lines.append("• %s · %d 路%s · %s · %s" % [t_name, lane, row_str, c_name, eff])
+			lines.append("• ⚡%s生效 · %s兵 · %d路%s · %s" % [c_name, t_name, lane, row_str, eff])
 		else:
-			lines.append("• %s · %d 路%s · 无 · 无战术" % [t_name, lane, default_row])
+			lines.append("• 常规突进 · %s兵 · %d路%s · (未佩战策)" % [t_name, lane, default_row])
 	return lines
 
 # ---------------------------------------------------------------------------
@@ -3277,14 +3279,14 @@ func _render_hand_cards() -> void:
 func _create_single_hand_card(idx: int, cdata: Dictionary) -> PanelContainer:
 	var card := PanelContainer.new()
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	card.custom_minimum_size = Vector2(0, 52)
+	card.custom_minimum_size = Vector2(0, 72)
 	
 	var c_type := str(cdata.get("type", "advance"))
 	var c_code := str(cdata.get("code", ""))
 	var is_played := bool(cdata.get("is_played", false))
 	var is_discarded := bool(cdata.get("is_discarded", false))
 	
-	# 统一接入九宫格卡框 card_frame_ninepatch.png (256x384 宣纸双线角纹九宫格拉伸)
+	# 四态去色高反差视觉设计（明亮宣纸 [可出]、暗金古铜 [已出]、幽暗纯黑 [弃用]）
 	var patch_path := "res://assets/art/ui/card_frame_ninepatch.png"
 	if ResourceLoader.exists(patch_path):
 		var nine_sb := StyleBoxTexture.new()
@@ -3295,44 +3297,30 @@ func _create_single_hand_card(idx: int, cdata: Dictionary) -> PanelContainer:
 		nine_sb.texture_margin_bottom = 28
 		nine_sb.set_content_margin_all(5)
 		if is_played:
-			nine_sb.modulate_color = Color("#756858") # 已出：暗古铜宣纸
+			nine_sb.modulate_color = Color("#756858") # 已出：暗金古铜
 		elif is_discarded:
-			nine_sb.modulate_color = Color("#42362e") # 弃牌：暗墨灰
+			nine_sb.modulate_color = Color("#382e27") # 弃用：幽暗纯黑
 		else:
-			nine_sb.modulate_color = Color("#fcf6ea") # 未出：温润宣纸本色
+			nine_sb.modulate_color = Color("#fffef6") # 可出：明亮温润宣纸
 		card.add_theme_stylebox_override("panel", nine_sb)
 	else:
-		var border_c := C_BORDER_GOLD
-		var bg_col := Color("#231c17")
-		var border_width := 1
 		if is_played:
-			border_c = Color("#e5be65")
-			bg_col = Color("#2d2621")
-			border_width = 2
+			card.add_theme_stylebox_override("panel", _style(Color("#3a2f22"), Color("#dfb557"), 2, 6, 4))
 		elif is_discarded:
-			border_c = Color("#453b34")
-			bg_col = Color("#171311", 0.95)
-			border_width = 1
-		elif c_type == "advance":
-			border_c = C_ZHUSHA
-		elif c_type == "defend":
-			border_c = C_MOLAN
-		elif c_type == "scout":
-			border_c = C_ZHUQING
-		elif c_type == "supply":
-			border_c = C_TENGHUANG
-		card.add_theme_stylebox_override("panel", _style(bg_col, border_c, border_width, 6, 4))
+			card.add_theme_stylebox_override("panel", _style(Color("#14100e"), Color("#352c26"), 1, 6, 4))
+		else:
+			card.add_theme_stylebox_override("panel", _style(Color("#fffef6"), Color("#c4a77d"), 1, 6, 4))
 
 	var vb := VBoxContainer.new()
 	vb.add_theme_constant_override("separation", 2)
 	card.add_child(vb)
 
-	# 顶部标题栏
+	# 顶部标题栏（卡名 + 状态徽标 + 战术图标）
 	var h_title := HBoxContainer.new()
 	h_title.add_theme_constant_override("separation", 3)
 	vb.add_child(h_title)
 
-	# 12 张战术图标 (优先加载 128x128 水墨战术图标 TextureRect)
+	# 12 张战术图标
 	var tac_path := "res://assets/art/tactics/tactics_%s.png" % c_code
 	if ResourceLoader.exists(tac_path):
 		var tac_icon := TextureRect.new()
@@ -3346,26 +3334,26 @@ func _create_single_hand_card(idx: int, cdata: Dictionary) -> PanelContainer:
 	var fallback_prefix := "" if ResourceLoader.exists(tac_path) else str(cdata.get("icon", "")) + " "
 	name_l.text = "%s%s" % [fallback_prefix, cdata.get("name", "")]
 	if is_played:
-		name_l.add_theme_color_override("font_color", Color("#ffffff"))
+		name_l.add_theme_color_override("font_color", Color("#ffd700"))
 	elif is_discarded:
-		name_l.add_theme_color_override("font_color", Color("#8e7f72"))
+		name_l.add_theme_color_override("font_color", Color("#756658"))
 	else:
-		name_l.add_theme_color_override("font_color", Color("#fae19c"))
-	name_l.add_theme_font_size_override("font_size", 11)
+		name_l.add_theme_color_override("font_color", Color("#1e1712"))
+	name_l.add_theme_font_size_override("font_size", 12)
 	h_title.add_child(name_l)
 
+	var state_badge := Label.new()
 	if is_played:
-		var state_badge := Label.new()
 		state_badge.text = "[已出]"
 		state_badge.add_theme_color_override("font_color", Color("#73c991"))
-		state_badge.add_theme_font_size_override("font_size", 9)
-		h_title.add_child(state_badge)
 	elif is_discarded:
-		var disc_badge := Label.new()
-		disc_badge.text = "[今日不用]"
-		disc_badge.add_theme_color_override("font_color", Color("#b84c3d"))
-		disc_badge.add_theme_font_size_override("font_size", 9)
-		h_title.add_child(disc_badge)
+		state_badge.text = "[弃用]"
+		state_badge.add_theme_color_override("font_color", Color("#b84c3d"))
+	else:
+		state_badge.text = "[可出]"
+		state_badge.add_theme_color_override("font_color", Color("#276f57"))
+	state_badge.add_theme_font_size_override("font_size", 12)
+	h_title.add_child(state_badge)
 
 	var sp := Control.new()
 	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -3375,58 +3363,58 @@ func _create_single_hand_card(idx: int, cdata: Dictionary) -> PanelContainer:
 	info_btn.text = "ℹ"
 	info_btn.flat = true
 	info_btn.custom_minimum_size = Vector2(18, 16)
-	info_btn.add_theme_font_size_override("font_size", 10)
+	info_btn.add_theme_font_size_override("font_size", 12)
 	info_btn.pressed.connect(func(): _show_card_tooltip(cdata, card.global_position))
 	h_title.add_child(info_btn)
 
-	# 中部描述 / 去向显示
+	# 中部去向 / 战术简效（字号统一 >=12px）
 	var desc_l := Label.new()
-	desc_l.add_theme_font_size_override("font_size", 9)
+	desc_l.add_theme_font_size_override("font_size", 12)
 	if is_played:
 		var order: Dictionary = cdata.get("order", {})
 		var tgt: String = str(order.get("target_node_code", ""))
 		var tgt_name: String = str(map.node_by_code(tgt).get("name", tgt))
 		var lane_val: int = int(order.get("lane", int(order.get("slot", 0)) + 1))
 		var row_pos := str(order.get("row_pos", "front"))
-		var row_str := "后" if row_pos == "back" else "前"
+		var row_str := "后" if row_pos == "back" or row_pos == "后" else "前"
 		var card_c := str(cdata.get("code", ""))
 		if card_c == "fire_attack" or card_c == "scout" or card_c == "feint":
-			desc_l.text = "【%s】特策支援" % tgt_name
+			desc_l.text = "%s·特策" % tgt_name
 		else:
-			desc_l.text = "【%s】%d路·%s" % [tgt_name, lane_val, row_str]
-		desc_l.add_theme_color_override("font_color", Color("#fae19c"))
+			desc_l.text = "%s·%d路%s" % [tgt_name, lane_val, row_str]
+		desc_l.add_theme_color_override("font_color", Color("#ffd700"))
 	elif is_discarded:
-		desc_l.text = "3槽已满·今日弃牌"
-		desc_l.add_theme_color_override("font_color", Color("#5c5147"))
+		desc_l.text = "今日不用"
+		desc_l.add_theme_color_override("font_color", Color("#63564c"))
 	else:
-		desc_l.text = str(cdata.get("short_desc", ""))
-		desc_l.add_theme_color_override("font_color", Color("#d5c4a1"))
+		desc_l.text = str(cdata.get("short_desc", "战策就绪"))
+		desc_l.add_theme_color_override("font_color", Color("#42352a"))
 	vb.add_child(desc_l)
 
-	# 底部操作按钮
+	# 底部主要操作按钮（字号统一 >=12px，高度 26px）
 	var assign_btn := Button.new()
-	assign_btn.custom_minimum_size = Vector2(0, 22)
-	assign_btn.add_theme_font_size_override("font_size", 10)
+	assign_btn.custom_minimum_size = Vector2(0, 26)
+	assign_btn.add_theme_font_size_override("font_size", 12)
 	
 	if is_played:
-		assign_btn.text = "↩️ 撤回将令"
+		assign_btn.text = "↩️ 撤回"
 		assign_btn.add_theme_color_override("font_color", Color("#fae19c"))
-		assign_btn.add_theme_stylebox_override("normal", _style(Color("#3f3328"), Color("#a6854b"), 1, 4, 2))
-		assign_btn.tooltip_text = "点击撤回该槽位军令，重新编排出战"
+		assign_btn.add_theme_stylebox_override("normal", _style(Color("#3f3328"), Color("#dfb557"), 1, 4, 2))
+		assign_btn.tooltip_text = "点击撤回该槽位军令，重新谋划出征"
 		assign_btn.disabled = false
 	elif is_discarded:
 		assign_btn.text = "今日不用"
 		assign_btn.add_theme_color_override("font_color", Color("#6e5d50"))
 		assign_btn.add_theme_stylebox_override("disabled", _style(Color("#181412"), Color("#352c26"), 1, 4, 2))
-		assign_btn.tooltip_text = "今日 3 道将令槽位已占满，此牌今日不用。撤回任一已出牌后可恢复使用！"
+		assign_btn.tooltip_text = "今日 3 道将令槽位已满，此牌今日不用。撤回任一已出牌后可恢复使用！"
 		assign_btn.disabled = true
 	else:
 		if selected_code != "":
 			var tgt_name: String = str(map.node_by_code(selected_code).get("name", selected_code))
-			assign_btn.text = "出令➔【%s】" % tgt_name
+			assign_btn.text = "出令➔%s" % tgt_name
 			assign_btn.add_theme_color_override("font_color", Color("#fae19c"))
 			assign_btn.add_theme_stylebox_override("normal", _style(Color("#38271d"), C_BORDER_GOLD, 1, 4, 2))
-			assign_btn.tooltip_text = "点击下达将令进军【%s】" % tgt_name
+			assign_btn.tooltip_text = "点击下达将令向【%s】出征" % tgt_name
 		else:
 			assign_btn.text = "点城出令"
 			assign_btn.add_theme_color_override("font_color", Color("#a89684"))
@@ -4109,7 +4097,7 @@ func _submit_defend() -> void:
 			origin = str(n.get("code", ""))
 			break
 	if origin == "":
-		origin = "W01"
+		origin = "A_START"
 	_submit_defend_direct(origin)
 
 func _submit_defend_direct(origin: String) -> void:
@@ -4117,6 +4105,7 @@ func _submit_defend_direct(origin: String) -> void:
 		return
 	order_submitting = true
 	action_status.text = "传达军令中..."
+	print("SUBMIT DEFEND: origin=", origin, " turn_id=", _turn_id())
 	api.request("POST", "/api/slice/orders", {
 		"request_key": _new_key("def"),
 		"turn_id": _turn_id(),
@@ -4155,6 +4144,7 @@ func _withdraw_order() -> void:
 	)
 
 func _show_error(error: Dictionary) -> void:
+	print("API ERROR: ", error)
 	var code := str(error.get("code", ""))
 	var msg := str(error.get("message", "请求失败"))
 	action_status.text = msg

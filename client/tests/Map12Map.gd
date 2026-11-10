@@ -1,4 +1,4 @@
-﻿extends Control
+extends Control
 
 ## 《青竹文房·灵宠山河》12 城大地图 · 13 节点沙盘叠层原型地图
 ## 背景：2560×1920 MAP12_LAYOUT_CONCEPT_V2.png
@@ -133,6 +133,7 @@ const EDGES := [
 var art_texture: Texture2D = null
 var font: Font = null
 var textures_cache: Dictionary = {}
+var faction_flags: Dictionary = {}
 
 var zoom_level: float = 1.0
 var selected_node: String = "changan"
@@ -150,6 +151,18 @@ func _ready() -> void:
 		var tex := _load_tex(path)
 		if tex != null:
 			textures_cache[code] = tex
+
+	# 缓存 4 面正式水墨阵营旗 (bi / mo / yan / zhi)
+	var flag_map := {
+		"bi": "res://assets/art/ui/flag_faction_bi.png",
+		"mo": "res://assets/art/ui/flag_faction_mo.png",
+		"yan": "res://assets/art/ui/flag_faction_yan.png",
+		"zhi": "res://assets/art/ui/flag_faction_zhi.png",
+	}
+	for f_code in flag_map:
+		var f_tex := _load_tex(flag_map[f_code])
+		if f_tex != null:
+			faction_flags[f_code] = f_tex
 			
 	set_process(true)
 
@@ -302,23 +315,36 @@ func _draw_city_node(code: String) -> void:
 		draw_arc(pos, r_base, 0.0, TAU, 36, faction_color, 2.5, true)
 		draw_arc(pos, r_base + 3.0, 0.0, TAU, 36, Color(C_XUANZHI.r, C_XUANZHI.g, C_XUANZHI.b, 0.75), 1.2, true)
 
-	# 4. 战台迎风旌旗（立于城池右上方战台，不遮挡大门与地基标签）
-	var flag_pole_h := 46.0 if is_changan else (38.0 if is_capital else 32.0)
-	var pole_base := pos + Vector2(target_w * 0.32, -target_h * 0.60)
-	var pole_top := pole_base + Vector2(0, -flag_pole_h)
-	draw_line(pole_base, pole_top, Color("#3a2a1a"), 2.5, true)
-	draw_circle(pole_top, 2.8, GOLD_LIGHT)
-	var wave := sin(pulse * 3.2 + pos.x * 0.05) * 3.0
-	var flag := PackedVector2Array([
-		pole_top,
-		pole_top + Vector2(26, 4 + wave),
-		pole_top + Vector2(18, 14),
-		pole_top + Vector2(28, 20 - wave),
-		pole_top + Vector2(0, 16),
-	])
-	draw_polyline(flag, Color(C_XUANZHI.r, C_XUANZHI.g, C_XUANZHI.b, 0.95), 3.5, true)
-	draw_colored_polygon(flag, faction_color)
-	draw_polyline(flag, Color("#2b1e13"), 1.5, true)
+	# 4. 战台迎风旌旗（立于城池右上方战台，优先绘制正式水墨阵营旗）
+	var f_code: String = data.get("faction", "")
+	if not is_changan and faction_flags.has(f_code) and faction_flags[f_code] != null:
+		var f_tex: Texture2D = faction_flags[f_code]
+		var f_sz: Vector2 = f_tex.get_size()
+		var flag_h := 38.0 if is_capital else 30.0
+		var flag_w := flag_h * (f_sz.x / maxf(f_sz.y, 1.0))
+		var flag_pos := pos + Vector2(target_w * 0.28, -target_h * 0.78)
+		# 旗杆
+		draw_line(flag_pos + Vector2(2, flag_h * 0.9), flag_pos + Vector2(2, 0), Color("#2a1e14"), 2.5, true)
+		draw_circle(flag_pos + Vector2(2, 0), 2.5, GOLD_LIGHT)
+		# 阵营旗帜
+		draw_texture_rect(f_tex, Rect2(flag_pos.x, flag_pos.y, flag_w, flag_h), false)
+	else:
+		var flag_pole_h := 46.0 if is_changan else (38.0 if is_capital else 32.0)
+		var pole_base := pos + Vector2(target_w * 0.32, -target_h * 0.60)
+		var pole_top := pole_base + Vector2(0, -flag_pole_h)
+		draw_line(pole_base, pole_top, Color("#3a2a1a"), 2.5, true)
+		draw_circle(pole_top, 2.8, GOLD_LIGHT)
+		var wave := sin(pulse * 3.2 + pos.x * 0.05) * 3.0
+		var flag := PackedVector2Array([
+			pole_top,
+			pole_top + Vector2(26, 4 + wave),
+			pole_top + Vector2(18, 14),
+			pole_top + Vector2(28, 20 - wave),
+			pole_top + Vector2(0, 16),
+		])
+		draw_polyline(flag, Color(C_XUANZHI.r, C_XUANZHI.g, C_XUANZHI.b, 0.95), 3.5, true)
+		draw_colored_polygon(flag, faction_color)
+		draw_polyline(flag, Color("#2b1e13"), 1.5, true)
 
 	# 5. LOD 文字信息分级渲染
 	# -----------------------------------------------------------------------
