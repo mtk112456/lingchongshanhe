@@ -1,0 +1,53 @@
+【布局修改任务 · P0/P1】
+
+三方复核结论已经一致：**信息架构像，视觉视口不完全像**。当前平板是“文房案台 Container-First”，率土/三战是“无界沙盘 Camera-First”。先按下面改，不要改 server/API。
+
+先读：
+
+```text
+client/LAYOUT_REVIEW_ANTIGRAVITY.md
+art_src/gpt/LAYOUT_REVIEW_GPT.md
+tools/layout_review_brief.md
+```
+
+## P0 平板主地图全屏化（最高优先级）
+
+- 去掉左右各 140px 的深色实心侧栏底板，地图绘制/交互铺满 1400×1000（保留安全区）。
+- 左右入口改成贴边的半透明/印章式悬浮图标列：
+  - 左：阵营 / 将军 / 图鉴 / 任务
+  - 右：全图 / 榷场 / 赛季 / 设置
+- 底部 Dock 改成贴底通栏或贴安全区的半透明条，不再悬浮在画面中间。
+- 保留 C 水彩底图和细纸边（2–3px），不要再把地图装进大木框。
+- 顶部 HUD 改半透明深墨，让地图从下面透出来；文字保持高对比。
+- 5 城标签/旗帜/选中环在复杂地形上必须可读。
+- 手机竖屏保持现有 C 地图，但 Dock 也贴底；抽屉滑出时 Dock 向下让位。
+
+## P1 城池抽屉战术化
+
+- 高度压到 28–30%。
+- 首屏优先：城名/归属/守备/敌我点数差/相邻/主动作（进军、驻守）。
+- “城池小传”收进右上角一个小“传”按钮，点开弹窗看；侦察/补给/撤销放次级。
+- 抽屉滑出时 Dock 向下滑出屏幕，关闭回弹。
+- 平板和手机竖屏都验证最低节点不被抽屉挡住。
+
+## 验收
+
+```text
+godot --headless --path client res://tests/ClientSmoke.tscn
+godot --headless --path client res://tests/ReplaySmoke.tscn
+godot --path client res://tests/CaptureScreenshots.tscn
+```
+
+重拍并保留：
+
+```text
+screenshot_tablet_s01_map.png
+screenshot_tablet_s02_drawer.png
+screenshot_tablet_s03_order_confirm.png
+screenshot_phone_portrait_s01_map.png
+screenshot_phone_portrait_s02_drawer.png
+```
+
+写 `client/LAYOUT_FIX_REPORT.md`：改了什么、改了哪些文件、跑了什么验收、截图路径、没做/阻塞。
+
+不要复制商业游戏 UI/素材/文案；不要为了“像”缩小触控区或牺牲学生可读性。
