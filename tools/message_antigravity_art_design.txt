@@ -1,0 +1,91 @@
+【Phase 1 美术与集成 · 设计主责】
+
+用户明确：**美术设计由你主导，GPT 只负责按你的 brief 出图。**
+
+## 现状
+
+GPT 第一批已出：
+
+```text
+art_src/gpt/PHASE1_BATTLE_ASSETS/
+  cavalry_idle / attack / hit
+  shield_idle / attack / hit
+  archer_idle / attack / hit
+  spear_idle / attack / hit
+  siege_ram_idle / siege_ram_wall_attack
+  castle_gate_wall
+  preview_64px
+```
+
+问题：
+
+- 客户端还是 emoji/卡片占位，没有加载这些 PNG；
+- 第二批缺失：战场背景、卡框、12 战术图标、4 阵营旗；
+- 没有一份“哪张图放哪里、多大、什么状态”的设计 brief。
+
+## 请你做三件事
+
+### 1. 写 `client/ART_BRIEF_PHASE1.md`
+
+必须覆盖：
+
+```text
+战场：
+  3 路 × 2 排，攻左守右
+  单位尺寸、脚底锚点、前后排层级
+  器械位置、城门位置
+  背景 3 张：平原 / 关隘 / 渡口，尺寸、留白、可读性
+
+单位：
+  4 兵种 × 3 状态怎么用
+  阵营色只上旗/环/印章，不整体换色
+  64px 下如何保持可辨
+
+手牌：
+  卡框（九宫格）
+  12 战术图标映射
+  未分配 / 已分配 / 已打出 三种状态
+
+编成：
+  4 兵种头像/图标
+  选中 / 禁用 / 重复 三种状态
+```
+
+每一件给 GPT 的规格：
+
+```text
+文件名：
+尺寸：
+透明底：
+状态：
+禁止项：文字、阵营色、地面阴影、裁切
+```
+
+### 2. 接入客户端
+
+- `BattleReplay.gd`：用 PNG 替换 emoji；
+- 手牌条 / `CompositionPanel.gd`：用图标替换 emoji；
+- 单位状态切换：idle / attack / hit；
+- 器械：idle / wall_attack；
+- 城门：`castle_gate_wall.png`；
+- 720×514 与 1400×1000 截图。
+
+### 3. 验收
+
+```text
+64px 下 4 兵种可辨
+前后排层级清楚
+阵营色只上旗/环/印章
+手牌不遮城池抽屉
+BattleReplaySmoke / ClientSmoke / ReplaySmoke 全过
+```
+
+## 输出
+
+```text
+client/ART_BRIEF_PHASE1.md
+client/PHASE1_ART_REPORT.md
+截图
+```
+
+不要改后端/schema。

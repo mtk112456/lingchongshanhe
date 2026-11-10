@@ -5,7 +5,8 @@ const messageFile = process.argv[3];
 if (!match || !messageFile) { console.error('usage: node cdp_type_and_send.mjs <conversation-id> <message-file>'); process.exit(2); }
 const message = fs.readFileSync(messageFile, 'utf8');
 
-const targets = await (await fetch('http://127.0.0.1:16165/json/list')).json();
+const CDP_PORT = process.env.CDP_PORT || '16165';
+const targets = await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`)).json();
 const target = targets.find(t => t.url && t.url.includes(match));
 if (!target) { console.error('target not found'); process.exit(3); }
 const ws = new WebSocket(target.webSocketDebuggerUrl);

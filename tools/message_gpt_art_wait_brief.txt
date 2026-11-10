@@ -1,0 +1,55 @@
+【Phase 1 美术 · 等反重力的 brief，不要自己定规格】
+
+用户明确：**美术设计由反重力主导，你只负责按 brief 出图。**
+
+## 第一批
+
+已收到并验收：
+
+```text
+art_src/gpt/PHASE1_BATTLE_ASSETS/
+  cavalry_idle / attack / hit
+  shield_idle / attack / hit
+  archer_idle / attack / hit
+  spear_idle / attack / hit
+  siege_ram_idle / siege_ram_wall_attack
+  castle_gate_wall
+  preview_64px
+```
+
+## 第二批
+
+**不要自己定规格。** 等反重力的：
+
+```text
+client/ART_BRIEF_PHASE1.md
+```
+
+拿到后按 brief 出：
+
+```text
+战场背景 3 张：平原 / 关隘 / 渡口
+卡框 1 套（九宫格）
+12 战术图标
+4 阵营旗
+如果 brief 要求，补单位头像/卡面
+```
+
+## 同时做第一批终审
+
+```text
+64px 可辨
+无文字、无阵营色
+脚底锚点一致
+朝向/尺寸与 brief 一致
+透明底无地面阴影
+```
+
+## 输出
+
+```text
+art_src/gpt/PHASE1_BATTLE_ASSETS_BATCH2/
+art_src/gpt/PHASE1_ART_REVIEW.md
+```
+
+不要改 client/server 代码。
