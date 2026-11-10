@@ -320,6 +320,7 @@ final class CardSettlementService
                 'lane' => $lane,
                 'row' => $row,
                 'card' => (string)$order['card_code'],
+                'player_id' => (int)$order['player_id'],
             ];
         }
         return $teams;
