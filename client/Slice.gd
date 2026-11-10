@@ -777,7 +777,7 @@ func _layout_responsive() -> void:
 	if hand_cards_bar != null:
 		var dock_h := 46.0 if is_compact_h else (56.0 if is_phone else 60.0)
 		var bar_w := minf(w - 16.0, 720.0)
-		var actual_bar_h := 28.0 if hand_bar_collapsed else (92.0 if is_compact_h else 98.0)
+		var actual_bar_h := 28.0 if hand_bar_collapsed else (102.0 if is_compact_h else 108.0)
 		hand_cards_bar.size = Vector2(bar_w, actual_bar_h)
 		if is_drawer_open:
 			hand_cards_bar.visible = false
@@ -1762,7 +1762,9 @@ func _open_city_intel_dialog(node_code: String) -> void:
 			var icon_map := {"cav": "🏇", "shield": "🛡️", "arc": "🏹", "spear": "🗡️"}
 			var icon := str(icon_map.get(u_type, "⚔️"))
 
-			var detail_l := _label("%s 兵种：%s兵 | 路号：%d 路 | 阵位：%s | 侦知兵力：%d 兵" % [icon, u_name, l_num, row_name, troops], 12, Color("#332211"))
+			var est_low := int(troops * 0.95)
+			var est_high := int(ceil(troops * 1.05))
+			var detail_l := _label("%s 兵种：%s兵 | %d路%s | 侦测兵力：估计 %d–%d 兵 (疑似 %d 兵)" % [icon, u_name, l_num, row_name, est_low, est_high, troops], 12, Color("#332211"))
 			lane_v.add_child(detail_l)
 		else:
 			var empty_l := _label("（城关未布设独立防线或无守军）", 12, Color("#665544"))
@@ -1824,10 +1826,12 @@ func _open_city_intel_dialog(node_code: String) -> void:
 					else:
 						m_line.text = "%s 【我方·%s阵营】 %d位同窗 · %d队 · 真实兵力 %d 兵" % [f_icon, f_name, p_cnt, t_cnt, troops]
 				else:
+					var est_low := int(troops * 0.95)
+					var est_high := int(ceil(troops * 1.05))
 					if is_feint:
-						m_line.text = "%s 【敌方·%s阵营】 %d位学子 · %d队 · 兵力 [疑似 %d 兵]" % [f_icon, f_name, p_cnt, t_cnt, troops]
+						m_line.text = "%s 【敌方·%s阵营】 %d位学子 · %d队 · 估计兵力：约 %d–%d 兵 [疑似 %d 兵·虚张]" % [f_icon, f_name, p_cnt, t_cnt, est_low, est_high, troops]
 					else:
-						m_line.text = "%s 【敌方·%s阵营】 %d位学子 · %d队 · 真实兵力 %d 兵" % [f_icon, f_name, p_cnt, t_cnt, troops]
+						m_line.text = "%s 【敌方·%s阵营】 %d位学子 · %d队 · 估计兵力：约 %d–%d 兵 [疑似 %d 兵]" % [f_icon, f_name, p_cnt, t_cnt, est_low, est_high, troops]
 				m_line.add_theme_color_override("font_color", txt_col)
 				m_line.add_theme_font_size_override("font_size", 12)
 				row_v.add_child(m_line)
@@ -1952,15 +1956,39 @@ func _open_city_drawer(code: String) -> void:
 	var order: Variant = state.get("my_order", null)
 	city_action_withdraw_btn.disabled = not can_edit or typeof(order) != TYPE_DICTIONARY
 
-	city_action_advance_btn.disabled = not can_edit or is_mine
-	city_action_defend_btn.disabled = not can_edit or not is_mine
+	var cur_week := _current_week()
+	var is_king := _is_king_node(code, n)
+
+	if is_mine:
+		city_action_advance_btn.text = "🛡️ 驻守此城"
+		city_action_advance_btn.tooltip_text = "向己方据点下达驻守军令，前3位学子队伍将代表阵营迎战来犯敌军"
+		city_action_advance_btn.disabled = not can_edit
+		city_action_defend_btn.disabled = not can_edit
+	else:
+		city_action_advance_btn.text = "⚔️ 进军攻打"
+		city_action_advance_btn.tooltip_text = "下达进军军令，向该目标据点出征"
+		city_action_advance_btn.disabled = not can_edit
+		city_action_defend_btn.disabled = true
+
+	# 长安王城与赛季阶段规则
+	if is_king and cur_week < 3:
+		city_action_advance_btn.disabled = true
+		city_action_advance_btn.text = "🔒 第 3 周开放"
+		city_action_advance_btn.tooltip_text = "中央帝都长安第 3 周开放，前两周专注于开拓四野"
+	elif cur_week >= 4 and not _is_changan_or_neighbor(code):
+		city_action_advance_btn.disabled = true
+		city_action_advance_btn.text = "🔒 决战周限长安及邻城"
+		city_action_advance_btn.tooltip_text = "第 4 周决战周已至，诸军仅可会战长安及邻近要冲！"
 
 	if typeof(order) == TYPE_DICTIONARY:
 		var act := str(order.get("action", ""))
 		var t_name := str(order.get("target_name", ""))
-		city_order_hint.text = "今日已令：向【%s】%s，帅印已加盖！" % [t_name, "进军攻打" if act == "advance" else "坚守据点"]
+		city_order_hint.text = "今日已令：向【%s】%s，帅印已加盖！" % [t_name, "进军攻打" if act == "advance" else "驻守据点"]
 	else:
-		city_order_hint.text = "今日军令：待命中 · 请选择下方军略指令"
+		if is_mine:
+			city_order_hint.text = "今日军令：己方要冲据点 · 可点击【🛡️ 驻守此城】"
+		else:
+			city_order_hint.text = "今日军令：待命中 · 请选择下方军略指令"
 
 	# 检查本城是否已打出哨探将令（Phase 1.5 哨探情报入口）
 	var has_scout_on_city := false
@@ -1986,8 +2014,42 @@ func _open_city_drawer(code: String) -> void:
 	_layout_responsive()
 	focus_city(code)
 
+func _current_week() -> int:
+	var turn_no := int(state.get("turn", {}).get("turn_no", 1))
+	return int(ceil(float(turn_no) / 7.0))
+
+func _is_king_node(code: String, n: Dictionary) -> bool:
+	if code == "changan":
+		return true
+	if str(n.get("node_type", "")) == "king" or bool(n.get("is_king", false)):
+		return true
+	return false
+
+func _is_changan_or_neighbor(code: String) -> bool:
+	if code == "changan":
+		return true
+	for e in state.get("map", {}).get("edges", []):
+		if typeof(e) != TYPE_ARRAY or e.size() < 2:
+			continue
+		if (str(e[0]) == "changan" and str(e[1]) == code) or (str(e[1]) == "changan" and str(e[0]) == code):
+			return true
+	return false
+
+func _my_faction_asset_code() -> String:
+	var c := _my_faction_code()
+	if c == "bamboo" or c == "bi": return "bi"
+	if c == "ink" or c == "mo": return "mo"
+	if c == "shuang" or c == "yan": return "yan"
+	if c == "dan" or c == "zhi": return "zhi"
+	return "bi"
+
 func _on_city_advance_pressed() -> void:
 	if selected_code == "":
+		return
+	var n: Dictionary = map.node_by_code(selected_code)
+	var is_mine := bool(n.get("is_my_faction", false))
+	if is_mine:
+		_on_city_defend_pressed()
 		return
 	var my_origin := _find_adjacent_my_node(selected_code)
 	if my_origin == "":
@@ -2098,10 +2160,14 @@ func _open_order_confirm() -> void:
 		confirm_title_label.text = "⚔️ 进军出征确认"
 		confirm_origin_label.text = "出发据点：【%s】" % orig_name
 		confirm_target_label.text = "进军目标：【%s】" % targ_name
+		confirm_cost_label.text = "军令开销：今日军令 1 道（每日限 1 道）"
+		confirm_hint_label.text = "决算谕告：今夕 21:00 准时决战，战果载入次日战报"
 	else:
-		confirm_title_label.text = "🛡️ 坚守据点确认"
-		confirm_origin_label.text = "守备据点：【%s】" % targ_name
-		confirm_target_label.text = "防守效能：守备值 +1"
+		confirm_title_label.text = "🛡️ 驻守此城确认"
+		confirm_origin_label.text = "守备要塞：【%s】" % targ_name
+		confirm_target_label.text = "驻防使命：守护据点 · 迎战来犯敌军（取前3名学生队伍御敌）"
+		confirm_cost_label.text = "驻守开销：今日军令 1 道 · 固守我方疆土"
+		confirm_hint_label.text = "驻防谕告：若本城无驻守令将回落固定守军，学子驻守可克敌制胜"
 
 	confirm_pet_label.text = "出战灵宠：%s（士气高昂）" % pet_name
 	order_confirm_overlay.visible = true
@@ -3214,31 +3280,48 @@ func _create_single_hand_card(idx: int, cdata: Dictionary) -> PanelContainer:
 	card.custom_minimum_size = Vector2(0, 52)
 	
 	var c_type := str(cdata.get("type", "advance"))
+	var c_code := str(cdata.get("code", ""))
 	var is_played := bool(cdata.get("is_played", false))
 	var is_discarded := bool(cdata.get("is_discarded", false))
 	
-	var border_c := C_BORDER_GOLD
-	var bg_col := Color("#231c17")
-	var border_width := 1
-	
-	if is_played:
-		border_c = Color("#e5be65")
-		bg_col = Color("#2d2621") # 灰底
-		border_width = 2
-	elif is_discarded:
-		border_c = Color("#453b34") # 暗淡褐灰边
-		bg_col = Color("#171311", 0.95) # 暗沉弃牌底
-		border_width = 1
-	elif c_type == "advance":
-		border_c = C_ZHUSHA
-	elif c_type == "defend":
-		border_c = C_MOLAN
-	elif c_type == "scout":
-		border_c = C_ZHUQING
-	elif c_type == "supply":
-		border_c = C_TENGHUANG
-
-	card.add_theme_stylebox_override("panel", _style(bg_col, border_c, border_width, 6, 4))
+	# 统一接入九宫格卡框 card_frame_ninepatch.png (256x384 宣纸双线角纹九宫格拉伸)
+	var patch_path := "res://assets/art/ui/card_frame_ninepatch.png"
+	if ResourceLoader.exists(patch_path):
+		var nine_sb := StyleBoxTexture.new()
+		nine_sb.texture = load(patch_path)
+		nine_sb.texture_margin_left = 28
+		nine_sb.texture_margin_top = 28
+		nine_sb.texture_margin_right = 28
+		nine_sb.texture_margin_bottom = 28
+		nine_sb.set_content_margin_all(5)
+		if is_played:
+			nine_sb.modulate_color = Color("#756858") # 已出：暗古铜宣纸
+		elif is_discarded:
+			nine_sb.modulate_color = Color("#42362e") # 弃牌：暗墨灰
+		else:
+			nine_sb.modulate_color = Color("#fcf6ea") # 未出：温润宣纸本色
+		card.add_theme_stylebox_override("panel", nine_sb)
+	else:
+		var border_c := C_BORDER_GOLD
+		var bg_col := Color("#231c17")
+		var border_width := 1
+		if is_played:
+			border_c = Color("#e5be65")
+			bg_col = Color("#2d2621")
+			border_width = 2
+		elif is_discarded:
+			border_c = Color("#453b34")
+			bg_col = Color("#171311", 0.95)
+			border_width = 1
+		elif c_type == "advance":
+			border_c = C_ZHUSHA
+		elif c_type == "defend":
+			border_c = C_MOLAN
+		elif c_type == "scout":
+			border_c = C_ZHUQING
+		elif c_type == "supply":
+			border_c = C_TENGHUANG
+		card.add_theme_stylebox_override("panel", _style(bg_col, border_c, border_width, 6, 4))
 
 	var vb := VBoxContainer.new()
 	vb.add_theme_constant_override("separation", 2)
@@ -3246,15 +3329,26 @@ func _create_single_hand_card(idx: int, cdata: Dictionary) -> PanelContainer:
 
 	# 顶部标题栏
 	var h_title := HBoxContainer.new()
-	h_title.add_theme_constant_override("separation", 2)
+	h_title.add_theme_constant_override("separation", 3)
 	vb.add_child(h_title)
 
+	# 12 张战术图标 (优先加载 128x128 水墨战术图标 TextureRect)
+	var tac_path := "res://assets/art/tactics/tactics_%s.png" % c_code
+	if ResourceLoader.exists(tac_path):
+		var tac_icon := TextureRect.new()
+		tac_icon.texture = load(tac_path)
+		tac_icon.custom_minimum_size = Vector2(16, 16)
+		tac_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		tac_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		h_title.add_child(tac_icon)
+
 	var name_l := Label.new()
-	name_l.text = "%s %s" % [cdata.get("icon", ""), cdata.get("name", "")]
+	var fallback_prefix := "" if ResourceLoader.exists(tac_path) else str(cdata.get("icon", "")) + " "
+	name_l.text = "%s%s" % [fallback_prefix, cdata.get("name", "")]
 	if is_played:
 		name_l.add_theme_color_override("font_color", Color("#ffffff"))
 	elif is_discarded:
-		name_l.add_theme_color_override("font_color", Color("#74675b"))
+		name_l.add_theme_color_override("font_color", Color("#8e7f72"))
 	else:
 		name_l.add_theme_color_override("font_color", Color("#fae19c"))
 	name_l.add_theme_font_size_override("font_size", 11)
@@ -3454,6 +3548,7 @@ func _start_demo_battle(node_code: String = "", fire: bool = true, callback: Cal
 			return
 		var b_id := int(data.get("battle_id", 0))
 		var log: Dictionary = data.get("log", {})
+		log["node_code"] = node_code
 		current_battle_id = b_id
 		
 		# 打开回放浮层并启动确定性播放

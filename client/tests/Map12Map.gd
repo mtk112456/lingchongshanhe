@@ -1,4 +1,4 @@
-extends Control
+﻿extends Control
 
 ## 《青竹文房·灵宠山河》12 城大地图 · 13 节点沙盘叠层原型地图
 ## 背景：2560×1920 MAP12_LAYOUT_CONCEPT_V2.png
@@ -30,13 +30,13 @@ const NODES_DATA := {
 	"hanzhong": {
 		"name": "汉中", "region": "西北·笔", "faction": "bi", "color": C_ZHUSHA,
 		"pos": Vector2(0.300, 0.213), "is_capital": true, "is_changan": false,
-		"tex": "res://assets/art/city_yunlu_trim.png", "tag": "【隘】栈道连云",
+		"tex": "res://assets/art/city_hanzhong_trim.png", "tag": "【隘】栈道连云",
 		"verse": "长驱入蜀路，栈道出秦关"
 	},
 	"xiangyang": {
 		"name": "襄阳", "region": "西北·笔", "faction": "bi", "color": C_ZHUSHA,
 		"pos": Vector2(0.231, 0.338), "is_capital": false, "is_changan": false,
-		"tex": "res://assets/art/city_songfeng_trim.png", "tag": "【关】汉江锁钥",
+		"tex": "res://assets/art/city_xiangyang_trim.png", "tag": "【关】汉江锁钥",
 		"verse": "江流天地外，山色有无中"
 	},
 	"yecheng": {
@@ -48,13 +48,13 @@ const NODES_DATA := {
 	"taiyuan": {
 		"name": "太原", "region": "东北·墨", "faction": "mo", "color": C_MOLAN,
 		"pos": Vector2(0.842, 0.223), "is_capital": false, "is_changan": false,
-		"tex": "res://assets/art/city_luoxia_trim.png", "tag": "【阁】晋祠古松",
+		"tex": "res://assets/art/city_taiyuan_trim.png", "tag": "【阁】晋祠古松",
 		"verse": "白日依山尽，黄河入海流"
 	},
 	"luoyang": {
 		"name": "洛阳", "region": "东北·墨", "faction": "mo", "color": C_MOLAN,
 		"pos": Vector2(0.737, 0.336), "is_capital": true, "is_changan": false,
-		"tex": "res://assets/art/city_yunlu_trim.png", "tag": "【都】伊洛文脉",
+		"tex": "res://assets/art/city_luoyang_trim.png", "tag": "【都】伊洛文脉",
 		"verse": "洛阳亲友如相问，一片冰心在玉壶"
 	},
 	"chengdu": {
@@ -66,13 +66,13 @@ const NODES_DATA := {
 	"jiangling": {
 		"name": "江陵", "region": "西南·砚", "faction": "yan", "color": C_ZHUQING,
 		"pos": Vector2(0.267, 0.686), "is_capital": true, "is_changan": false,
-		"tex": "res://assets/art/city_songfeng_trim.png", "tag": "【渚】楚泽清风",
+		"tex": "res://assets/art/city_jiangling_trim.png", "tag": "【渚】楚泽清风",
 		"verse": "千里江陵一日还，两岸猿声啼不住"
 	},
 	"changsha": {
 		"name": "长沙", "region": "西南·砚", "faction": "yan", "color": C_ZHUQING,
 		"pos": Vector2(0.221, 0.798), "is_capital": false, "is_changan": false,
-		"tex": "res://assets/art/city_tingyu_trim.png", "tag": "【院】岳麓青苍",
+		"tex": "res://assets/art/city_changsha_trim.png", "tag": "【院】岳麓青苍",
 		"verse": "惟楚有材，于斯为盛"
 	},
 	"jianye": {
@@ -84,13 +84,13 @@ const NODES_DATA := {
 	"kuaiji": {
 		"name": "会稽", "region": "东南·纸", "faction": "zhi", "color": C_TENGHUANG,
 		"pos": Vector2(0.747, 0.729), "is_capital": false, "is_changan": false,
-		"tex": "res://assets/art/city_songfeng_trim.png", "tag": "【亭】兰亭水曲",
+		"tex": "res://assets/art/city_kuaiji_trim.png", "tag": "【亭】兰亭水曲",
 		"verse": "群贤毕至，少长咸集，引以为流觞曲水"
 	},
 	"shouchun": {
 		"name": "寿春", "region": "东南·纸", "faction": "zhi", "color": C_TENGHUANG,
 		"pos": Vector2(0.704, 0.833), "is_capital": false, "is_changan": false,
-		"tex": "res://assets/art/city_luoxia_trim.png", "tag": "【关】八公淮水",
+		"tex": "res://assets/art/city_shouchun_trim.png", "tag": "【关】八公淮水",
 		"verse": "八公山上，草木皆兵"
 	},
 	"changan": {
@@ -101,7 +101,7 @@ const NODES_DATA := {
 	},
 }
 
-# 16 条拓扑驰道（4 区三角互联 12 条 + 4 主城通长安 4 条）
+# 19 条拓扑驰道（4 区三角 12 条 + 4 主城通长安 4 条 + 3 条跨区边）
 const EDGES := [
 	# 西北笔阵营内环 (3 条)
 	["liangzhou", "hanzhong"],
@@ -124,6 +124,10 @@ const EDGES := [
 	["luoyang", "changan"],
 	["jiangling", "changan"],
 	["jianye", "changan"],
+	# 跨区边 (3 条，避免前两周无事可做)
+	["liangzhou", "taiyuan"],
+	["xiangyang", "luoyang"],
+	["jiangling", "jianye"],
 ]
 
 var art_texture: Texture2D = null

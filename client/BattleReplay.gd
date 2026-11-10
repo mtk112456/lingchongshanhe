@@ -47,6 +47,10 @@ var units_data: Dictionary = {} # id -> Dictionary
 var events_by_tick: Dictionary = {} # tick -> Array
 var battle_result: Dictionary = {}
 
+# 案台与战场画卷背景
+var bg_texture: TextureRect
+var current_city_ident: String = ""
+
 # 播放状态机
 var current_tick: int = 0
 var is_playing: bool = true
@@ -133,6 +137,8 @@ func load_sample_data() -> void:
 
 func play_data(data: Dictionary) -> void:
 	replay_data = data
+	var node_id := str(data.get("node_code", data.get("node", data.get("city_type", ""))))
+	set_battle_background_by_city(node_id)
 	tick_max = int(data.get("tick_max", 0))
 	if tick_max <= 0:
 		tick_max = int(data.get("result", {}).get("ticks", data.get("ticks", 60)))
@@ -362,6 +368,8 @@ const CARD_EFFECTS: Dictionary = {
 func _show_result_overlay() -> void:
 	if not result_overlay:
 		return
+	result_overlay.z_index = 35
+	result_overlay.move_to_front()
 	result_overlay.visible = true
 	result_overlay.modulate.a = 0.0
 	var tw := create_tween()
@@ -433,13 +441,15 @@ func _format_team_tactics_lines() -> String:
 		att_units.sort_custom(func(a, b): return int(a.get("lane", 1)) < int(b.get("lane", 1)))
 		teams = att_units
 
-	# 3. 兜底默认三队
+	# 3. 兜底默认三队（严格覆盖战术生效与未佩战策样本）
 	if teams.is_empty():
-		lines.append("• 骑 · 1 路前 · 夜袭 · 攻击 +20%（本城未侦察）")
-		lines.append("• 盾 · 2 路前 · 坚壁 · 防御 +20%")
-		lines.append("• 弓 · 3 路后 · 火攻 · 器械攻墙 +50%")
+		lines.append("⚔️【战况交锋总揽】先锋夜袭突防，中军重盾破关，城防大幅瓦解！")
+		lines.append("• ⚡夜袭生效 · 骑兵 · 1路前 · 攻击 +20%（本城未侦察）")
+		lines.append("• ⚡坚壁生效 · 盾兵 · 2路前 · 防御 +20%（守备稳固）")
+		lines.append("• 常规突进 · 弓兵 · 3路后 · (未佩战策)")
 		return "\n".join(lines)
 
+	lines.append("⚔️【战况交锋总揽】先锋夜袭突防，中军重盾破关，城防大幅瓦解！")
 	var type_names := {"cav": "骑", "shield": "盾", "arc": "弓", "spear": "枪"}
 	for t in teams:
 		if typeof(t) != TYPE_DICTIONARY:
@@ -451,13 +461,12 @@ func _format_team_tactics_lines() -> String:
 		var row_str := "后" if row_val == "back" else "前"
 		var card_code := str(t.get("card", "") if t.get("card") != null else "")
 		
-		var card_title := "无"
-		var effect_desc := "无战术"
 		if card_code != "" and card_code != "null":
-			card_title = str(CARD_NAMES.get(card_code, card_code))
-			effect_desc = str(CARD_EFFECTS.get(card_code, "战术生效"))
-		
-		lines.append("• %s · %d 路%s · %s · %s" % [t_name, lane_num, row_str, card_title, effect_desc])
+			var card_title := str(CARD_NAMES.get(card_code, card_code))
+			var effect_desc := str(CARD_EFFECTS.get(card_code, "战术生效"))
+			lines.append("• ⚡%s生效 · %s兵 · %d路%s · %s" % [card_title, t_name, lane_num, row_str, effect_desc])
+		else:
+			lines.append("• 常规突进 · %s兵 · %d路%s · (未佩战策)" % [t_name, lane_num, row_str])
 
 	return "\n".join(lines)
 
@@ -476,6 +485,21 @@ func _build_ui() -> void:
 	bg.color = C_WOOD_DESK
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
+
+	# 宏伟水墨水彩战场画卷底图（平原/关隘/渡口 3 景动态自适应）
+	bg_texture = TextureRect.new()
+	bg_texture.name = "BattleBgTexture"
+	bg_texture.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	bg_texture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	bg_texture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	add_child(bg_texture)
+	set_battle_background_by_city("plain")
+
+	# 柔和半透明暗幕，确保沙盘上方信息高对比度清晰
+	var bg_dim := ColorRect.new()
+	bg_dim.color = Color(0.08, 0.06, 0.04, 0.28)
+	bg_dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(bg_dim)
 	
 	root_vbox = VBoxContainer.new()
 	root_vbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -566,9 +590,9 @@ func _build_ui() -> void:
 	battlefield_rect.resized.connect(_layout_battlefield)
 	root_vbox.add_child(battlefield_rect)
 	
-	# 宣纸沙盘铺底
+	# 宣纸沙盘铺底（半透明磨砂，透出宏伟战场画卷，同时保持战道与卡牌对比度）
 	var paper_map := ColorRect.new()
-	paper_map.color = Color("#efe7d5")
+	paper_map.color = Color(0.96, 0.92, 0.85, 0.22)
 	paper_map.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	battlefield_rect.add_child(paper_map)
 	
@@ -976,6 +1000,7 @@ func _on_skip_pressed() -> void:
 func _build_result_overlay() -> void:
 	result_overlay = Control.new()
 	result_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	result_overlay.z_index = 35
 	result_overlay.visible = false
 	add_child(result_overlay)
 	
@@ -989,7 +1014,18 @@ func _build_result_overlay() -> void:
 	var card_center := PanelContainer.new()
 	card_center.custom_minimum_size = Vector2(460, 320)
 	card_center.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	card_center.add_theme_stylebox_override("panel", _make_style(C_XUANZHI, C_BORDER_GOLD, 3, 10, 16))
+	var patch_path := "res://assets/art/ui/card_frame_ninepatch.png"
+	if ResourceLoader.exists(patch_path):
+		var nine_sb := StyleBoxTexture.new()
+		nine_sb.texture = load(patch_path)
+		nine_sb.texture_margin_left = 32
+		nine_sb.texture_margin_top = 32
+		nine_sb.texture_margin_right = 32
+		nine_sb.texture_margin_bottom = 32
+		nine_sb.set_content_margin_all(16)
+		card_center.add_theme_stylebox_override("panel", nine_sb)
+	else:
+		card_center.add_theme_stylebox_override("panel", _make_style(C_XUANZHI, C_BORDER_GOLD, 3, 10, 16))
 	result_overlay.add_child(card_center)
 	
 	var vbox := VBoxContainer.new()
@@ -1095,3 +1131,21 @@ func _make_style(bg: Color, border: Color, border_w: int = 1, radius: int = 6, p
 	sb.set_corner_radius_all(radius)
 	sb.set_content_margin_all(pad)
 	return sb
+
+## 按城池类型与据点识别码动态切换 3 张战场画卷背景 (平原/关隘/渡口)
+func set_battle_background_by_city(city_ident: String) -> void:
+	current_city_ident = city_ident
+	var path := "res://assets/art/battle/bg_battle_plain.png"
+	var lower := city_ident.to_lower()
+	if "ferry" in lower or "渡" in city_ident or "n1" in lower or "水" in city_ident or "建业" in city_ident or "襄阳" in city_ident or "river" in lower:
+		path = "res://assets/art/battle/bg_battle_ferry.png"
+	elif "pass" in lower or "关" in city_ident or "台" in city_ident or "start" in lower or "n3" in lower or "太原" in city_ident or "汉中" in city_ident or "江陵" in city_ident or "gate" in lower:
+		path = "res://assets/art/battle/bg_battle_pass.png"
+	else:
+		path = "res://assets/art/battle/bg_battle_plain.png"
+	
+	if ResourceLoader.exists(path):
+		var tex := load(path) as Texture2D
+		if tex and is_instance_valid(bg_texture):
+			bg_texture.texture = tex
+

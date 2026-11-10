@@ -18,7 +18,12 @@ var play_cards: Array = []
 var has_scout := false
 
 func _ready() -> void:
-	print("RUN_PHASE15_CAPTURE start (SubViewport Mode)")
+	print("RUN_PHASE15_CAPTURE start (Dual-Viewport Protected Mode)")
+	if not OS.has_feature("dedicated_server"):
+		DisplayServer.window_set_size(Vector2i(1400, 1000))
+	get_window().size = Vector2i(1400, 1000)
+	get_viewport().size = Vector2i(1400, 1000)
+
 	sv = SubViewport.new()
 	sv.size = Vector2i(1400, 1000)
 	sv.render_target_update_mode = SubViewport.UPDATE_ALWAYS
@@ -205,7 +210,12 @@ func _build_play_cards(hand_cards: Array) -> void:
 			play_cards.append(str(hand_cards[i]))
 
 func _set_viewport_size(w: int, h: int) -> void:
-	sv.size = Vector2i(w, h)
+	if not OS.has_feature("dedicated_server"):
+		DisplayServer.window_set_size(Vector2i(w, h))
+	get_window().size = Vector2i(w, h)
+	get_viewport().size = Vector2i(w, h)
+	if sv != null:
+		sv.size = Vector2i(w, h)
 	scene.size = Vector2(w, h)
 	scene._layout_responsive()
 

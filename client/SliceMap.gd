@@ -74,6 +74,9 @@ const LANDMARK_ASSET_PATHS := {
 	"B_START": "res://assets/art/city_yanhui.png",
 }
 
+# 4 面水墨阵营旗贴图（严格对齐后端 code：bi / mo / yan / zhi）
+var faction_flags: Dictionary = {}
+
 var art_map_texture: Texture2D = null
 var art_map_portrait_texture: Texture2D = null
 var city_trim_textures: Dictionary = {}
@@ -107,6 +110,25 @@ func _init_asset_slots() -> void:
 			var tex: Texture2D = load(path)
 			if tex != null:
 				landmark_textures[code] = tex
+
+	# 加载 4 面水墨阵营旗（shuang 映射 yan，dan 映射 zhi）
+	faction_flags.clear()
+	var flag_map := {
+		"bi": "res://assets/art/ui/flag_faction_bi.png",
+		"bamboo": "res://assets/art/ui/flag_faction_bi.png",
+		"mo": "res://assets/art/ui/flag_faction_mo.png",
+		"ink": "res://assets/art/ui/flag_faction_mo.png",
+		"yan": "res://assets/art/ui/flag_faction_yan.png",
+		"shuang": "res://assets/art/ui/flag_faction_yan.png",
+		"zhi": "res://assets/art/ui/flag_faction_zhi.png",
+		"dan": "res://assets/art/ui/flag_faction_zhi.png",
+	}
+	for f_code in flag_map:
+		var f_path: String = flag_map[f_code]
+		if ResourceLoader.exists(f_path):
+			var f_tex := load(f_path) as Texture2D
+			if f_tex:
+				faction_flags[f_code] = f_tex
 
 func set_zoom_level(z: float) -> void:
 	zoom_level = z
@@ -468,17 +490,27 @@ func _draw_node_over_art(n: Dictionary, pos: Vector2, faction_color: Color, is_s
 	draw_line(pole_base, pole_top, Color("#3a2a1a"), 3.0, true)
 	draw_circle(pole_top, 3.0, GOLD)
 	var wave := sin(pulse * 3.2 + pos.x * 0.05) * 3.0
-	var flag := PackedVector2Array([
-		pole_top,
-		pole_top + Vector2(28, 5 + wave),
-		pole_top + Vector2(20, 16),
-		pole_top + Vector2(30, 24 - wave),
-		pole_top + Vector2(0, 19),
-	])
-	# 旗面描米白边，避免与红山蓝山背景粘连
-	draw_polyline(flag, Color(CREAM.r, CREAM.g, CREAM.b, 0.92), 4.0, true)
-	draw_colored_polygon(flag, faction_color)
-	draw_polyline(flag, Color("#2b1e13"), 1.6, true)
+	var owner_f_code := str(n.get("owner_faction", n.get("faction", ""))).to_lower()
+	var flag_tex: Texture2D = faction_flags.get(owner_f_code, null)
+	if flag_tex != null:
+		var fw := 28.0 if is_compact_screen else 32.0
+		var fh := 28.0 if is_compact_screen else 32.0
+		var f_rect := Rect2(pole_top + Vector2(2, wave - 2), Vector2(fw, fh))
+		# 旗帜背后衬一层柔和宣纸光环，在任何山水背景下都清晰可辨
+		draw_circle(f_rect.get_center(), (fw / 2.0) + 1.0, Color(1, 1, 1, 0.35))
+		draw_texture_rect(flag_tex, f_rect, false)
+	else:
+		var flag := PackedVector2Array([
+			pole_top,
+			pole_top + Vector2(28, 5 + wave),
+			pole_top + Vector2(20, 16),
+			pole_top + Vector2(30, 24 - wave),
+			pole_top + Vector2(0, 19),
+		])
+		# 旗面描米白边，避免与红山蓝山背景粘连
+		draw_polyline(flag, Color(CREAM.r, CREAM.g, CREAM.b, 0.92), 4.0, true)
+		draw_colored_polygon(flag, faction_color)
+		draw_polyline(flag, Color("#2b1e13"), 1.6, true)
 
 	# 4. 城名纸签与归属小签（LOD: zoom_level >= 0.88，小于此级别只显建筑剪影、归属光环与战旗）
 	if zoom_level >= 0.88:

@@ -16,7 +16,12 @@ var play_cards: Array = []
 var has_scout := false
 
 func _ready() -> void:
-	print("P15_VALIDATION_SUITE start (SubViewport Mode)")
+	print("P15_VALIDATION_SUITE start (Dual-Viewport Protected Mode)")
+	if not OS.has_feature("dedicated_server"):
+		DisplayServer.window_set_size(Vector2i(1400, 1000))
+	get_window().size = Vector2i(1400, 1000)
+	get_viewport().size = Vector2i(1400, 1000)
+
 	sv = SubViewport.new()
 	sv.size = Vector2i(1400, 1000)
 	sv.render_target_update_mode = SubViewport.UPDATE_ALWAYS
@@ -272,6 +277,10 @@ func _build_play_cards(hand_cards: Array) -> void:
 			play_cards.append(str(hand_cards[i]))
 
 func _set_viewport_size(w: int, h: int) -> void:
+	if not OS.has_feature("dedicated_server"):
+		DisplayServer.window_set_size(Vector2i(w, h))
+	get_window().size = Vector2i(w, h)
+	get_viewport().size = Vector2i(w, h)
 	if sv != null:
 		sv.size = Vector2i(w, h)
 	scene.size = Vector2(w, h)

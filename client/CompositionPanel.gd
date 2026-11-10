@@ -174,7 +174,9 @@ func _build_ui() -> void:
 		btn.custom_minimum_size = Vector2(0, 36)
 		btn.text = " %s (%s)" % [udata.name, udata.role]
 		var asset_name := str(udata.get("asset", code))
-		var icon_path := "res://assets/art/battle/%s_idle.png" % asset_name
+		var icon_path := "res://assets/art/ui/unit_icon_%s.png" % code
+		if not ResourceLoader.exists(icon_path):
+			icon_path = "res://assets/art/battle/%s_idle.png" % asset_name
 		if ResourceLoader.exists(icon_path):
 			btn.icon = load(icon_path)
 			btn.expand_icon = true
@@ -376,7 +378,19 @@ func _update_display() -> void:
 		
 		var border_c: Color = C_BORDER_GOLD if is_selected else Color(0.35, 0.28, 0.22, 0.7)
 		var bg_c: Color = Color("#231c17") if not is_selected else Color("#362a20")
-		card.add_theme_stylebox_override("panel", _make_style(bg_c, border_c, 2 if is_selected else 1, 6, 4))
+		var patch_path := "res://assets/art/ui/card_frame_ninepatch.png"
+		if ResourceLoader.exists(patch_path):
+			var sb := StyleBoxTexture.new()
+			sb.texture = load(patch_path)
+			sb.texture_margin_left = 28
+			sb.texture_margin_top = 28
+			sb.texture_margin_right = 28
+			sb.texture_margin_bottom = 28
+			sb.set_content_margin_all(5)
+			sb.modulate_color = Color("#fcf6ea") if is_selected else Color("#786b5e")
+			card.add_theme_stylebox_override("panel", sb)
+		else:
+			card.add_theme_stylebox_override("panel", _make_style(bg_c, border_c, 2 if is_selected else 1, 6, 4))
 		
 		var sel_ind: Label = card.find_child("SelectIndicator", true, false)
 		if sel_ind:
@@ -390,7 +404,9 @@ func _update_display() -> void:
 		var u_icon: TextureRect = card.find_child("SlotUnitIcon", true, false)
 		if u_icon:
 			var asset_name := str(u_data.get("asset", u_code))
-			var icon_path := "res://assets/art/battle/%s_idle.png" % asset_name
+			var icon_path := "res://assets/art/ui/unit_icon_%s.png" % u_code
+			if not ResourceLoader.exists(icon_path):
+				icon_path = "res://assets/art/battle/%s_idle.png" % asset_name
 			if ResourceLoader.exists(icon_path):
 				u_icon.texture = load(icon_path)
 		
