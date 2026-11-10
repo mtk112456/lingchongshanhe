@@ -1,0 +1,56 @@
+【13 节点原型 · 2 条必须修】
+
+原型结构成立：13 节点、长安王城、16 条路线、0.35x/0.50x 都出来了。回归已过（14/14、ClientSmoke、ReplaySmoke）。但还有 2 条体验问题，先修再进 4K：
+
+## 1. 0.50x 手机城名太小
+
+复现：
+
+```text
+client/tests/screenshot_phone_landscape_map12_zoom_050.png
+client/tests/screenshot_phone_landscape_map12_water.png
+```
+
+720×514 下城名纸签里的字看起来不足 10px，真机很难读。
+
+要求：
+
+- 0.50x 手机城名纸签文字 **≥12px**；
+- 只显示精简单行城名，隐藏归属副签；
+- 城名之间不重叠、不骑跨；
+- 选中城名可加粗/加金边，但不要放大到遮挡地图；
+- 重拍 0.50x 手机两张图。
+
+## 2. 0.35x 平板地图被装进大画框
+
+复现：
+
+```text
+client/tests/screenshot_tablet_map12_zoom_035.png
+client/tests/screenshot_tablet_map12_selected_changan.png
+```
+
+4:3 图装进 1400×1000（1.4）视口，四周留下深色画框/留白，地图有效面积偏小；5 节点主地图是全屏的，两者不一致。
+
+要求：
+
+- 做一版 **full-bleed / cover**：地图铺满 1400×1000，安全区只用于 HUD/标签/相机；
+- 或者把 12 城底图按 1.4 比例裁切/重构图，不要四周大画框；
+- 保留细纸边可以，但不要 100px 级深色边框；
+- 重拍 0.35x 两张图，和当前版做对比。
+
+## 3. 顺手修
+
+- 浅色落点（太原/洛阳/建业/会稽/寿春）在 0.35x 几乎看不见，给局部暗色衬底（柳荫/青石/松影），不要规则圆斑；
+- 11 城复用 5 个 Sprite 原型阶段可接受，但请在报告里标注“临时”，最终等 GPT 12 城专属 Sprite；
+- 长安王城尺寸/金环保持，不要缩小成普通城。
+
+## 验收
+
+```text
+godot --headless --path client res://tests/ClientSmoke.tscn
+godot --headless --path client res://tests/ReplaySmoke.tscn
+godot --path client res://tests/RunMap12Capture.tscn
+```
+
+重拍四张 map12 截图，更新 `client/MAP12_PROTOTYPE_REPORT.md`。不要改 server/API。

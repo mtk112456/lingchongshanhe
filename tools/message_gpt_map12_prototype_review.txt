@@ -1,0 +1,36 @@
+【12 城叠层原型复审 · 只判断，不改代码】
+
+请读：
+
+```text
+client/MAP12_PROTOTYPE_REPORT.md
+client/MAP12_REVIEW_ANTIGRAVITY.md
+art_src/gpt/JOINT_MAP_REVIEW.md
+art_src/gpt/ai_pipeline_v1/MAP12_ANCHORS_V2.md
+```
+
+四张原型截图：
+
+```text
+client/tests/screenshot_tablet_map12_zoom_035.png
+client/tests/screenshot_tablet_map12_selected_changan.png
+client/tests/screenshot_phone_landscape_map12_zoom_050.png
+client/tests/screenshot_phone_landscape_map12_water.png
+```
+
+请回答：
+
+1. 0.35x 平板：13 个节点能数清吗？长安王城是否能一眼认出？中央岩台是否还像“第 13 城”或已经成立？
+2. 0.50x 手机：城名纸签是否太小/太淡？在 720×514 真机上能否读清？归属副签该不该隐藏？
+3. 0.35x 平板有深色画框/留白（4:3 图装进 1.4 视口），这是“卷轴装裱”还是应该 full-bleed？和 5 节点全屏地图是否不一致？
+4. 浅色落点（太原/洛阳/建业/会稽/寿春）在 0.35x 是否几乎看不见？需要多强的暗色衬底？
+5. 11 个城暂时复用 5 个切片 Sprite，导致区域识别度下降多少？原型阶段可接受吗？
+6. 最优先 3 个美术/可读性修改。
+
+输出：
+
+```text
+art_src/gpt/MAP12_PROTOTYPE_REVIEW_GPT.md
+```
+
+不要改 client/server；只写复审。
