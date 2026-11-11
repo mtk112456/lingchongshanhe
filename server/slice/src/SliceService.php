@@ -9,6 +9,7 @@ require_once __DIR__ . '/BattleSettlementService.php';
 require_once __DIR__ . '/BulletinService.php';
 require_once __DIR__ . '/MeritService.php';
 require_once __DIR__ . '/EstateService.php';
+require_once __DIR__ . '/PlayerReportService.php';
 
 final class SliceService
 {
@@ -2009,6 +2010,11 @@ final class SliceService
             'turn' => $this->turnPublic($turn),
             'report' => $result,
             'me' => $me,
+            'me_report' => (new PlayerReportService($this->pdo))->forTurn(
+                (int)$player['game_id'],
+                (int)$player['id'],
+                $turnId
+            ),
         ];
     }
 

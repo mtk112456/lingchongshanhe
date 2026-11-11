@@ -163,7 +163,8 @@ final class BattleEngine
                 $t['row'],
                 $t['type'],
                 (string)$attacker['general'],
-                $t['troops']
+                $t['troops'],
+                $t['player_id'] ?? null
             );
             $units[$id]['card'] = $t['card'];
         }
@@ -176,7 +177,8 @@ final class BattleEngine
                 $t['row'],
                 $t['type'],
                 (string)$defender['general'],
-                $t['troops']
+                $t['troops'],
+                $t['player_id'] ?? null
             );
             $units[$id]['card'] = $t['card'];
         }
@@ -192,6 +194,7 @@ final class BattleEngine
             'row' => $u['row'],
             'type' => $u['type'],
             'card' => $u['card'] ?? null,
+            'player_id' => $u['player_id'] ?? null,
             'atk' => round($u['atk'], 2),
             'def_mult' => round($u['def_mult'], 3),
             'initiative' => (int)($u['initiative'] ?? 0),
@@ -271,9 +274,101 @@ final class BattleEngine
             'row' => $u['row'],
             'type' => $u['type'],
             'card' => $u['card'] ?? null,
+            'player_id' => $u['player_id'] ?? null,
             'troops' => round($u['troops'], 1),
             'alive' => $u['alive'],
         ], $units));
+
+        // 个人贡献：按玩家聚合伤害、破墙、损失兵力
+        $playerStats = [];
+        $unitPlayer = [];
+        foreach ($units as $unit) {
+            if (($unit['player_id'] ?? null) !== null) {
+                $unitPlayer[(string)$unit['id']] = (int)$unit['player_id'];
+            }
+        }
+        $initPlayer = function (?int $pid) use (&$playerStats): void {
+            if ($pid === null || isset($playerStats[$pid])) {
+                return;
+            }
+            $playerStats[$pid] = [
+                'damage' => 0.0,
+                'wall_damage' => 0.0,
+                'troops_initial' => 0.0,
+                'troops_lost' => 0.0,
+                'teams' => 0,
+            ];
+        };
+        foreach ($attTeams as $t) {
+            $initPlayer($t['player_id'] ?? null);
+            if (($t['player_id'] ?? null) !== null) {
+                $playerStats[(int)$t['player_id']]['troops_initial'] += (float)$t['troops'];
+                $playerStats[(int)$t['player_id']]['teams']++;
+            }
+        }
+        foreach ($defTeams as $t) {
+            $initPlayer($t['player_id'] ?? null);
+            if (($t['player_id'] ?? null) !== null) {
+                $playerStats[(int)$t['player_id']]['troops_initial'] += (float)$t['troops'];
+                $playerStats[(int)$t['player_id']]['teams']++;
+            }
+        }
+
+        $siegeDamage = 0.0;
+        foreach ($events as $event) {
+            $damage = (float)($event['damage'] ?? 0);
+            if ($damage <= 0) {
+                continue;
+            }
+            $uid = (string)($event['unit'] ?? '');
+            if ($uid === 'SIEGE') {
+                $siegeDamage += $damage;
+                continue;
+            }
+            if (!isset($unitPlayer[$uid])) {
+                continue;
+            }
+            $pid = $unitPlayer[$uid];
+            if (($event['action'] ?? '') === 'wall') {
+                $playerStats[$pid]['wall_damage'] += $damage;
+            } else {
+                $playerStats[$pid]['damage'] += $damage;
+            }
+        }
+
+        // 器械伤害平分给攻方玩家
+        $attackerPids = array_values(array_unique(array_filter(array_map(
+            static fn($t) => $t['player_id'] ?? null,
+            $attTeams
+        ))));
+        if ($siegeDamage > 0 && $attackerPids !== []) {
+            $share = $siegeDamage / count($attackerPids);
+            foreach ($attackerPids as $pid) {
+                $playerStats[(int)$pid]['wall_damage'] += $share;
+            }
+        }
+
+        foreach ($finalUnits as $unit) {
+            $pid = $unit['player_id'] ?? null;
+            if ($pid === null || !isset($playerStats[(int)$pid])) {
+                continue;
+            }
+            $playerStats[(int)$pid]['troops_lost'] += max(0.0, (float)$unit['max_troops'] - (float)$unit['troops']);
+        }
+
+        $totalContribution = 0.0;
+        foreach ($playerStats as $stat) {
+            $totalContribution += $stat['damage'] + $stat['wall_damage'];
+        }
+        foreach ($playerStats as &$stat) {
+            $stat['damage'] = round($stat['damage'], 1);
+            $stat['wall_damage'] = round($stat['wall_damage'], 1);
+            $stat['troops_lost'] = round($stat['troops_lost'], 1);
+            $stat['contribution'] = $totalContribution > 0
+                ? round(($stat['damage'] + $stat['wall_damage']) / $totalContribution, 3)
+                : 0.0;
+        }
+        unset($stat);
 
         return [
             'wall' => max(0, round($wall, 1)),
@@ -285,6 +380,7 @@ final class BattleEngine
             'def_formation' => $defFormation,
             'units' => $initialUnits,
             'final_units' => $finalUnits,
+            'players' => $playerStats,
             'events' => $events,
         ];
     }
@@ -335,6 +431,7 @@ final class BattleEngine
                     'lane' => $lane,
                     'row' => $row,
                     'card' => $card,
+                    'player_id' => isset($t['player_id']) ? (int)$t['player_id'] : null,
                 ];
                 if (count($teams) >= 3) {
                     break;
@@ -520,7 +617,8 @@ final class BattleEngine
         string $row,
         string $type,
         string $general,
-        float $troops
+        float $troops,
+        ?int $playerId = null
     ): array {
         $t = self::TYPES[$type];
         $g = self::GENERALS[$general] ?? self::GENERALS['def'];
@@ -532,6 +630,7 @@ final class BattleEngine
             'lane' => $lane,
             'row' => $row,
             'type' => $type,
+            'player_id' => $playerId,
             'troops' => $troops,
             'max_troops' => $troops,
             'atk' => $baseAtk * $t['atk'] * ($g['atk'] ?? 1.0),

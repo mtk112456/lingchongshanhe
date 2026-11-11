@@ -5,6 +5,7 @@ require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/../src/SqlRunner.php';
 require_once __DIR__ . '/../src/CardSettlementService.php';
 require_once __DIR__ . '/../src/MeritService.php';
+require_once __DIR__ . '/../src/PlayerReportService.php';
 
 $failed = 0;
 function check(string $name, bool $ok, string $detail = ''): void
@@ -108,6 +109,14 @@ try {
     $turnSummary = $merit->turnSummary($turnIds[2], $vanguardIds[0]);
     check('单回合战报军功 65', $turnSummary['turn_total'] === 65, 'turn=' . $turnSummary['turn_total']);
 
+    $playerReport = (new PlayerReportService($pdo))->forTurn($gameId, $vanguardIds[0], $turnIds[2]);
+    check('个人战报有 1 条令', count($playerReport['orders']) === 1, 'orders=' . count($playerReport['orders']));
+    check('个人战报角色=先锋', ($playerReport['orders'][0]['role'] ?? '') === 'vanguard');
+    check('个人战报有伤害', ($playerReport['damage'] ?? 0) > 0, 'damage=' . ($playerReport['damage'] ?? 0));
+    check('个人战报贡献 0–1', ($playerReport['orders'][0]['contribution'] ?? -1) >= 0 && ($playerReport['orders'][0]['contribution'] ?? 2) <= 1);
+    check('个人战报有高光', ($playerReport['highlight'] ?? '') !== '');
+    check('个人战报合计军功 65', ($playerReport['merit']['turn_total'] ?? 0) === 65);
+
     // 不修改 students.score 是红线
     $scoreAfter = (int)$pdo->query('SELECT score FROM students WHERE id = (SELECT student_id FROM slice_players WHERE id = ' . $vanguardIds[0] . ')')->fetchColumn();
     check('不修改 students.score', $scoreAfter === $scoreBefore, "before={$scoreBefore} after={$scoreAfter}");
@@ -121,6 +130,7 @@ try {
     check('state 带军功总分', is_int($stateTotal), 'total=' . var_export($stateTotal, true));
     $report = slice_bootstrap()[2]->getReport($player, $turnIds[2]);
     check('战报带本回合军功', ($report['me']['merit']['turn_total'] ?? 0) > 0, 'turn=' . ($report['me']['merit']['turn_total'] ?? 'null'));
+    check('战报带个人账单', ($report['me_report']['damage'] ?? 0) > 0, 'damage=' . ($report['me_report']['damage'] ?? 'null'));
 } finally {
     $pdo->exec("DELETE FROM slice_games WHERE code = 'SLICE_A'");
     SqlRunner::runFile($pdo, $seed);

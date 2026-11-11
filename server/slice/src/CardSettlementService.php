@@ -479,6 +479,7 @@ final class CardSettlementService
             'defender_teams' => $defTeams,
             'real_garrison' => $realGarrison,
             'merit' => $meritAwarded,
+            'contribution' => $result['players'] ?? [],
         ];
     }
 

@@ -233,6 +233,51 @@ Authorization: Bearer <token>
 
 ---
 
+## 1.5 GET /api/slice/me/report
+
+```text
+GET /api/slice/me/report?turn_id=3
+Authorization: Bearer <token>
+```
+
+个人战报：结算后第一屏。
+
+```json
+{
+  "turn_no": 2,
+  "settled_at": "2026-11-11 21:00:00",
+  "orders": [
+    {"slot": 0, "card": "night_raid", "node_code": "N1", "node_name": "松风渡",
+     "lane": 1, "row": "front", "role": "vanguard",
+     "damage": 300.6, "wall_damage": 120.0, "troops_lost": 80.0,
+     "contribution": 0.33, "captured": true}
+  ],
+  "battles_joined": 1,
+  "damage": 300.6,
+  "wall_damage": 120.0,
+  "troops_lost": 80.0,
+  "merit": {"turn_total": 65, "items": [{"kind": "capture", "label": "破城", "amount": 40}]},
+  "highlight": "你的队伍参与了松风渡的破城，贡献 33%"
+}
+```
+
+角色：
+
+```text
+vanguard 先锋 / support 支援 / garrison 驻守 / scout 侦察 / fire 火攻 / feint 疑兵 / reserve 未接战
+```
+
+`/api/slice/report` 的返回里也带 `me_report`，旧战报页可直接用。
+
+战斗数据 `slice_battles.log_json.players` 按玩家聚合：
+
+```json
+{"10": {"damage": 300.6, "wall_damage": 120.0, "troops_initial": 456.8,
+        "troops_lost": 80.0, "teams": 1, "contribution": 0.33}}
+```
+
+---
+
 ## 2. POST /api/slice/composition
 
 ```json

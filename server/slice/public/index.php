@@ -11,6 +11,7 @@ require_once dirname(__DIR__) . '/src/SeasonHistoryService.php';
 require_once dirname(__DIR__) . '/src/BulletinService.php';
 require_once dirname(__DIR__) . '/src/MeritService.php';
 require_once dirname(__DIR__) . '/src/EstateService.php';
+require_once dirname(__DIR__) . '/src/PlayerReportService.php';
 
 $started = microtime(true);
 $requestId = $_SERVER['HTTP_X_REQUEST_ID'] ?? bin2hex(random_bytes(6));
@@ -373,6 +374,19 @@ try {
             'top' => $merit->top((int)$player['game_id'], 10),
             'week_top' => $merit->weekTop((int)$player['game_id'], $week, 10),
         ]);
+    }
+
+    if ($method === 'GET' && $path === '/api/slice/me/report') {
+        $player = requireAuth($service);
+        $turnId = isset($_GET['turn_id']) ? (int)$_GET['turn_id'] : (int)($player['game_current_turn_id'] ?? 0);
+        if ($turnId <= 0) {
+            throw new ApiException('BAD_REQUEST', '缺少 turn_id');
+        }
+        success((new PlayerReportService($pdo))->forTurn(
+            (int)$player['game_id'],
+            (int)$player['id'],
+            $turnId
+        ));
     }
 
     if ($method === 'GET' && $path === '/api/slice/estate') {
