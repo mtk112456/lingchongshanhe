@@ -130,7 +130,8 @@ var res_wood_lbl: Label
 var res_iron_lbl: Label
 var wallet_label: Label
 var countdown_label: Label
-var hud_mail_btn: Button
+var hud_morning_btn: Button
+var morning_red_dot: Panel
 var hud_settings_btn: Button
 var hud_logout_btn: Button
 var last_hand_signature: String = ""
@@ -142,6 +143,7 @@ var offline_banner: PanelContainer
 var offline_banner_label: Label
 var offline_retry_btn: Button
 var drawer_tween: Tween
+var dock_tween: Tween
 var is_drawer_open: bool = false
 
 # S2 首次登录 3 步新手教学向导
@@ -152,7 +154,16 @@ var tutorial_desc_lbl: Label
 var tutorial_action_btn: Button
 var tutorial_skip_btn: Button
 var tutorial_step: int = 0
+var tutorial_img_frame: PanelContainer
+var tutorial_img_clip: Control
 var tutorial_img: TextureRect
+var tutorial_atlas: AtlasTexture
+var tutorial_tag_city: PanelContainer
+var tutorial_tag_card: PanelContainer
+var tutorial_parallax_t: float = 0.0
+var tutorial_parallax_px: float = 0.0
+var tutorial_img_base_pos: Vector2 = Vector2.ZERO
+var tutorial_icon_badge: Label
 
 # 迷雾与侦察数据
 var scouted_nodes: Array = []
@@ -164,10 +175,11 @@ var right_rail: Control
 var bottom_dock: Control
 var dock_tab_buttons: Dictionary = {}
 
-# S02 城池底部抽屉
+# S01 城池详情抽屉（不遮手牌双区布局 + 战前军议折叠卡）
 var city_drawer: Panel
 var city_drawer_margin: MarginContainer
 var city_drawer_handle: Panel
+var city_drawer_scroll: ScrollContainer
 var city_avatar_box: Panel
 var city_avatar_icon: Label
 var city_title_label: Label
@@ -184,30 +196,63 @@ var city_lore_label: Label
 var city_power_diff_label: Label
 var city_lore_dialog: AcceptDialog
 var city_action_advance_btn: Button
-var city_action_defend_btn: Button
 var city_action_scout_btn: Button
-var city_action_supply_btn: Button
-var city_action_withdraw_btn: Button
 var city_action_battle_btn: Button
 var current_battle_id: int = 0
 
-# Phase 1: 军团编成、每日战术手牌与 3x2 战斗回放
+# S01 战前军议预估折叠卡（首层 3 项，详情可展开）
+var city_forecast_card: PanelContainer
+var city_forecast_toggle_btn: Button
+var city_forecast_badge: Label
+var city_forecast_summary_lbl: Label
+var city_forecast_detail_box: VBoxContainer
+var city_forecast_detail_lbl: Label
+var city_forecast_advice_lbl: Label
+var city_forecast_footer_lbl: Label
+var city_forecast_expanded: bool = false
+var _forecast_debounce_timer: Timer
+var _forecast_req_seq: int = 0
+var _last_forecast_node: String = ""
+var _last_forecast_data: Dictionary = {}
+var _last_forecast_err: String = ""
+var _last_forecast_loading: bool = false
+
+# Phase 1 & P0 新模块：军团编成 / 小院 / 赛季史书 / 晨报弹层
 const CompositionPanelScript = preload("res://CompositionPanel.gd")
 const EstateViewScript = preload("res://EstateView.gd")
+const SeasonViewScript = preload("res://SeasonView.gd")
+const MorningReportModalScript = preload("res://MorningReportModal.gd")
 const BattleReplayScene = preload("res://BattleReplay.tscn")
 var estate_page: Control
 var estate_data: Dictionary = {}
 var merit_summary_data: Dictionary = {}
+var cached_merit_payload: Dictionary = {}
+var season_page: Control
+var season_data: Dictionary = {}
+var season_history_data: Dictionary = {}
+var bulletin_data: Dictionary = {}
+var _bulletin_submitting: bool = false
+var morning_modal: Control
+var _morning_auto_checked: bool = false
+var _season_award_auto_checked: bool = false
 var hand_preview_codes: Array = []
 var hand_preview_panel: PanelContainer
 var _merit_highlight_on_open: bool = false
 var composition_panel: PanelContainer
 var army_margin: MarginContainer
+var army_header_sub_lbl: Label
+var army_bulletin_box: PanelContainer
+var army_bulletin_row: HBoxContainer
+var army_bulletin_hint_lbl: Label
 var hand_cards_bar: PanelContainer
 var hand_cards_container: HBoxContainer
 var hand_card_views: Array = []
 var hand_redraw_btn: Button
 var hand_collapse_btn: Button
+var hand_lane_btn: Button
+var hand_row_btn: Button
+var hand_lane_override: int = 0
+var hand_row_override: String = ""
 var hand_cards_data: Array = []
 var hand_redraw_used: bool = false
 var hand_bar_collapsed: bool = false
@@ -217,31 +262,27 @@ var card_tooltip_panel: PanelContainer
 var card_tooltip_title: Label
 var card_tooltip_desc: Label
 
-# S03 军令确认浮层
-var order_confirm_overlay: Control
-var order_confirm_modal: Panel
-var confirm_title_label: Label
-var confirm_origin_label: Label
-var confirm_target_label: Label
-var confirm_pet_label: Label
-var confirm_cost_label: Label
-var confirm_hint_label: Label
-var confirm_action_type := "advance"
-var confirm_origin_code := ""
-var confirm_target_code := ""
-
-# S04 战争日报全屏页
+# S04 战争日报全屏页（含个人战报、诸军四榜、天下大势与嵌入复盘子页）
 var report_page: Control
 var report_margin: MarginContainer
+var report_tab_daily_btn: Button
+var report_tab_replay_btn: Button
+var report_daily_box: VBoxContainer
+var report_replay_box: VBoxContainer
+var _active_report_subtab: String = "daily"
 var report_headline_panel: PanelContainer
 var report_headline_lbl: Label
 var report_seal_rect: TextureRect
 var report_time_lbl: Label
 var report_my_text: RichTextLabel
 var report_my_card: PanelContainer
+var report_me_expand_btn: Button
+var report_me_detail_text: RichTextLabel
+var report_me_expanded: bool = false
 var report_estate_row: HBoxContainer
 var report_estate_lbl: Label
 var report_estate_btn: Button
+var report_boards_text: RichTextLabel
 var last_report_turn_id := 0
 var last_report_payload: Dictionary = {}
 var report_world_text: RichTextLabel
@@ -252,10 +293,10 @@ var report_loading_box: PanelContainer
 var report_error_box: PanelContainer
 var report_error_lbl: Label
 
-# S05 战局复盘全屏页
+# S04 回放子页组件（原 S05 已并入 S04_REPORT，保留字段兼容 ReplaySmoke）
 var replay_page: Control
 var replay_margin: MarginContainer
-var replay_dialog: Control # 兼容自动化测试引用
+var replay_dialog: Control # 绑定 report_replay_box，兼容 ReplaySmoke
 var replay_map: Control
 var replay_turn_select: OptionButton
 var replay_text: RichTextLabel
@@ -375,6 +416,15 @@ func _process(delta: float) -> void:
 		toast_timer -= delta
 		if toast_timer <= 0.0 and toast_panel != null:
 			toast_panel.visible = false
+	if tutorial_overlay != null and tutorial_overlay.visible and tutorial_step == 1 and tutorial_img != null and tutorial_img.visible:
+		if AudioManager.is_reduced_motion or DisplayServer.get_name() == "headless":
+			if absf(tutorial_parallax_px) > 0.01:
+				tutorial_parallax_px = 0.0
+				_layout_tutorial_media()
+		else:
+			tutorial_parallax_t += delta
+			tutorial_parallax_px = sin(tutorial_parallax_t * 0.7) * 3.0
+			tutorial_img.position.x = tutorial_img_base_pos.x + tutorial_parallax_px
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_RESIZED:
@@ -660,19 +710,25 @@ func _set_offline(is_offline: bool, msg: String = "⚠️ 烽烟信号微弱 · 
 # 页面路由与分层导航管理
 # ---------------------------------------------------------------------------
 
-const DOCK_PAGES := ["S01_MAP", "S02_CITY_HUB", "S03_ARMY", "S04_REPORT", "S05_REPLAY"]
+const DOCK_PAGES := ["S01_MAP", "S03_ARMY", "S04_REPORT", "S02_CITY_HUB", "S10_SEASON"]
 
 func _navigate_to(page_id: String) -> void:
+	if page_id == "S05_REPLAY":
+		page_id = "S04_REPORT"
 	if page_id != "S02_CITY_HUB" and estate_page != null:
 		estate_page.on_exited_page()
+	if page_id != "S01_MAP" and morning_modal != null and morning_modal.visible:
+		morning_modal.close_and_mark_read()
 	current_page = page_id
 	var target_node: Control = null
 	if page_id == "S01_MAP":
 		target_node = map_shell
 		map_shell.visible = true
-		if legend_panel != null and (city_drawer == null or not city_drawer.visible):
+		if legend_panel != null and (city_drawer == null or not city_drawer.visible or size.y >= 650.0):
 			legend_panel.visible = true
-		if hand_cards_bar != null and (city_drawer == null or not city_drawer.visible):
+		if right_rail != null and (not is_drawer_open or size.y >= 650.0):
+			right_rail.visible = true
+		if hand_cards_bar != null:
 			hand_cards_bar.visible = true
 		for p in pages.values():
 			p.visible = false
@@ -682,8 +738,6 @@ func _navigate_to(page_id: String) -> void:
 			hand_cards_bar.visible = false
 		if is_drawer_open or (city_drawer != null and city_drawer.visible):
 			_toggle_city_drawer(false)
-		if order_confirm_overlay != null:
-			order_confirm_overlay.visible = false
 		for k in pages.keys():
 			var is_target: bool = (k == page_id)
 			pages[k].visible = is_target
@@ -699,6 +753,10 @@ func _navigate_to(page_id: String) -> void:
 		if _merit_highlight_on_open:
 			_merit_highlight_on_open = false
 			estate_page.flash_merit_card()
+
+	# BGM 路由：赛季曲缺失时回退沙盘曲；同曲由 play_bgm 去重，不会重启
+	var bgm_name := "season" if page_id == "S10_SEASON" and AudioManager.has_bgm("season") else "map"
+	AudioManager.play_bgm(bgm_name)
 
 	_update_dock_highlight(page_id)
 	_layout_responsive()
@@ -734,13 +792,13 @@ func _sync_dock_for_estate_drawer(hide_dock: bool) -> void:
 	var is_phone := (size.x < 900.0) or is_compact_h
 	var dock_h := 46.0 if is_compact_h else (56.0 if is_phone else 60.0)
 	var target_y := size.y if hide_dock else (size.y - dock_h)
+	if is_instance_valid(dock_tween) and dock_tween.is_running():
+		dock_tween.kill()
 	if AudioManager.is_reduced_motion:
 		bottom_dock.position.y = target_y
 	else:
-		if is_instance_valid(drawer_tween) and drawer_tween.is_running():
-			drawer_tween.kill()
-		drawer_tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-		drawer_tween.tween_property(bottom_dock, "position:y", target_y, 0.22)
+		dock_tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		dock_tween.tween_property(bottom_dock, "position:y", target_y, 0.22)
 
 func _update_dock_highlight(page_id: String) -> void:
 	for k in dock_tab_buttons.keys():
@@ -840,7 +898,13 @@ func _layout_responsive() -> void:
 			hud_right_box.position = Vector2(w - rw - (6.0 if is_compact_h else (8.0 if is_phone else 16.0)), safe_top + (top_h - safe_top - 44.0) / 2.0)
 			hud_right_box.size = Vector2(rw, 44.0)
 			hud_right_box.add_theme_constant_override("separation", 4 if is_compact_h else 8)
-		for hbtn in [hud_mail_btn, hud_settings_btn, hud_logout_btn]:
+		if hud_morning_btn != null:
+			var m_w := 44.0 if is_compact_h else 76.0
+			hud_morning_btn.text = "📰" if is_compact_h else "📰 晨报"
+			hud_morning_btn.custom_minimum_size = Vector2(m_w, 44)
+			if morning_red_dot != null:
+				morning_red_dot.position = Vector2(m_w - 11.0, 3.0)
+		for hbtn in [hud_settings_btn, hud_logout_btn]:
 			if hbtn != null:
 				hbtn.custom_minimum_size = Vector2(34, 44) if is_compact_h else Vector2(44, 44)
 		if countdown_label != null:
@@ -859,7 +923,7 @@ func _layout_responsive() -> void:
 				res_iron_lbl.text = "⛏180" if is_compact_h else "⛏️ 铁 180"
 				res_iron_lbl.add_theme_font_size_override("font_size", 11 if is_compact_h else 13)
 			if wallet_label != null:
-				var cur_jade := int(wallet.get("jade", 0))
+				var cur_jade := int(wallet.get("jade_balance", wallet.get("jade", 0)))
 				wallet_label.text = ("💎%d" % cur_jade) if is_compact_h else ("💎 文玉 %d" % cur_jade)
 				wallet_label.add_theme_font_size_override("font_size", 11 if is_compact_h else 13)
 			if recharge_btn != null:
@@ -916,86 +980,83 @@ func _layout_responsive() -> void:
 	if bottom_dock != null:
 		bottom_dock.visible = is_dock_page
 		bottom_dock.size = Vector2(w, dock_h)
-		if is_drawer_open or estate_drawer_open or not is_dock_page:
+		if is_instance_valid(dock_tween) and dock_tween.is_running():
+			dock_tween.kill()
+		var hide_dock_for_compact_drawer := (is_compact_h and is_drawer_open)
+		if hide_dock_for_compact_drawer or estate_drawer_open or not is_dock_page:
 			bottom_dock.position = Vector2(0, h)
 		else:
-			if is_instance_valid(drawer_tween) and drawer_tween.is_running():
-				drawer_tween.kill()
 			bottom_dock.position = Vector2(0, h - dock_h)
 		if dock_row != null:
-			var max_dock_w := minf(w - 20.0, 720.0)
+			var max_dock_w := minf(w - 16.0, 740.0)
 			dock_row.position = Vector2((w - max_dock_w) / 2.0, (dock_h - (38.0 if is_compact_h else 44.0)) / 2.0)
 			dock_row.size = Vector2(max_dock_w, 38.0 if is_compact_h else 44.0)
 			
 		for tab_id in dock_tab_buttons.keys():
 			var btn: Button = dock_tab_buttons[tab_id]
-			btn.add_theme_font_size_override("font_size", 12 if is_compact_h else 14)
+			btn.add_theme_font_size_override("font_size", 11 if is_compact_h else 14)
 
 	if estate_page != null:
 		estate_page.layout_responsive(Vector2(w, h), dock_h)
+	if season_page != null:
+		season_page.layout_responsive(Vector2(w, h), dock_h)
+	if morning_modal != null:
+		morning_modal.layout_responsive(Vector2(w, h))
 
-	# 5.1 每日战术手牌栏（悬浮贴于底部导航栏上方，抽屉打开时避让）
+	# 5.1 每日将令手牌栏（始终贴底可见！抽屉打开时不隐藏，构成上城下牌双区）
+	var hand_bar_top := h - dock_h - 104.0
 	if hand_cards_bar != null:
-		var bar_w := minf(w - 16.0, 720.0)
-		var target_bar_h := 28.0 if hand_bar_collapsed else (100.0 if is_compact_h else 104.0)
+		var bar_w := minf(w - 12.0, 740.0)
+		var target_bar_h := 28.0 if hand_bar_collapsed else (96.0 if is_compact_h else 106.0)
 		var min_bar_h := 28.0 if hand_bar_collapsed else hand_cards_bar.get_combined_minimum_size().y
 		var actual_bar_h := maxf(target_bar_h, min_bar_h)
 		hand_cards_bar.size = Vector2(bar_w, actual_bar_h)
-		if is_drawer_open:
-			hand_cards_bar.visible = false
-		elif current_page == "S01_MAP":
+		var effective_bottom := 4.0 if (is_compact_h and is_drawer_open) else (dock_h + 2.0)
+		hand_bar_top = h - effective_bottom - actual_bar_h
+		hand_cards_bar.position = Vector2((w - bar_w) / 2.0, hand_bar_top)
+		if current_page == "S01_MAP":
 			hand_cards_bar.visible = true
-			hand_cards_bar.position = Vector2((w - bar_w) / 2.0, h - dock_h - actual_bar_h - 2.0)
 
-	# 6. S02 城池底部抽屉（P1: 高度压到紧凑战术条 ≤28–32%，杜绝大块黑白空卡）
+	# 6. S01 城池详情抽屉 + 战前军议折叠卡（双区布局，绝不遮挡底部手牌栏与左侧主视野）
 	if city_drawer != null:
-		var drawer_w := w if (is_phone or is_portrait) else minf(w - 40.0, 840.0)
-		var drawer_h := 168.0 if is_compact_h else 210.0
+		var drawer_w := minf(388.0, w * 0.56) if is_compact_h else (minf(w - 24.0, 480.0) if is_portrait else minf(w * 0.36, 480.0))
+		var max_avail_h := maxf(180.0, hand_bar_top - top_h - 10.0)
+		var desired_h := max_avail_h if is_compact_h else minf(max_avail_h, 520.0 if city_forecast_expanded else 372.0)
+		var drawer_h := minf(max_avail_h, desired_h)
+		var drawer_x := (w - drawer_w - 8.0) if is_compact_h else (w - drawer_w - 16.0)
+		var drawer_y := (top_h + 4.0) if is_compact_h else (hand_bar_top - drawer_h - 10.0)
 		city_drawer.size = Vector2(drawer_w, drawer_h)
-		city_drawer.position = Vector2((w - drawer_w) / 2.0, h - drawer_h)
+		if is_drawer_open:
+			if is_instance_valid(drawer_tween) and drawer_tween.is_running():
+				drawer_tween.kill()
+			city_drawer.modulate.a = 1.0
+			city_drawer.position = Vector2(drawer_x, drawer_y)
+		else:
+			city_drawer.position = Vector2(drawer_x, h)
 		if city_drawer_margin != null:
-			city_drawer_margin.position = Vector2(10.0, 4.0 if is_compact_h else 6.0)
-			city_drawer_margin.size = Vector2(drawer_w - 20.0, drawer_h - (8.0 if is_compact_h else 10.0))
+			city_drawer_margin.position = Vector2(10.0, 6.0)
+			city_drawer_margin.size = Vector2(drawer_w - 20.0, drawer_h - 12.0)
 		if city_drawer_handle != null:
 			city_drawer_handle.position = Vector2((drawer_w - 44.0) / 2.0, 3.0)
 
-		# 动作按钮尺寸与字号紧凑响应，杜绝在 720x514 手机横屏截断
 		var act_btn_h := 34.0 if is_compact_h else 42.0
 		var act_font_size := 12 if is_compact_h else 14
 		if city_action_advance_btn != null:
 			city_action_advance_btn.custom_minimum_size.y = act_btn_h
 			city_action_advance_btn.add_theme_font_size_override("font_size", act_font_size)
-		if city_action_defend_btn != null:
-			city_action_defend_btn.custom_minimum_size.y = act_btn_h
-			city_action_defend_btn.add_theme_font_size_override("font_size", act_font_size)
 		if city_action_scout_btn != null:
-			city_action_scout_btn.custom_minimum_size = Vector2(56 if is_compact_h else 66, act_btn_h)
+			city_action_scout_btn.custom_minimum_size = Vector2(86 if is_compact_h else 104, act_btn_h)
 			city_action_scout_btn.add_theme_font_size_override("font_size", 11 if is_compact_h else 13)
-		if city_action_supply_btn != null:
-			city_action_supply_btn.custom_minimum_size = Vector2(56 if is_compact_h else 66, act_btn_h)
-			city_action_supply_btn.add_theme_font_size_override("font_size", 11 if is_compact_h else 13)
-		if city_action_withdraw_btn != null:
-			city_action_withdraw_btn.custom_minimum_size = Vector2(56 if is_compact_h else 66, act_btn_h)
-			city_action_withdraw_btn.add_theme_font_size_override("font_size", 11 if is_compact_h else 13)
 
-	# 7. S03 军令确认浮层
-	if order_confirm_modal != null:
-		var mw := minf(w - 32.0, 540.0)
-		var mh := minf(h - 32.0, 400.0)
-		order_confirm_modal.size = Vector2(mw, mh)
-		order_confirm_modal.position = Vector2((w - mw) / 2.0, (h - mh) / 2.0)
-
-	# 8. S03 / S04 / S05 / S06 页面自适应（有 Dock 页面按 h - top - dock_h 留足底部空间）
+	# 8. S03 / S04(含回放) / S06 页面自适应（有 Dock 页面按 h - top - dock_h 留足底部空间）
 	var dock_bottom_pad := (dock_h + 6.0) if is_dock_page else 10.0
 	if report_margin != null:
-		report_margin.position = Vector2(16, 70)
-		report_margin.size = Vector2(w - 32, h - 70.0 - dock_bottom_pad)
-		
-	if replay_margin != null:
-		replay_margin.position = Vector2(16, 70)
-		replay_margin.size = Vector2(w - 32, h - 70.0 - dock_bottom_pad)
+		var rep_top := 62.0 if is_compact_h else 70.0
+		var rep_px := 10.0 if is_compact_h else 16.0
+		report_margin.position = Vector2(rep_px, rep_top)
+		report_margin.size = Vector2(w - rep_px * 2.0, h - rep_top - dock_bottom_pad)
 		if replay_map != null:
-			replay_map.custom_minimum_size = Vector2(0, 180 if is_compact_h else (400 if is_portrait else 320))
+			replay_map.custom_minimum_size = Vector2(0, 170 if is_compact_h else (360 if is_portrait else 300))
 			
 	if faction_margin != null:
 		faction_margin.position = Vector2(16, 70)
@@ -1028,16 +1089,37 @@ func _layout_responsive() -> void:
 				b.size = Vector2(140, 140)
 				b.position = map.node_position(code) - Vector2(70, 105)
 
-	# 11. S2 首次新手引导条自适应
+	# 11. S2 首次新手引导条自适应（第1步展示首令双步图卡且绝不占全屏；第2/3步收成轻量横条）
 	if tutorial_box != null:
-		var tb_w := minf(w - 24.0, 620.0 if not is_phone else 560.0)
-		var tb_h := 66.0 if is_compact_h else 76.0
-		tutorial_box.size = Vector2(tb_w, tb_h)
-		tutorial_box.position = Vector2((w - tb_w) / 2.0, top_h + (38.0 if is_compact_h else 58.0))
-		if tutorial_img != null:
-			var img_sz := Vector2(96, 54) if (is_phone or is_compact_h) else Vector2(116, 64)
-			tutorial_img.custom_minimum_size = img_sz
-			tutorial_img.size = img_sz
+		var is_step1 := (tutorial_step <= 1)
+		var is_compact_tut := (is_phone or is_compact_h)
+		if is_step1:
+			if tutorial_atlas != null and tutorial_atlas.atlas != null:
+				tutorial_atlas.region = Rect2(24.0, 52.0, 948.0, 494.0) if is_compact_tut else Rect2(16.0, 28.0, 992.0, 532.0)
+			var tb_w := minf(w - 28.0, 446.0 if is_compact_tut else 592.0)
+			var tb_h := 130.0 if is_compact_tut else 182.0
+			tutorial_box.custom_minimum_size = Vector2(tb_w, tb_h)
+			tutorial_box.size = Vector2(tb_w, tb_h)
+			tutorial_box.position = Vector2((w - tb_w) / 2.0, top_h + (8.0 if is_compact_h else 16.0))
+			if tutorial_desc_lbl != null:
+				tutorial_desc_lbl.custom_minimum_size = Vector2(160.0 if is_compact_tut else 220.0, 0.0)
+			if tutorial_img_frame != null:
+				var img_sz := Vector2(212.0, 110.0) if is_compact_tut else Vector2(308.0, 164.0)
+				tutorial_img_frame.custom_minimum_size = img_sz
+				tutorial_img_frame.size = img_sz
+		else:
+			var tb_w := minf(w - 24.0, 620.0 if not is_phone else 560.0)
+			var tb_h := 66.0 if is_compact_h else 76.0
+			tutorial_box.custom_minimum_size = Vector2(tb_w, tb_h)
+			tutorial_box.size = Vector2(tb_w, tb_h)
+			tutorial_box.position = Vector2((w - tb_w) / 2.0, top_h + (38.0 if is_compact_h else 58.0))
+			if tutorial_desc_lbl != null:
+				tutorial_desc_lbl.custom_minimum_size = Vector2(220.0, 0.0)
+			if tutorial_img_frame != null:
+				var img_sz := Vector2(96.0, 54.0) if is_compact_tut else Vector2(116.0, 64.0)
+				tutorial_img_frame.custom_minimum_size = img_sz
+				tutorial_img_frame.size = img_sz
+		call_deferred("_layout_tutorial_media")
 
 # ---------------------------------------------------------------------------
 # MapView 沙盘视口交互控制器（双指缩放、拖拽平移、双击放大、视野聚焦、边界限制）
@@ -1185,12 +1267,8 @@ func _clamp_pan() -> void:
 		elif size.x < size.y:
 			# 竖屏：保持 0，地图底图 100% 铺满视口，绝不向上平移漏出底板
 			map_pan.y = 0.0
-		elif city_drawer != null and city_drawer.visible:
-			# 横屏且抽屉打开：最大上抬量严格限制在抽屉高度内减去 24px 安全重叠，
-			# 确保地图底边（vh + map_pan.y）始终深藏于抽屉（vh - drawer_h）之后至少 24px，绝不露底
-			var max_lift := maxf(city_drawer.size.y - 24.0, 0.0)
-			map_pan.y = clampf(map_pan.y, -max_lift, 0.0)
 		else:
+			# 抽屉已改右浮双区，地图不垂直上移露出底部暗板
 			map_pan.y = 0.0
 	else:
 		# 放大状态（mh > vh）：允许在实际超出的地图尺寸范围内拖拽平移
@@ -1414,12 +1492,30 @@ func _build_game() -> void:
 	game_layer.add_child(pages_container)
 
 	_build_report_page()
-	_build_replay_page()
 	_build_all_placeholder_pages()
 	_build_bottom_dock()
-	_build_order_confirm_modal()
 	_build_card_tooltip()
 	_build_battle_replay_overlay()
+
+	morning_modal = MorningReportModalScript.new()
+	morning_modal.name = "MorningReportModal"
+	morning_modal.dismissed.connect(_on_morning_modal_dismissed)
+	morning_modal.go_estate_requested.connect(func(tid: int):
+		_mark_morning_turn_seen(tid)
+		_open_estate_page(true)
+	)
+	morning_modal.go_map_requested.connect(func(tid: int):
+		_mark_morning_turn_seen(tid)
+		_navigate_to("S01_MAP")
+	)
+	morning_modal.bulletin_selected.connect(_choose_bulletin_choice)
+	game_layer.add_child(morning_modal)
+
+	_forecast_debounce_timer = Timer.new()
+	_forecast_debounce_timer.one_shot = true
+	_forecast_debounce_timer.wait_time = 0.30
+	_forecast_debounce_timer.timeout.connect(_on_forecast_debounce_timeout)
+	add_child(_forecast_debounce_timer)
 
 	# 3. 教师后台（抽屉保留以满足权限隔离和无头测试需求）
 	_build_teacher_deck()
@@ -1526,11 +1622,19 @@ func _build_top_hud() -> void:
 	timer_pill.add_child(countdown_label)
 	hud_right_box.add_child(timer_pill)
 
-	hud_mail_btn = _button("✉️", Color("#33485c"), 44)
-	hud_mail_btn.custom_minimum_size = Vector2(44, 44)
-	hud_mail_btn.tooltip_text = "军府信件/活动"
-	hud_mail_btn.pressed.connect(func(): _navigate_to("S12_MAIL"))
-	hud_right_box.add_child(hud_mail_btn)
+	hud_morning_btn = _button("📰 晨报", Color("#33485c"), 44)
+	hud_morning_btn.custom_minimum_size = Vector2(72, 44)
+	hud_morning_btn.tooltip_text = "查看昨日战报摘要与今日邸报 2 选 1"
+	hud_morning_btn.pressed.connect(func(): _open_morning_report(true))
+	hud_right_box.add_child(hud_morning_btn)
+
+	morning_red_dot = Panel.new()
+	morning_red_dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	morning_red_dot.size = Vector2(10, 10)
+	morning_red_dot.position = Vector2(61, 3)
+	morning_red_dot.add_theme_stylebox_override("panel", _style(Color("#ff3b30"), CREAM, 1, 5, 0))
+	morning_red_dot.visible = false
+	hud_morning_btn.add_child(morning_red_dot)
 
 	hud_settings_btn = _button("", Color("#3d2f26"), 44)
 	hud_settings_btn.custom_minimum_size = Vector2(44, 44)
@@ -1549,29 +1653,24 @@ func _build_top_hud() -> void:
 	hud_logout_btn.pressed.connect(_on_logout)
 	hud_right_box.add_child(hud_logout_btn)
 
-# 构建 S01 左右贴边半透明悬浮图标列（P0: 去除实心黑底栏，改为贴边半透明印章）
+# 构建 S01 左右贴边半透明悬浮图标列（仅保留已实装功能，未实装模块收起）
 func _build_side_rails() -> void:
 	rail_buttons.clear()
 	left_rail = VBoxContainer.new()
 	left_rail.position = Vector2(14, 86)
-	left_rail.size = Vector2(48, 220)
+	left_rail.size = Vector2(48, 120)
 	left_rail.add_theme_constant_override("separation", 8)
 	map_shell.add_child(left_rail)
 
 	_add_rail_item(left_rail, "🚩 阵营", "🚩", func(): _navigate_to("S06_FACTION"))
-	_add_rail_item(left_rail, "🐾 将军", "🐾", func(): _navigate_to("S07_GENERAL"))
-	_add_rail_item(left_rail, "📜 图鉴", "📜", func(): _navigate_to("S08_CODEX"))
-	_add_rail_item(left_rail, "🎯 任务", "🎯", func(): _navigate_to("S13_TASKS"))
 
 	right_rail = VBoxContainer.new()
 	right_rail.position = Vector2(size.x - 62, 86)
-	right_rail.size = Vector2(48, 220)
+	right_rail.size = Vector2(48, 120)
 	right_rail.add_theme_constant_override("separation", 8)
 	map_shell.add_child(right_rail)
 
 	_add_rail_item(right_rail, "🎯 全图", "🎯", reset_view)
-	_add_rail_item(right_rail, "🏮 榷场", "🏮", func(): _navigate_to("S09_SHOP"))
-	_add_rail_item(right_rail, "🏆 赛季", "🏆", func(): _navigate_to("S10_SEASON"))
 	_add_rail_item(right_rail, "⚙️ 设置", "⚙️", func(): _navigate_to("S11_SETTINGS"))
 
 func _add_rail_item(parent: Control, full_text: String, icon_only: String, on_click: Callable) -> void:
@@ -1642,10 +1741,10 @@ func _build_bottom_dock() -> void:
 	bottom_dock.add_child(dock_row)
 
 	_add_dock_tab(dock_row, "S01_MAP", "🗺️", "沙盘地图", func(): _navigate_to("S01_MAP"))
-	_add_dock_tab(dock_row, "S02_CITY_HUB", "🏡", "文房小院", func(): _open_estate_page())
-	_add_dock_tab(dock_row, "S03_ARMY", "⚔️", "军团编组", func(): _navigate_to("S03_ARMY"))
+	_add_dock_tab(dock_row, "S03_ARMY", "⚔️", "军团编成", func(): _open_army_page())
 	_add_dock_tab(dock_row, "S04_REPORT", "📜", "战争日报", func(): _open_report())
-	_add_dock_tab(dock_row, "S05_REPLAY", "🔄", "战局复盘", func(): _open_replay())
+	_add_dock_tab(dock_row, "S02_CITY_HUB", "🏡", "文房小院", func(): _open_estate_page())
+	_add_dock_tab(dock_row, "S10_SEASON", "🏆", "赛季史书", func(): _open_season_page())
 
 	_update_dock_highlight("S01_MAP")
 
@@ -1663,42 +1762,63 @@ func _add_dock_tab(parent: Control, page_id: String, icon: String, title: String
 	parent.add_child(btn)
 	dock_tab_buttons[page_id] = btn
 
-# 抽屉显示状态与底部 Dock 避让让位联动（设计系统动效：220ms TRANS_CUBIC EASE_OUT）
+# 抽屉显示状态（打开时不隐藏手牌栏，720×514 下抽屉浮于右上、手牌贴底常驻）
 func _toggle_city_drawer(is_show: bool) -> void:
 	is_drawer_open = is_show
 	if city_drawer == null:
+		if not is_show and _forecast_debounce_timer != null:
+			_forecast_debounce_timer.stop()
 		return
 	var is_compact_h := size.y < 650.0
-	var drawer_h := 168.0 if is_compact_h else 210.0
-	var dock_h := 46.0 if is_compact_h else (56.0 if (size.x < 900.0 or is_compact_h) else 60.0)
-	
+	var is_phone := size.x < 900.0 or is_compact_h
+	var dock_h := 46.0 if is_compact_h else (56.0 if is_phone else 60.0)
 	if is_instance_valid(drawer_tween) and drawer_tween.is_running():
 		drawer_tween.kill()
 
 	if is_show:
 		city_drawer.visible = true
-		city_drawer.position.y = size.y
-		if legend_panel != null:
+		city_drawer.modulate.a = 1.0
+		if legend_panel != null and is_compact_h:
 			legend_panel.visible = false
-		if hand_cards_bar != null:
-			hand_cards_bar.visible = false
-		drawer_tween = create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-		drawer_tween.tween_property(city_drawer, "position:y", size.y - drawer_h, 0.22)
-		if bottom_dock != null:
-			drawer_tween.tween_property(bottom_dock, "position:y", size.y, 0.22)
-	else:
-		if legend_panel != null:
-			legend_panel.visible = true
+		if right_rail != null and is_compact_h:
+			right_rail.visible = false
 		if hand_cards_bar != null and current_page == "S01_MAP":
 			hand_cards_bar.visible = true
-		drawer_tween = create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-		drawer_tween.tween_property(city_drawer, "position:y", size.y, 0.18)
-		if bottom_dock != null:
-			drawer_tween.tween_property(bottom_dock, "position:y", size.y - dock_h, 0.18)
-		drawer_tween.chain().tween_callback(func():
-			if is_instance_valid(city_drawer):
-				city_drawer.visible = false
-		)
+		_layout_responsive()
+		if not AudioManager.is_reduced_motion:
+			var target_y := city_drawer.position.y
+			city_drawer.position.y = target_y + 16.0
+			city_drawer.modulate.a = 0.0
+			drawer_tween = create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+			drawer_tween.tween_property(city_drawer, "position:y", target_y, 0.20)
+			drawer_tween.tween_property(city_drawer, "modulate:a", 1.0, 0.18)
+	else:
+		_forecast_req_seq += 1
+		if _forecast_debounce_timer != null:
+			_forecast_debounce_timer.stop()
+		if legend_panel != null:
+			legend_panel.visible = true
+		if right_rail != null:
+			right_rail.visible = true
+		if hand_cards_bar != null and current_page == "S01_MAP":
+			hand_cards_bar.visible = true
+		_layout_responsive()
+		if AudioManager.is_reduced_motion:
+			city_drawer.visible = false
+			city_drawer.modulate.a = 1.0
+		else:
+			if bottom_dock != null and current_page in DOCK_PAGES:
+				if is_instance_valid(dock_tween) and dock_tween.is_running():
+					dock_tween.kill()
+				dock_tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+				dock_tween.tween_property(bottom_dock, "position:y", size.y - dock_h, 0.16)
+			drawer_tween = create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+			drawer_tween.tween_property(city_drawer, "modulate:a", 0.0, 0.14)
+			drawer_tween.chain().tween_callback(func():
+				if is_instance_valid(city_drawer):
+					city_drawer.visible = false
+					city_drawer.modulate.a = 1.0
+			)
 	_clamp_pan()
 
 # ---------------------------------------------------------------------------
@@ -1748,126 +1868,177 @@ func _build_city_drawer() -> void:
 	var title_v := VBoxContainer.new()
 	title_v.add_theme_constant_override("separation", 1)
 	title_v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_v.clip_contents = true
 	h_top.add_child(title_v)
 
 	var row_name := HBoxContainer.new()
-	row_name.add_theme_constant_override("separation", 8)
+	row_name.add_theme_constant_override("separation", 4)
 	title_v.add_child(row_name)
 
-	city_title_label = _label("【据点名称】", 17, GOLD_LIGHT)
+	city_title_label = _label("【据点名称】", 15, GOLD_LIGHT)
 	row_name.add_child(city_title_label)
 
-	city_type_badge = _label("[要塞关隘]", 12, GOLD)
+	city_type_badge = _label("[要塞]", 11, GOLD)
 	row_name.add_child(city_type_badge)
 
-	city_faction_badge = _label("归属：中立关塞", 12, Color("#d5c4a1"))
+	city_faction_badge = _label("归属：中立", 11, Color("#d5c4a1"))
+	city_faction_badge.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	city_faction_badge.clip_text = true
+	city_faction_badge.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	row_name.add_child(city_faction_badge)
 
-	city_governor_badge = _label("", 12, Color("#fae19c"))
+	city_governor_badge = _label("", 11, Color("#fae19c"))
 	city_governor_badge.visible = false
 	row_name.add_child(city_governor_badge)
 
 	# 右上角小“传”文脉按钮与关闭
 	var top_btns := HBoxContainer.new()
-	top_btns.add_theme_constant_override("separation", 8)
+	top_btns.add_theme_constant_override("separation", 4)
 	h_top.add_child(top_btns)
 
 	var lore_btn := Button.new()
-	lore_btn.text = "📜 传"
+	lore_btn.text = "📜传"
 	lore_btn.tooltip_text = "查看城池文脉与小传"
-	lore_btn.custom_minimum_size = Vector2(48, 32)
-	lore_btn.add_theme_font_size_override("font_size", 13)
+	lore_btn.custom_minimum_size = Vector2(40, 30)
+	lore_btn.add_theme_font_size_override("font_size", 12)
 	lore_btn.add_theme_color_override("font_color", GOLD_LIGHT)
-	lore_btn.add_theme_stylebox_override("normal", _style(Color("#2d2218", 0.9), GOLD, 1, 6, 4))
+	lore_btn.add_theme_stylebox_override("normal", _style(Color("#2d2218", 0.9), GOLD, 1, 6, 3))
 	lore_btn.pressed.connect(_open_city_lore_dialog)
 	top_btns.add_child(lore_btn)
 
 	var close_btn := Button.new()
 	close_btn.text = "✕"
-	close_btn.custom_minimum_size = Vector2(32, 32)
+	close_btn.custom_minimum_size = Vector2(30, 30)
 	close_btn.add_theme_font_size_override("font_size", 14)
 	close_btn.add_theme_stylebox_override("normal", _style(Color.TRANSPARENT, Color("#baa789"), 1, 15))
 	close_btn.pressed.connect(func(): _toggle_city_drawer(false))
 	top_btns.add_child(close_btn)
 
-	# 2. 战术属性卡片（守备+战力差 / 驰道+军令）
-	var info_row := HBoxContainer.new()
-	info_row.add_theme_constant_override("separation", 10)
-	v.add_child(info_row)
+	# 2. 中部可滚动内容区：城情/驰道 + ⚔️ 战前军议预估折叠卡
+	city_drawer_scroll = ScrollContainer.new()
+	city_drawer_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	city_drawer_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.add_child(city_drawer_scroll)
 
-	# 左卡：城防守备与敌我战力差
-	var def_box := PanelContainer.new()
-	def_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	def_box.add_theme_stylebox_override("panel", _panel_style(C_XUANZHI, Color("#dfcaa7"), 1, 6, 8))
-	info_row.add_child(def_box)
-	var def_v := VBoxContainer.new()
-	def_v.add_theme_constant_override("separation", 2)
-	def_box.add_child(def_v)
-	city_def_badge = _label("🛡️ 城防守备：3 / 3 点 · 坚固", 13, C_ZHUSHA)
-	def_v.add_child(city_def_badge)
-	city_morale_badge = _label("❤️ 城池民心：0 / 2 格", 12, C_TENGHUANG)
-	def_v.add_child(city_morale_badge)
-	city_power_diff_label = _label("⚔️ 战意差：我方 0 vs 敌方 0", 12, Color("#554433"))
-	def_v.add_child(city_power_diff_label)
-	city_garrison_label = _label("👥 驻防状态：守备严整", 11, Color("#665544"))
-	def_v.add_child(city_garrison_label)
+	var scroll_body := VBoxContainer.new()
+	scroll_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll_body.add_theme_constant_override("separation", 6)
+	city_drawer_scroll.add_child(scroll_body)
 
-	# 右卡：驰道地理与今日军令
-	var route_box := PanelContainer.new()
-	route_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	route_box.add_theme_stylebox_override("panel", _panel_style(C_XUANZHI, Color("#dfcaa7"), 1, 6, 8))
-	info_row.add_child(route_box)
-	var route_v := VBoxContainer.new()
-	route_v.add_theme_constant_override("separation", 2)
-	route_box.add_child(route_v)
-	city_routes_label = _label("🗺️ 连通驰道：--", 13, C_WOOD_DESK)
-	route_v.add_child(city_routes_label)
-	city_order_hint = _label("📢 今日军令：待命中 · 请选下方指令", 12, C_MOLAN)
-	route_v.add_child(city_order_hint)
-	city_tactical_label = _label("🎯 战术地位：兵家必争，交锋要冲", 11, Color("#665544"))
-	route_v.add_child(city_tactical_label)
+	var info_box := PanelContainer.new()
+	info_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	info_box.add_theme_stylebox_override("panel", _panel_style(C_XUANZHI, Color("#dfcaa7"), 1, 6, 8))
+	scroll_body.add_child(info_box)
 
-	# 3. 动作操作栏（首屏优先：主动作大按钮突出，次级动作紧凑排布）
+	var info_v := VBoxContainer.new()
+	info_v.add_theme_constant_override("separation", 2)
+	info_box.add_child(info_v)
+
+	var def_top := HBoxContainer.new()
+	def_top.add_theme_constant_override("separation", 8)
+	info_v.add_child(def_top)
+	city_def_badge = _label("🛡️ 守备：3 / 3", 12, C_ZHUSHA)
+	def_top.add_child(city_def_badge)
+	city_morale_badge = _label("❤️ 民心：0 / 2", 12, C_TENGHUANG)
+	city_morale_badge.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	def_top.add_child(city_morale_badge)
+
+	city_garrison_label = _label("👥 守军状态：待踏勘", 11, Color("#5a4a3a"))
+	city_garrison_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	info_v.add_child(city_garrison_label)
+
+	city_routes_label = _label("🗺️ 连通驰道：--", 12, C_WOOD_DESK)
+	city_routes_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	info_v.add_child(city_routes_label)
+
+	city_order_hint = _label("📢 每天最多出 3 令 · 点击下方手牌向此城出令", 11, C_MOLAN)
+	city_order_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	info_v.add_child(city_order_hint)
+
+	city_power_diff_label = _label("", 11, Color("#554433"))
+	city_power_diff_label.visible = false
+	info_v.add_child(city_power_diff_label)
+	city_tactical_label = _label("", 11, Color("#665544"))
+	city_tactical_label.visible = false
+	info_v.add_child(city_tactical_label)
+
+	# 2.5 ⚔️ 战前军议预估折叠卡（首层 3 项，详情可展开）
+	city_forecast_card = PanelContainer.new()
+	city_forecast_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	city_forecast_card.add_theme_stylebox_override("panel", _panel_style(Color("#f8f2e6"), Color("#276f57"), 1, 6, 8))
+	scroll_body.add_child(city_forecast_card)
+
+	var fv := VBoxContainer.new()
+	fv.add_theme_constant_override("separation", 4)
+	city_forecast_card.add_child(fv)
+
+	var f_hdr := HBoxContainer.new()
+	f_hdr.add_theme_constant_override("separation", 6)
+	fv.add_child(f_hdr)
+
+	var f_title := _label("⚔ 战前军议", 13, C_WOOD_DESK)
+	f_hdr.add_child(f_title)
+
+	city_forecast_badge = _label("测算中", 11, Color("#ffffff"))
+	var badge_wrap := PanelContainer.new()
+	badge_wrap.add_theme_stylebox_override("panel", _style(Color("#5a4d3f"), Color.TRANSPARENT, 0, 4, 2))
+	badge_wrap.add_child(city_forecast_badge)
+	f_hdr.add_child(badge_wrap)
+
+	var f_sp := Control.new()
+	f_sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	f_hdr.add_child(f_sp)
+
+	city_forecast_toggle_btn = Button.new()
+	city_forecast_toggle_btn.text = "展开详情 ▾"
+	city_forecast_toggle_btn.custom_minimum_size = Vector2(78, 24)
+	city_forecast_toggle_btn.add_theme_font_size_override("font_size", 11)
+	city_forecast_toggle_btn.add_theme_color_override("font_color", C_MOLAN)
+	city_forecast_toggle_btn.add_theme_stylebox_override("normal", _style(Color("#efe4d0"), Color("#c9b08a"), 1, 4, 2))
+	city_forecast_toggle_btn.pressed.connect(_on_forecast_toggle_pressed)
+	f_hdr.add_child(city_forecast_toggle_btn)
+
+	city_forecast_summary_lbl = _label("测算中...", 12, C_WOOD_DESK)
+	city_forecast_summary_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	fv.add_child(city_forecast_summary_lbl)
+
+	city_forecast_detail_box = VBoxContainer.new()
+	city_forecast_detail_box.add_theme_constant_override("separation", 3)
+	city_forecast_detail_box.visible = false
+	fv.add_child(city_forecast_detail_box)
+
+	city_forecast_detail_box.add_child(HSeparator.new())
+	city_forecast_detail_lbl = _label("", 11, Color("#3e3126"))
+	city_forecast_detail_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	city_forecast_detail_box.add_child(city_forecast_detail_lbl)
+
+	city_forecast_advice_lbl = _label("", 11, C_ZHUQING)
+	city_forecast_advice_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	city_forecast_detail_box.add_child(city_forecast_advice_lbl)
+
+	city_forecast_footer_lbl = _label("预估不消耗令", 10, Color("#7c6c5b"))
+	city_forecast_footer_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	fv.add_child(city_forecast_footer_lbl)
+
+	# 3. 动作操作栏（统一引导走手牌出令：只保留 [去手牌出令] 与 [哨探军报]）
 	var h_act := HBoxContainer.new()
 	h_act.add_theme_constant_override("separation", 8)
 	v.add_child(h_act)
 
-	# 主动作：进军与驻守
-	city_action_advance_btn = _button("⚔️ 进军攻打", C_ZHUSHA, 44)
+	city_action_advance_btn = _button("🎴 去手牌出令", C_ZHUSHA, 40)
 	city_action_advance_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	city_action_advance_btn.pressed.connect(_on_city_advance_pressed)
 	h_act.add_child(city_action_advance_btn)
 
-	city_action_defend_btn = _button("🛡️ 驻守据点", C_ZHUQING, 44)
-	city_action_defend_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	city_action_defend_btn.pressed.connect(_on_city_defend_pressed)
-	h_act.add_child(city_action_defend_btn)
-
-	city_action_battle_btn = _button("⚔️ 演武决战", Color("#8c3a32"), 44)
-	city_action_battle_btn.custom_minimum_size = Vector2(88, 44)
-	city_action_battle_btn.add_theme_font_size_override("font_size", 13)
-	city_action_battle_btn.pressed.connect(func(): _start_demo_battle(selected_code))
-	h_act.add_child(city_action_battle_btn)
-
-	# 次级动作：哨探军报（打出哨探才出现）、补给、撤销
-	city_action_scout_btn = _button("🔍 哨探军报", Color("#2c4a5e"), 44)
-	city_action_scout_btn.custom_minimum_size = Vector2(88, 44)
+	city_action_scout_btn = _button("🔍 哨探军报", Color("#2c4a5e"), 40)
+	city_action_scout_btn.custom_minimum_size = Vector2(96, 40)
 	city_action_scout_btn.add_theme_font_size_override("font_size", 13)
 	city_action_scout_btn.pressed.connect(func(): _open_city_intel_dialog(selected_code))
 	city_action_scout_btn.visible = false
 	h_act.add_child(city_action_scout_btn)
 
-	city_action_supply_btn = _button("🌾 补给", Color("#423429"), 44)
-	city_action_supply_btn.custom_minimum_size = Vector2(66, 44)
-	city_action_supply_btn.add_theme_font_size_override("font_size", 13)
-	city_action_supply_btn.pressed.connect(func(): _toast("【军需官】本据点粮草充足，士饱马腾！"))
-	h_act.add_child(city_action_supply_btn)
-
-	city_action_withdraw_btn = _button("↩️ 撤销", Color("#5c4c3d"), 44)
-	city_action_withdraw_btn.custom_minimum_size = Vector2(66, 44)
-	city_action_withdraw_btn.add_theme_font_size_override("font_size", 13)
-	city_action_withdraw_btn.pressed.connect(_withdraw_order)
-	h_act.add_child(city_action_withdraw_btn)
+	city_action_battle_btn = Button.new()
+	city_action_battle_btn.visible = false
 
 	# 4. 独立城池小传弹窗与哨探情报弹窗
 	_build_city_lore_dialog()
@@ -2190,25 +2361,29 @@ func _open_city_drawer(code: String) -> void:
 		city_lore_dialog.title = "【%s】城池文脉与小传" % c_name
 
 	var role := str(me.get("role", "player"))
-	var can_edit := bool(state.get("can_edit", false)) and role == "player" and not order_submitting
-	var order: Variant = state.get("my_order", null)
-	city_action_withdraw_btn.disabled = not can_edit or typeof(order) != TYPE_DICTIONARY
-
+	var can_edit := bool(state.get("can_edit", false)) and role == "player"
 	var cur_week := _current_week()
 	var is_king := _is_king_node(code, n)
 
-	if is_mine:
-		city_action_advance_btn.text = "🛡️ 驻守此城"
-		city_action_advance_btn.tooltip_text = "向己方据点下达驻守军令，前3位学子队伍将代表阵营迎战来犯敌军"
-		city_action_advance_btn.disabled = not can_edit
-		city_action_defend_btn.disabled = not can_edit
-	else:
-		city_action_advance_btn.text = "⚔️ 进军攻打"
-		city_action_advance_btn.tooltip_text = "下达进军军令，向该目标据点出征"
-		city_action_advance_btn.disabled = not can_edit
-		city_action_defend_btn.disabled = true
+	var card_orders_list: Array = state.get("card_orders", []) if typeof(state.get("card_orders", null)) == TYPE_ARRAY else []
+	var city_orders_cnt := 0
+	var has_scout_on_city := false
+	for ord in card_orders_list:
+		if typeof(ord) == TYPE_DICTIONARY and str(ord.get("target_node_code", "")) == code:
+			city_orders_cnt += 1
+			if str(ord.get("card_code", "")) == "scout":
+				has_scout_on_city = true
 
-	# 长安王城、决战周与迷雾可达性判定（按规则优先级依次裁决）
+	if is_mine:
+		city_action_advance_btn.text = "🛡️ 去手牌驻守"
+		city_action_advance_btn.tooltip_text = "每天最多出 3 令 · 点击下方手牌向己方据点出令驻守"
+		city_action_advance_btn.disabled = not can_edit
+	else:
+		city_action_advance_btn.text = "🎴 去手牌出令"
+		city_action_advance_btn.tooltip_text = "每天最多出 3 令 · 点击下方手牌（牌+城+路+前后排）出征"
+		city_action_advance_btn.disabled = not can_edit
+
+	# 长安王城、决战周与迷雾可达性判定
 	if is_king and cur_week < 3:
 		city_action_advance_btn.disabled = true
 		city_action_advance_btn.text = "🔒 第 3 周开放"
@@ -2220,27 +2395,15 @@ func _open_city_drawer(code: String) -> void:
 	elif not is_mine and not reachable_targets.is_empty() and not reachable_targets.has(code):
 		city_action_advance_btn.disabled = true
 		city_action_advance_btn.text = "🔒 不与己方领土相邻"
-		city_action_advance_btn.tooltip_text = "该据点关河阻隔，尚未与我方领土接壤，无法下达进军令！"
+		city_action_advance_btn.tooltip_text = "该据点关河阻隔，尚未与我方领土接壤，无法出令进军！"
 
-	if typeof(order) == TYPE_DICTIONARY:
-		var act := str(order.get("action", ""))
-		var t_name := str(order.get("target_name", ""))
-		city_order_hint.text = "今日已令：向【%s】%s，帅印已加盖！" % [t_name, "进军攻打" if act == "advance" else "驻守据点"]
+	var used_cnt := card_orders_list.size()
+	if city_orders_cnt > 0:
+		city_order_hint.text = "📢 本城已派 %d 令（今日共 %d / 3 令，每天最多出 3 令）" % [city_orders_cnt, used_cnt]
+	elif is_mine:
+		city_order_hint.text = "📢 己方据点（今日 %d / 3 令）· 点下方手牌出令即驻守" % used_cnt
 	else:
-		if is_mine:
-			city_order_hint.text = "今日军令：己方要冲据点 · 可点击【🛡️ 驻守此城】"
-		else:
-			city_order_hint.text = "今日军令：待命中 · 请选择下方军略指令"
-
-	# 检查本城是否已打出哨探将令（Phase 1.5 哨探情报入口）
-	var has_scout_on_city := false
-	var orders_val: Variant = state.get("card_orders", [])
-	if typeof(orders_val) == TYPE_ARRAY:
-		for ord in orders_val:
-			if typeof(ord) == TYPE_DICTIONARY:
-				if str(ord.get("card_code", "")) == "scout" and str(ord.get("target_node_code", "")) == code:
-					has_scout_on_city = true
-					break
+		city_order_hint.text = "📢 待出征（今日 %d / 3 令 · 每天最多出 3 令）· 点下方手牌" % used_cnt
 
 	var can_see_intel: bool = has_scout_on_city or is_scouted
 	if city_action_scout_btn != null:
@@ -2252,10 +2415,10 @@ func _open_city_drawer(code: String) -> void:
 	if not has_scout_on_city and city_intel_dialog != null and city_intel_dialog.visible:
 		city_intel_dialog.hide()
 
-	_toggle_city_drawer(true)
 	_render_hand_cards(false)
-	_layout_responsive()
+	_toggle_city_drawer(true)
 	focus_city(code)
+	_request_city_forecast(code)
 	if tutorial_step == 1:
 		_advance_tutorial(2)
 
@@ -2291,141 +2454,238 @@ func _my_faction_asset_code() -> String:
 func _on_city_advance_pressed() -> void:
 	if selected_code == "":
 		return
-	var n: Dictionary = map.node_by_code(selected_code)
+	var tgt_name := str(map.node_by_code(selected_code).get("name", selected_code))
+	if hand_cards_bar != null:
+		if hand_bar_collapsed:
+			hand_bar_collapsed = false
+			_toggle_hand_bar_collapse()
+		hand_cards_bar.visible = true
+		_shake_node(hand_cards_bar)
+	_toast("每天最多出 3 令 · 点击下方【每日将令】即可向【%s】出令！" % tgt_name)
+
+# ---------------------------------------------------------------------------
+# S01 战前军议折叠卡：POST /api/slice/battle/forecast 与 300ms 去抖重算
+# ---------------------------------------------------------------------------
+
+func _on_forecast_toggle_pressed() -> void:
+	city_forecast_expanded = not city_forecast_expanded
+	_apply_forecast_expand_state()
+	_layout_responsive()
+
+func _apply_forecast_expand_state() -> void:
+	if city_forecast_detail_box == null or city_forecast_toggle_btn == null:
+		return
+	var can_expand := (
+		not _last_forecast_loading
+		and _last_forecast_err == ""
+		and bool(_last_forecast_data.get("ready", false))
+		and str(_last_forecast_data.get("role", "attack")) != "defend"
+		and str(_last_forecast_data.get("reason", "")) != "DEFEND_CITY"
+	)
+	city_forecast_toggle_btn.visible = can_expand
+	if can_expand:
+		city_forecast_detail_box.visible = city_forecast_expanded
+		city_forecast_toggle_btn.text = "收起详情 ▴" if city_forecast_expanded else "展开详情 ▾"
+	else:
+		city_forecast_detail_box.visible = false
+
+func _schedule_forecast_recalc() -> void:
+	if not is_drawer_open or selected_code == "" or _forecast_debounce_timer == null:
+		return
+	_forecast_debounce_timer.stop()
+	_forecast_debounce_timer.start(0.30)
+
+func _on_forecast_debounce_timeout() -> void:
+	if is_drawer_open and selected_code != "":
+		_request_city_forecast(selected_code)
+
+func _request_city_forecast(node_code: String) -> void:
+	if api == null or api.token == "" or node_code == "" or _turn_id() <= 0:
+		return
+	if _forecast_debounce_timer != null:
+		_forecast_debounce_timer.stop()
+	_forecast_req_seq += 1
+	var seq := _forecast_req_seq
+	_last_forecast_node = node_code
+	_last_forecast_loading = true
+	_last_forecast_err = ""
+	_render_city_forecast(node_code, {}, "", true)
+
+	api.battle_forecast(_turn_id(), node_code, func(ok: bool, data: Dictionary, err: Dictionary):
+		if seq != _forecast_req_seq or selected_code != node_code or not is_drawer_open:
+			return
+		_last_forecast_loading = false
+		if not ok:
+			_last_forecast_data = {}
+			_last_forecast_err = str(err.get("message", "暂时无法预估"))
+			_render_city_forecast(node_code, {}, _last_forecast_err, false)
+			return
+		_last_forecast_err = ""
+		_last_forecast_data = data.duplicate(true)
+		_render_city_forecast(node_code, data, "", false)
+	)
+
+func _render_city_forecast(node_code: String, data: Dictionary, err_msg: String, is_loading: bool) -> void:
+	if city_forecast_card == null:
+		return
+	var n: Dictionary = map.node_by_code(node_code)
 	var is_mine := bool(n.get("is_my_faction", false))
-	if is_mine:
-		_on_city_defend_pressed()
+
+	var badge_panel := city_forecast_badge.get_parent() as PanelContainer
+	var set_badge := func(txt: String, col: Color):
+		city_forecast_badge.text = txt
+		if badge_panel != null:
+			badge_panel.add_theme_stylebox_override("panel", _style(col, Color.TRANSPARENT, 0, 4, 2))
+
+	if is_loading:
+		set_badge.call("测算中", Color("#5a4d3f"))
+		city_forecast_summary_lbl.text = "正在研判战前态势..."
+		_apply_forecast_expand_state()
 		return
-	var my_origin := _find_adjacent_my_node(selected_code)
-	if my_origin == "":
-		_toast("此城与己方领地不相邻，无法下令进军！", true)
+
+	if err_msg != "" or data.is_empty():
+		set_badge.call("暂不可用", Color("#6b5747"))
+		city_forecast_summary_lbl.text = "暂时无法预估"
+		_apply_forecast_expand_state()
 		return
-	confirm_action_type = "advance"
-	confirm_origin_code = my_origin
-	confirm_target_code = selected_code
-	_open_order_confirm()
 
-func _on_city_defend_pressed() -> void:
-	if selected_code == "":
+	var role := str(data.get("role", "attack"))
+	var ready := bool(data.get("ready", false))
+	var reason := str(data.get("reason", ""))
+
+	# 己方城红线：绝对不显示进攻预估
+	if is_mine or role == "defend" or reason == "DEFEND_CITY":
+		set_badge.call("驻守", C_MOLAN)
+		city_forecast_summary_lbl.text = "本令做什么：驻守己方城池（取驻守令前 3 名迎战）
+最大风险：无驻守令将回落固定守军
+结果方向：固守待援 · 这是己方城，出令 = 驻守"
+		_apply_forecast_expand_state()
 		return
-	confirm_action_type = "defend"
-	confirm_origin_code = selected_code
-	confirm_target_code = selected_code
-	_open_order_confirm()
 
-func _find_adjacent_my_node(target: String) -> String:
-	for e in state.get("map", {}).get("edges", []):
-		if typeof(e) != TYPE_ARRAY or e.size() < 2:
-			continue
-		var a := str(e[0])
-		var b := str(e[1])
-		if a == target:
-			if bool(map.node_by_code(b).get("is_my_faction", false)):
-				return b
-		elif b == target:
-			if bool(map.node_by_code(a).get("is_my_faction", false)):
-				return a
-	return ""
+	if not ready:
+		set_badge.call("待出令", Color("#7c5c26"))
+		if reason == "NO_VANGUARD":
+			city_forecast_summary_lbl.text = "本令做什么：请先出一张队伍牌（火攻/侦察/疑兵不占先锋位）
+最大风险：当前缺少主力队伍进战
+结果方向：尚缺先锋队伍，暂未形成推演预估"
+		else:
+			city_forecast_summary_lbl.text = "本令做什么：先从下方手牌选一张牌指向此城
+最大风险：尚未下达进攻将令
+结果方向：待出令后自动预测破墙与战果"
+		_apply_forecast_expand_state()
+		return
 
-# ---------------------------------------------------------------------------
-# S03 军令确认浮层
-# ---------------------------------------------------------------------------
+	# ready == true 且非己方城
+	var intel_known := bool(data.get("intel_known", false))
+	var fc: Dictionary = data.get("forecast", {}) if typeof(data.get("forecast", null)) == TYPE_DICTIONARY else {}
+	var att: Dictionary = data.get("attacker", {}) if typeof(data.get("attacker", null)) == TYPE_DICTIONARY else {}
+	var defn: Dictionary = data.get("defender", {}) if typeof(data.get("defender", null)) == TYPE_DICTIONARY else {}
 
-func _build_order_confirm_modal() -> void:
-	order_confirm_overlay = ColorRect.new()
-	order_confirm_overlay.color = Color(0, 0, 0, 0.55)
-	order_confirm_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	order_confirm_overlay.visible = false
-	order_confirm_overlay.z_index = 20
-	game_layer.add_child(order_confirm_overlay)
+	var att_teams_cnt := (att.get("teams", []) as Array).size() if typeof(att.get("teams", null)) == TYPE_ARRAY else 0
+	var sup_cnt := int(att.get("supporters", 0))
+	var att_troops := int(round(float(att.get("troops", 0.0))))
 
-	order_confirm_modal = Panel.new()
-	order_confirm_modal.position = Vector2(420, 300)
-	order_confirm_modal.size = Vector2(560, 400)
-	order_confirm_modal.add_theme_stylebox_override("panel", _panel_style(C_XUANZHI, C_TENGHUANG, 2, 16, 20))
-	order_confirm_overlay.add_child(order_confirm_modal)
+	var what_line := "本令做什么：攻城夺关（我方 %d 队先锋" % maxi(1, att_teams_cnt)
+	if sup_cnt > 0:
+		what_line += " + %d 支援" % sup_cnt
+	what_line += "）"
 
-	var margin := MarginContainer.new()
-	margin.position = Vector2(24, 20)
-	margin.size = Vector2(512, 360)
-	order_confirm_modal.add_child(margin)
+	var risk_line := ""
+	var dir_line := ""
+	var verdict := str(fc.get("verdict", "均势"))
 
-	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 12)
-	margin.add_child(v)
-
-	confirm_title_label = _label("⚔️ 九州军令出征确认", 20, C_WOOD_DESK)
-	confirm_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	v.add_child(confirm_title_label)
-
-	var sep1 := HSeparator.new()
-	v.add_child(sep1)
-
-	var card := PanelContainer.new()
-	card.add_theme_stylebox_override("panel", _style(Color("#f7f0e1"), Color("#dfcaa7"), 1, 8, 12))
-	var card_v := VBoxContainer.new()
-	card_v.add_theme_constant_override("separation", 8)
-	card.add_child(card_v)
-	v.add_child(card)
-
-	confirm_origin_label = _label("出发据点：【问津关】", 14, C_WOOD_DESK)
-	card_v.add_child(confirm_origin_label)
-
-	confirm_target_label = _label("目标据点：【墨池隘】", 14, C_ZHUSHA)
-	card_v.add_child(confirm_target_label)
-
-	confirm_pet_label = _label("出征灵宠：青竹灵猫（战力 120）", 14, C_ZHUQING)
-	card_v.add_child(confirm_pet_label)
-
-	confirm_cost_label = _label("军令开销：今日军令 1 道（每日限 1 道）", 13, Color("#7a5223"))
-	card_v.add_child(confirm_cost_label)
-
-	confirm_hint_label = _label("决算谕告：今夕 21:00 准时决战，战果载入次日战报", 12, Color("#685848"))
-	v.add_child(confirm_hint_label)
-
-	var row_act := HBoxContainer.new()
-	row_act.add_theme_constant_override("separation", 14)
-	v.add_child(row_act)
-
-	var cancel_btn := _button("再作权衡", C_MOLAN, 44)
-	cancel_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	cancel_btn.pressed.connect(func(): order_confirm_overlay.visible = false)
-	row_act.add_child(cancel_btn)
-
-	var do_confirm_btn := _button("加盖军印", C_ZHUSHA, 44)
-	do_confirm_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	do_confirm_btn.pressed.connect(_on_confirm_order_pressed)
-	row_act.add_child(do_confirm_btn)
-
-func _open_order_confirm() -> void:
-	var orig_name := str(map.node_by_code(confirm_origin_code).get("name", confirm_origin_code))
-	var targ_name := str(map.node_by_code(confirm_target_code).get("name", confirm_target_code))
-	var pet_name := str(me.get("pet", {}).get("name", "青竹灵宠"))
-
-	if confirm_action_type == "advance":
-		confirm_title_label.text = "⚔️ 进军出征确认"
-		confirm_origin_label.text = "出发据点：【%s】" % orig_name
-		confirm_target_label.text = "进军目标：【%s】" % targ_name
-		confirm_cost_label.text = "军令开销：今日军令 1 道（每日限 1 道）"
-		confirm_hint_label.text = "决算谕告：今夕 21:00 准时决战，战果载入次日战报"
+	if not intel_known:
+		# 红线：未侦察不显示精确守军与确定战果，也不泄露 defender.teams
+		set_badge.call("未侦察", C_TENGHUANG)
+		risk_line = "最大风险：守军未侦察，兵力与布阵未知"
+		dir_line = "结果方向：情报不明（建议先派哨探侦察再决断）"
+		var r_arr: Variant = defn.get("troops_range", [])
+		var range_txt := "未知"
+		if typeof(r_arr) == TYPE_ARRAY and r_arr.size() >= 2:
+			range_txt = "%d–%d" % [int(r_arr[0]), int(r_arr[1])]
+		city_forecast_detail_lbl.text = "攻方集结：约 %d 兵
+守军估测：%s 兵（未侦察 · 不展示敌军编成）
+破墙/易主：未侦察暂不给出确定战果" % [att_troops, range_txt]
 	else:
-		confirm_title_label.text = "🛡️ 驻守此城确认"
-		confirm_origin_label.text = "守备要塞：【%s】" % targ_name
-		confirm_target_label.text = "驻防使命：守护据点 · 迎战来犯敌军（取前3名学生队伍御敌）"
-		confirm_cost_label.text = "驻守开销：今日军令 1 道 · 固守我方疆土"
-		confirm_hint_label.text = "驻防谕告：若本城无驻守令将回落固定守军，学子驻守可克敌制胜"
+		var badge_col := C_ZHUQING if verdict == "优势" else (C_TENGHUANG if verdict == "均势" else C_ZHUSHA)
+		set_badge.call(verdict, badge_col)
 
-	confirm_pet_label.text = "出战灵宠：%s（士气高昂）" % pet_name
-	order_confirm_overlay.visible = true
+		var def_troops := int(round(float(defn.get("troops", 0.0))))
+		var wall_base := clampf(float(fc.get("wall_base", 1650.0)), 1.0, 99999.0)
+		var wall_rem := clampf(float(fc.get("wall", wall_base)), 0.0, wall_base)
+		var wall_broken := clampf(wall_base - wall_rem, 0.0, wall_base)
+		var wall_pct := int(round(wall_broken / wall_base * 100.0))
+		var m_before := int(fc.get("morale_before", 0))
+		var m_after := int(fc.get("morale_after", 0))
+		var m_cap := int(fc.get("morale_cap", 2))
+		var will_cap := bool(fc.get("capture_estimate", false))
 
-func _on_confirm_order_pressed() -> void:
-	order_confirm_overlay.visible = false
-	if city_drawer != null:
-		_toggle_city_drawer(false)
-	if confirm_action_type == "advance":
-		_submit_advance_direct(confirm_origin_code, confirm_target_code)
-	else:
-		_submit_defend_direct(confirm_origin_code)
+		if att_troops < def_troops:
+			risk_line = "最大风险：我方兵力不足（攻 %d < 守 %d）" % [att_troops, def_troops]
+		elif wall_rem > wall_base * 0.5:
+			risk_line = "最大风险：城防未半，破墙推进偏慢"
+		elif not will_cap:
+			risk_line = "最大风险：本回合民心尚难一举破城（%d→%d/%d）" % [m_before, m_after, m_cap]
+		else:
+			risk_line = "最大风险：敌可能临战增兵，留意 21:00 前动向"
+
+		if verdict == "优势":
+			dir_line = "结果方向：%s" % ("有望破城易主！" if will_cap else "有望破墙占优")
+		elif verdict == "劣势":
+			dir_line = "结果方向：兵力处劣势（建议增兵或改途）"
+		else:
+			dir_line = "结果方向：势均力敌（均势相持）"
+
+		var counters_dict: Dictionary = data.get("counters", {}) if typeof(data.get("counters", null)) == TYPE_DICTIONARY else {}
+		var c_parts: Array[String] = []
+		var c_names := {"cav": "骑", "shield": "盾", "arc": "弓", "spear": "枪"}
+		for ck in counters_dict.keys():
+			var cnt := int(counters_dict[ck])
+			if cnt <= 0:
+				continue
+			var sp := str(ck).split(">")
+			if sp.size() == 2:
+				c_parts.append("%s克%s ×%d" % [c_names.get(sp[0], sp[0]), c_names.get(sp[1], sp[1]), cnt])
+		var counter_str := "克制：%s" % ("、".join(c_parts) if not c_parts.is_empty() else "无明显克制差")
+
+		city_forecast_detail_lbl.text = "攻 %d · 守 %d
+破墙 %d / %d（%d%%）
+民心 %d → %d / %d，%s
+%s" % [
+			att_troops, def_troops,
+			int(round(wall_broken)), int(round(wall_base)), wall_pct,
+			m_before, m_after, m_cap,
+			"本回合有望易主" if will_cap else "本回合不会易主",
+			counter_str
+		]
+
+	city_forecast_summary_lbl.text = "%s
+%s
+%s" % [what_line, risk_line, dir_line]
+
+	var adv_arr: Variant = data.get("advice", [])
+	var adv_lines: Array[String] = []
+	if typeof(adv_arr) == TYPE_ARRAY:
+		for item in adv_arr:
+			var s := _normalize_balance_copy(str(item).strip_edges())
+			if s != "":
+				adv_lines.append("· " + s)
+	city_forecast_advice_lbl.text = "
+".join(adv_lines)
+	city_forecast_advice_lbl.visible = not adv_lines.is_empty()
+	_apply_forecast_expand_state()
+	_layout_responsive()
+
+func _normalize_balance_copy(txt: String) -> String:
+	var out := txt
+	out = out.replace("每人 +2%，上限 +30%", "每人 +2%，上限 +15%")
+	out = out.replace("每人+2%，上限+30%", "每人 +2%，上限 +15%")
+	out = out.replace("每人 +2%, 上限 +30%", "每人 +2%，上限 +15%")
+	out = out.replace("支援 +30%", "每人 +2%，上限 +15%").replace("支援+30%", "每人 +2%，上限 +15%")
+	out = out.replace("上限 +30%", "每人 +2%，上限 +15%").replace("上限+30%", "每人 +2%，上限 +15%")
+	out = out.replace("支援 30%", "支援 15%").replace("支援30%", "支援15%")
+	out = out.replace("器械攻墙 +50%", "器械攻墙 +60%").replace("器械攻墙+50%", "器械攻墙+60%")
+	return out
 
 # ---------------------------------------------------------------------------
 # S04 战争日报独立全屏页（头条、城池变化、分数、我的军令、全部军令、下候提示）
@@ -2453,13 +2713,35 @@ func _build_report_page() -> void:
 	report_page.add_child(report_margin)
 
 	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 10)
+	v.add_theme_constant_override("separation", 8)
 	report_margin.add_child(v)
+
+	# 0. 子页切换：战报与四榜 | 战局回放（替代原独立第 5 Tab）
+	var sub_tab_row := HBoxContainer.new()
+	sub_tab_row.add_theme_constant_override("separation", 8)
+	v.add_child(sub_tab_row)
+
+	report_tab_daily_btn = _button("📜 个人与诸军战报", C_ZHUSHA, 34)
+	report_tab_daily_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	report_tab_daily_btn.pressed.connect(func(): _switch_report_subtab("daily"))
+	sub_tab_row.add_child(report_tab_daily_btn)
+
+	report_tab_replay_btn = _button("🔄 战局沙盘回放", Color("#3b2f26"), 34)
+	report_tab_replay_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	report_tab_replay_btn.pressed.connect(_open_replay)
+	sub_tab_row.add_child(report_tab_replay_btn)
+
+	# A. 战报子页
+	report_daily_box = VBoxContainer.new()
+	report_daily_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	report_daily_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	report_daily_box.add_theme_constant_override("separation", 8)
+	v.add_child(report_daily_box)
 
 	# 1. 顶部决战头条 Banner（C 宣纸纸卡 + 金边）
 	report_headline_panel = PanelContainer.new()
 	report_headline_panel.add_theme_stylebox_override("panel", _panel_style(C_XUANZHI, C_TENGHUANG, 2, 10, 12))
-	v.add_child(report_headline_panel)
+	report_daily_box.add_child(report_headline_panel)
 
 	var hl_v := VBoxContainer.new()
 	hl_v.add_theme_constant_override("separation", 4)
@@ -2481,30 +2763,52 @@ func _build_report_page() -> void:
 	report_headline_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hl_row.add_child(report_headline_lbl)
 
-	var view_replay_btn := _button("🔄 调取沙盘复盘", C_ZHUSHA, 34)
-	view_replay_btn.custom_minimum_size = Vector2(140, 34)
-	view_replay_btn.pressed.connect(_open_replay)
-	hl_row.add_child(view_replay_btn)
-
 	report_time_lbl = _label("推演时点：今夜 21:00 准时结算", 12, Color("#685848"))
 	hl_v.add_child(report_time_lbl)
 
-	# 2. 三大板块（支持滑动）
+	# 2. 四大板块（个人战报 + 诸军四榜 + 天下大势 + 诸军战况）
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	v.add_child(scroll)
+	report_daily_box.add_child(scroll)
 
 	var scroll_v := VBoxContainer.new()
 	scroll_v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll_v.add_theme_constant_override("separation", 10)
 	scroll.add_child(scroll_v)
 
-	# 板块 1：我的出征演武与积分变动
+	# 板块 1：个人战报（首屏先给真实行动 + 军功 + 小院直通，明细收进展开区）
 	report_my_text = _build_report_card(scroll_v, "◆ 个人战报")
 	report_text = report_my_text
 	var my_card_v := report_my_text.get_parent()
 	report_my_card = my_card_v.get_parent() as PanelContainer
+
+	report_me_expand_btn = Button.new()
+	report_me_expand_btn.text = "展开每令伤害与明细 ▾"
+	report_me_expand_btn.custom_minimum_size = Vector2(160, 28)
+	report_me_expand_btn.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	report_me_expand_btn.add_theme_font_size_override("font_size", 11)
+	report_me_expand_btn.add_theme_color_override("font_color", C_MOLAN)
+	report_me_expand_btn.add_theme_stylebox_override("normal", _style(Color("#efe4d0"), Color("#c9b08a"), 1, 5, 4))
+	report_me_expand_btn.visible = false
+	report_me_expand_btn.pressed.connect(func():
+		report_me_expanded = not report_me_expanded
+		if report_me_detail_text != null:
+			report_me_detail_text.visible = report_me_expanded
+		report_me_expand_btn.text = "收起每令明细 ▴" if report_me_expanded else "展开每令伤害与明细 ▾"
+	)
+	my_card_v.add_child(report_me_expand_btn)
+
+	report_me_detail_text = RichTextLabel.new()
+	report_me_detail_text.bbcode_enabled = true
+	report_me_detail_text.fit_content = true
+	report_me_detail_text.scroll_active = false
+	report_me_detail_text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	report_me_detail_text.add_theme_font_size_override("normal_font_size", 12)
+	report_me_detail_text.add_theme_color_override("default_color", Color("#4d3f32"))
+	report_me_detail_text.visible = false
+	my_card_v.add_child(report_me_detail_text)
+
 	var es_sep := HSeparator.new()
 	my_card_v.add_child(es_sep)
 	report_estate_row = HBoxContainer.new()
@@ -2519,11 +2823,68 @@ func _build_report_page() -> void:
 	report_estate_btn.pressed.connect(func(): _open_estate_page(true))
 	report_estate_row.add_child(report_estate_btn)
 
-	# 板块 2：全域城池易帜与据点布防
+	# 板块 2：诸军四榜（先锋 / 支援 / 侦察 / 守城）
+	report_boards_text = _build_report_card(scroll_v, "◆ 诸军四榜（先锋 / 支援 / 侦察 / 守城）")
+
+	# 板块 3：全域城池易帜与据点布防
 	report_world_text = _build_report_card(scroll_v, "◆ 天下大势与关隘城池易帜")
 
-	# 板块 3：诸军战况与下候军略备忘
+	# 板块 4：诸军战况与下候军略备忘
 	report_summary_text = _build_report_card(scroll_v, "◆ 诸军战功交锋与下候备忘")
+
+	# B. 嵌入的战局回放子页（原 S05 并入 S04，保留 replay_dialog 兼容 ReplaySmoke）
+	report_replay_box = VBoxContainer.new()
+	report_replay_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	report_replay_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	report_replay_box.add_theme_constant_override("separation", 8)
+	report_replay_box.visible = false
+	v.add_child(report_replay_box)
+	replay_page = report_replay_box
+	replay_dialog = report_replay_box
+
+	var r_row := HBoxContainer.new()
+	r_row.add_theme_constant_override("separation", 10)
+	report_replay_box.add_child(r_row)
+
+	r_row.add_child(_label("回放回合：", 14, GOLD_LIGHT))
+	replay_turn_select = OptionButton.new()
+	replay_turn_select.custom_minimum_size = Vector2(150, 36)
+	replay_turn_select.add_theme_stylebox_override("normal", _style(C_XUANZHI, Color("#c9baa7"), 1, 7, 8))
+	replay_turn_select.add_theme_color_override("font_color", C_WOOD_DESK)
+	replay_turn_select.item_selected.connect(_render_replay_turn)
+	r_row.add_child(replay_turn_select)
+
+	prev_turn_btn = _button("◀ 上一候", C_MOLAN, 36)
+	prev_turn_btn.custom_minimum_size = Vector2(84, 36)
+	prev_turn_btn.pressed.connect(_step_replay.bind(-1))
+	r_row.add_child(prev_turn_btn)
+
+	next_turn_btn = _button("下一候 ▶", C_MOLAN, 36)
+	next_turn_btn.custom_minimum_size = Vector2(84, 36)
+	next_turn_btn.pressed.connect(_step_replay.bind(1))
+	r_row.add_child(next_turn_btn)
+
+	replay_time_lbl = _label("推演时点：--", 12, Color("#d5c4a1"))
+	replay_time_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	r_row.add_child(replay_time_lbl)
+
+	replay_map = ReplayMapScript.new()
+	replay_map.custom_minimum_size = Vector2(0, 300)
+	replay_map.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	replay_map.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	report_replay_box.add_child(replay_map)
+
+	var text_panel := PanelContainer.new()
+	text_panel.custom_minimum_size = Vector2(0, 140)
+	text_panel.add_theme_stylebox_override("panel", _panel_style(C_XUANZHI, Color("#dfcaa7"), 1, 10, 12))
+	report_replay_box.add_child(text_panel)
+
+	replay_text = RichTextLabel.new()
+	replay_text.bbcode_enabled = true
+	replay_text.scroll_active = true
+	replay_text.add_theme_font_size_override("normal_font_size", 13)
+	replay_text.add_theme_color_override("default_color", C_WOOD_DESK)
+	text_panel.add_child(replay_text)
 
 func _build_report_card(parent: Control, card_title: String) -> RichTextLabel:
 	var p := PanelContainer.new()
@@ -2552,7 +2913,20 @@ func _build_report_card(parent: Control, card_title: String) -> RichTextLabel:
 	v.add_child(rtl)
 	return rtl
 
+func _switch_report_subtab(tab: String) -> void:
+	_active_report_subtab = tab
+	var is_daily := (tab != "replay")
+	if report_daily_box != null:
+		report_daily_box.visible = is_daily
+	if report_replay_box != null:
+		report_replay_box.visible = not is_daily
+	if report_tab_daily_btn != null:
+		report_tab_daily_btn.add_theme_stylebox_override("normal", _style(C_ZHUSHA if is_daily else Color("#3b2f26"), GOLD_LIGHT if is_daily else Color("#6e5a44"), 1, 6, 4))
+	if report_tab_replay_btn != null:
+		report_tab_replay_btn.add_theme_stylebox_override("normal", _style(C_ZHUSHA if not is_daily else Color("#3b2f26"), GOLD_LIGHT if not is_daily else Color("#6e5a44"), 1, 6, 4))
+
 func _open_report() -> void:
+	_switch_report_subtab("daily")
 	var last_rep: Variant = state.get("last_report", null)
 	var target_turn_id := 0
 	if typeof(last_rep) == TYPE_DICTIONARY:
@@ -2576,11 +2950,12 @@ func _open_report() -> void:
 					api.get_merit(func(mok: bool, mdata: Dictionary, _merr: Dictionary):
 						if not mok or not is_instance_valid(self):
 							return
+						cached_merit_payload = mdata.duplicate(true)
 						var m_me: Variant = mdata.get("me", {})
 						if typeof(m_me) == TYPE_DICTIONARY and not m_me.is_empty():
 							merit_summary_data = m_me.duplicate(true)
-							if current_page == "S04_REPORT" and last_report_turn_id == target_turn_id:
-								_show_report(last_report_payload)
+						if current_page == "S04_REPORT" and last_report_turn_id == target_turn_id:
+							_show_report(last_report_payload)
 					)
 			var me_rep_v: Variant = data.get("me_report", null)
 			if typeof(me_rep_v) != TYPE_DICTIONARY or me_rep_v.is_empty():
@@ -2610,24 +2985,25 @@ func _render_in_progress_report() -> void:
 	# 1. 个人出征演武与学分变动
 	var p_name := str(me.get("name", "青竹学子"))
 	var pet_name := str(me.get("pet", {}).get("name", "青竹灵宠"))
-	var my_ord: Variant = state.get("my_order", null)
-	var my_b := "[b]出征学子：[/b]%s | [b]出战灵宠：[/b]%s（战力 120）\n" % [p_name, pet_name]
-	if typeof(my_ord) == TYPE_DICTIONARY and not my_ord.is_empty():
-		var act := str(my_ord.get("action", ""))
-		var t_name := str(my_ord.get("target_name", ""))
-		my_b += "[color=#b83b32]• 当前已签军令：向【%s】执行【%s】，已加盖行营帅印！[/color]\n" % [
-			t_name, "挥师进军攻打" if act == "advance" else "坚壁固守城池"
-		]
+	var card_ords: Array = state.get("card_orders", []) if typeof(state.get("card_orders", null)) == TYPE_ARRAY else []
+	var my_b := "[b]出征学子：[/b]%s | [b]出战灵宠：[/b]%s\n" % [p_name, pet_name]
+	if not card_ords.is_empty():
+		my_b += "[color=#b83b32]• 今日已签将令 %d / 3 令（每天最多出 3 令，21:00 锁令前可随时撤回）[/color]\n" % card_ords.size()
 	else:
-		my_b += "[color=#b83b32]• 当前军令状态：尚未签发军令！请前往【沙盘】轻触城池下达【进军】或【坚守】。[/color]\n"
-	
-	var cur_score := int(wallet.get("score", 0))
-	var cur_wenyu := int(wallet.get("balance", 0))
-	my_b += "• 学堂积分余额：%d 分 | 军备文玉：%d 枚（兑换比率 1:10，每日限额 20 文玉）\n" % [cur_score, cur_wenyu]
+		my_b += "[color=#b83b32]• 当前军令状态：今日尚未出手牌！前往【沙盘】点城并轻触下方手牌出令（每天最多出 3 令）。[/color]\n"
+	var cur_pts := int(wallet.get("available_points", 0))
+	var cur_wenyu := int(wallet.get("jade_balance", wallet.get("jade", 0)))
+	my_b += "• 可用学堂积分：%d 分 | 军备文玉：%d 枚（1 积分 = 10 文玉，每日限 20 积分）" % [cur_pts, cur_wenyu]
 	if report_estate_lbl != null:
 		report_estate_lbl.text = "🏡 文房小院 · 当前可用 %d 军功" % int(estate_data.get("merit_balance", 0))
-	my_b += "• 奖励规则：每日参与军令推演可获积分奖励，战报结算后自动结算入库。"
+	if report_me_expand_btn != null:
+		report_me_expand_btn.visible = false
+	if report_me_detail_text != null:
+		report_me_detail_text.visible = false
 	report_my_text.text = my_b
+	if report_boards_text != null:
+		report_boards_text.text = "[color=#685848]今夜 21:00 首候推演结算后，将自动张榜公布本周四榜（先锋 / 支援 / 侦察 / 守城）及全班榜首！[/color]"
+
 
 	# 2. 天下大势与关隘城池布防现状
 	var w_b := "[b]九州五大核心据点防御格局一览：[/b]\n"
@@ -2762,14 +3138,19 @@ func _format_me_report_order(ord: Dictionary) -> Array[String]:
 	var contrib_pct := int(round(float(ord.get("contribution", 0.0)) * 100.0))
 	var dmg := int(round(float(ord.get("damage", 0.0))))
 	var wall_dmg := int(round(float(ord.get("wall_damage", 0.0))))
-	var is_combat_role := role_code in ["vanguard", "garrison", "support", "fire"]
+	var is_combat_role := role_code in ["vanguard", "garrison", "fire"]
 
 	var out: Array[String] = []
 	var head := "%s [b]%s[/b] · %s" % [str(rmeta["icon"]), node_label, str(rmeta["label"])]
+	if role_code == "support":
+		# 决策红线 §1.9：支援只显示“你给主攻 +2%”，不画成个人伤害
+		head += " · 你给主攻 +2%（阵营协攻加成）"
+		out.append(head)
+		return out
 	if contrib_pct > 0 or (is_combat_role and (dmg > 0 or wall_dmg > 0)):
-		head += " · 贡献 %d%%" % contrib_pct
+		head += " · 贡献 %d%%（本场攻方伤害占比）" % contrib_pct
 	out.append(head)
-	if dmg > 0 or wall_dmg > 0:
+	if is_combat_role and (dmg > 0 or wall_dmg > 0):
 		out.append("[color=#5a4a3a]   伤害 %d · 破墙 %d[/color]" % [dmg, wall_dmg])
 	return out
 
@@ -2779,6 +3160,7 @@ func _build_me_report_bbcode(data: Dictionary, my_rep: Variant, me_rep: Dictiona
 	var lines: Array[String] = []
 	var hl_raw: Variant = me_rep.get("highlight", "")
 	var mr_highlight := str(hl_raw).strip_edges() if hl_raw != null else ""
+
 	if mr_highlight != "":
 		lines.append("[b]我今天下了 %d 令[/b]  [color=#8c3a32]%s[/color]" % [mr_orders.size(), mr_highlight])
 	else:
@@ -2804,6 +3186,18 @@ func _build_me_report_bbcode(data: Dictionary, my_rep: Variant, me_rep: Dictiona
 	else:
 		lines.append("[b][color=#8c3a32]军功 +%d[/color][/b]" % turn_merit)
 	return "\n".join(lines)
+
+func _build_me_report_detail_bbcode(me_rep: Dictionary) -> String:
+	var raw_orders: Variant = me_rep.get("orders", [])
+	var mr_orders: Array = raw_orders if typeof(raw_orders) == TYPE_ARRAY else []
+	var out: Array[String] = []
+	for ord_v in mr_orders:
+		if typeof(ord_v) == TYPE_DICTIONARY:
+			var lost := int(round(float(ord_v.get("troops_lost", 0.0))))
+			var nname := str(ord_v.get("node_name", ord_v.get("node_code", "")))
+			if lost > 0:
+				out.append("• %s：兵力战损 %d" % [nname, lost])
+	return "\n".join(out)
 
 func _show_report(data: Dictionary) -> void:
 	last_report_payload = data
@@ -2831,7 +3225,16 @@ func _show_report(data: Dictionary) -> void:
 
 	if not me_rep.is_empty():
 		report_my_text.text = _build_me_report_bbcode(data, my_rep, me_rep, turn_id)
+		var detail_str := _build_me_report_detail_bbcode(me_rep)
+		if report_me_expand_btn != null and report_me_detail_text != null:
+			report_me_expand_btn.visible = (detail_str != "")
+			report_me_detail_text.text = detail_str
+			report_me_detail_text.visible = report_me_expanded and (detail_str != "")
 	else:
+		if report_me_expand_btn != null:
+			report_me_expand_btn.visible = false
+		if report_me_detail_text != null:
+			report_me_detail_text.visible = false
 		var b_my := ""
 		if typeof(my_rep) == TYPE_DICTIONARY and not my_rep.is_empty():
 			var desc := str(my_rep.get("readable_text", ""))
@@ -2842,9 +3245,9 @@ func _show_report(data: Dictionary) -> void:
 		else:
 			b_my += "本候出征顺利，班宠灵力激荡，守备得力，立下军功！\n\n"
 
-		var cur_score := int(wallet.get("score", 0))
-		var cur_wenyu := int(wallet.get("balance", 0))
-		b_my += "• 学堂积分余额：%d 分 | 军备文玉：%d 枚（兑换比率 1:10）\n" % [cur_score, cur_wenyu]
+		var cur_pts := int(wallet.get("available_points", 0))
+		var cur_wenyu := int(wallet.get("jade_balance", wallet.get("jade", 0)))
+		b_my += "• 可用学堂积分：%d 分 | 军备文玉：%d 枚（1 积分 = 10 文玉）\n" % [cur_pts, cur_wenyu]
 		b_my += "• 本候推演奖励已入库，积分与文玉已按学堂规则完成发放。"
 
 		var tactics_lines: Array[String] = []
@@ -2899,13 +3302,16 @@ func _show_report(data: Dictionary) -> void:
 			str(r.get("target_name", "")),
 			str(r.get("result_summary", "")),
 		]
-	b_sum += "\n[color=#b83b32]◆ 下候备战提示：[/color]\n下一候军令已开启，请前往沙盘审视关防，谋划进军或坚守！"
+	b_sum += "\n[color=#b83b32]◆ 下候备战提示：[/color]\n新一候军令开启后，请先查晨报与今日邸报，再前往沙盘出满 3 令！"
 	report_summary_text.text = b_sum
+
+	if report_boards_text != null:
+		report_boards_text.text = _build_four_boards_bbcode(rep, me_rep)
 
 const TACTICAL_EFFECTS := {
 	"night_raid": "攻击 +20%（本城未侦察）",
 	"forced_march": "先手行动，免疫断粮",
-	"fire_attack": "器械攻墙 +50%",
+	"fire_attack": "器械攻墙 +60%",
 	"fortify": "防御 +20%",
 	"mutual_support": "相邻路友军防御 +10%",
 	"empty_fort": "敌全军攻击 -10%",
@@ -2984,85 +3390,93 @@ func _parse_tactics_lines_from_orders(orders: Array) -> Array[String]:
 			lines.append("• 常规突进 · %s兵 · %d路%s · (未佩战策)" % [t_name, lane, default_row])
 	return lines
 
+func _build_four_boards_bbcode(rep: Dictionary, me_rep: Dictionary) -> String:
+	var id_to_name: Dictionary = {}
+	for w_arr in [cached_merit_payload.get("week_top", []), cached_merit_payload.get("top", [])]:
+		if typeof(w_arr) == TYPE_ARRAY:
+			for r in w_arr:
+				if typeof(r) == TYPE_DICTIONARY and int(r.get("player_id", 0)) > 0:
+					id_to_name[int(r.get("player_id", 0))] = str(r.get("nickname", ""))
+	var my_pid := int(me.get("id", 0))
+	if my_pid > 0:
+		id_to_name[my_pid] = str(me.get("name", "我"))
+
+	var battles: Array = rep.get("battles", []) if typeof(rep.get("battles", null)) == TYPE_ARRAY else []
+	var vang_names: Dictionary = {}
+	var def_names: Dictionary = {}
+	var scout_cities: Array[String] = []
+	var fire_cities: Array[String] = []
+	for b in battles:
+		if typeof(b) != TYPE_DICTIONARY:
+			continue
+		var ncode := str(b.get("node_code", ""))
+		var nname := str(map.node_by_code(ncode).get("name", ncode))
+		for t in (b.get("teams", []) if typeof(b.get("teams", null)) == TYPE_ARRAY else []):
+			if typeof(t) == TYPE_DICTIONARY and int(t.get("player_id", 0)) > 0:
+				var pid := int(t.get("player_id", 0))
+				var nm := str(id_to_name.get(pid, "学子#%d" % pid))
+				vang_names[nm] = int(vang_names.get(nm, 0)) + 1
+		for dt in (b.get("defender_teams", []) if typeof(b.get("defender_teams", null)) == TYPE_ARRAY else []):
+			if typeof(dt) == TYPE_DICTIONARY and int(dt.get("player_id", 0)) > 0:
+				var pid := int(dt.get("player_id", 0))
+				var nm := str(id_to_name.get(pid, "学子#%d" % pid))
+				def_names[nm] = int(def_names.get(nm, 0)) + 1
+		if bool(b.get("scouted", false)):
+			scout_cities.append(nname)
+		if bool(b.get("fire", false)):
+			fire_cities.append(nname)
+
+	var sup_cnt := 0
+	for ord_v in (me_rep.get("orders", []) if typeof(me_rep.get("orders", null)) == TYPE_ARRAY else []):
+		if typeof(ord_v) == TYPE_DICTIONARY and str(ord_v.get("role", "")) == "support":
+			sup_cnt += 1
+
+	var role_map := {}
+	var my_roles: Variant = merit_summary_data.get("roles", [])
+	if typeof(my_roles) == TYPE_ARRAY:
+		for mr in my_roles:
+			if typeof(mr) == TYPE_DICTIONARY:
+				role_map[str(mr.get("kind", ""))] = int(mr.get("rank", 0))
+
+	var top_str := func(d: Dictionary, empty_tip: String) -> String:
+		if d.is_empty():
+			return empty_tip
+		var arr: Array[String] = []
+		for k in d.keys():
+			arr.append("%s(%d次)" % [str(k), int(d[k])])
+		return "、".join(arr.slice(0, 3))
+
+	var out: Array[String] = []
+	var r_v := (" · 我的本周先锋第 %d" % int(role_map["vanguard"])) if role_map.has("vanguard") else ""
+	var r_s := (" · 我的本周支援第 %d" % int(role_map["support"])) if role_map.has("support") else ""
+	var r_c := (" · 我的本周侦察第 %d" % int(role_map["scout"])) if role_map.has("scout") else ""
+	var r_d := (" · 我的本周守城第 %d" % int(role_map["defend"])) if role_map.has("defend") else ""
+
+	out.append("• [b][color=#b83b32]⚔️ 先锋榜[/color][/b]：%s%s" % [top_str.call(vang_names, "本候尚无先锋出战"), r_v])
+	out.append("• [b][color=#276f57]🤝 支援榜[/color][/b]：%s%s" % ["我本候协攻 %d 令（各给主攻 +2%%）" % sup_cnt if sup_cnt > 0 else "全阵营出令即计入协攻", r_s])
+	out.append("• [b][color=#1e3a5f]🕵 侦察榜[/color][/b]：%s%s" % ["破雾据点：" + ("、".join(scout_cities) if not scout_cities.is_empty() else "本候未触发哨探"), r_c])
+	out.append("• [b][color=#cf8325]🛡️ 守城榜[/color][/b]：%s%s" % [top_str.call(def_names, "由城池固定守军迎敌"), r_d])
+
+	var week_top: Array = cached_merit_payload.get("week_top", []) if typeof(cached_merit_payload.get("week_top", null)) == TYPE_ARRAY else []
+	if not week_top.is_empty():
+		var wt_strs: Array[String] = []
+		for i in range(mini(3, week_top.size())):
+			var row: Dictionary = week_top[i]
+			wt_strs.append("%d.%s(%d)" % [i + 1, str(row.get("nickname", "")), int(row.get("total", 0))])
+		out.append("[color=#5a4a3a]本周军功总榜前三：%s[/color]" % " · ".join(wt_strs))
+	return "\n".join(out)
+
 # ---------------------------------------------------------------------------
-# S05 战局回放独立全屏页（5 节点/路线/归属/变化高亮/战斗日志）
+# S04 战局回放子页（已并入战争日报，保留 _open_replay / replay_dialog 兼容）
 # ---------------------------------------------------------------------------
-
-func _build_replay_page() -> void:
-	replay_page = Control.new()
-	replay_page.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	replay_page.visible = false
-	pages["S05_REPLAY"] = replay_page
-	replay_dialog = replay_page # 别名绑定，保证 ReplaySmoke 测试判定成立
-	pages_container.add_child(replay_page)
-
-	var bg := ColorRect.new()
-	bg.color = C_WOOD_DESK
-	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	replay_page.add_child(bg)
-
-	var header := _create_page_header("🔄 九州沙盘推演复盘", "逐候复盘天下城池归属变迁")
-	replay_page.add_child(header)
-
-	replay_margin = MarginContainer.new()
-	replay_margin.position = Vector2(16, 70)
-	replay_margin.size = Vector2(size.x - 32, size.y - 80)
-	replay_page.add_child(replay_margin)
-
-	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 10)
-	replay_margin.add_child(v)
-
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
-	v.add_child(row)
-
-	row.add_child(_label("回放回合：", 14, GOLD_LIGHT))
-	replay_turn_select = OptionButton.new()
-	replay_turn_select.custom_minimum_size = Vector2(160, 38)
-	replay_turn_select.add_theme_stylebox_override("normal", _style(C_XUANZHI, Color("#c9baa7"), 1, 7, 8))
-	replay_turn_select.add_theme_color_override("font_color", C_WOOD_DESK)
-	replay_turn_select.item_selected.connect(_render_replay_turn)
-	row.add_child(replay_turn_select)
-
-	prev_turn_btn = _button("◀ 上一候", C_MOLAN, 38)
-	prev_turn_btn.custom_minimum_size = Vector2(88, 38)
-	prev_turn_btn.pressed.connect(_step_replay.bind(-1))
-	row.add_child(prev_turn_btn)
-
-	next_turn_btn = _button("下一候 ▶", C_MOLAN, 38)
-	next_turn_btn.custom_minimum_size = Vector2(88, 38)
-	next_turn_btn.pressed.connect(_step_replay.bind(1))
-	row.add_child(next_turn_btn)
-
-	replay_time_lbl = _label("推演时点：--", 12, Color("#d5c4a1"))
-	replay_time_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(replay_time_lbl)
-
-	replay_map = ReplayMapScript.new()
-	replay_map.custom_minimum_size = Vector2(0, 360)
-	replay_map.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	replay_map.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	v.add_child(replay_map)
-
-	var text_panel := PanelContainer.new()
-	text_panel.custom_minimum_size = Vector2(0, 160)
-	text_panel.add_theme_stylebox_override("panel", _panel_style(C_XUANZHI, Color("#dfcaa7"), 1, 10, 14))
-	v.add_child(text_panel)
-
-	replay_text = RichTextLabel.new()
-	replay_text.bbcode_enabled = true
-	replay_text.scroll_active = true
-	replay_text.add_theme_font_size_override("normal_font_size", 13)
-	replay_text.add_theme_color_override("default_color", C_WOOD_DESK)
-	text_panel.add_child(replay_text)
 
 func _open_replay() -> void:
 	action_status.text = "正在调取沙盘推演记录..."
 	api.request("GET", "/api/slice/replay", null, func(ok: bool, data: Dictionary, err: Dictionary):
 		if not ok:
 			_render_fallback_replay()
-			_navigate_to("S05_REPLAY")
+			_navigate_to("S04_REPORT")
+			_switch_report_subtab("replay")
 			return
 		_show_replay(data)
 	)
@@ -3085,8 +3499,9 @@ func _show_replay(data: Dictionary) -> void:
 			owners[str(n.get("code", ""))] = n.get("owner", {})
 		replay_map.setup(nodes, edges, owners, {})
 		replay_time_lbl.text = "推演时点：今夜 21:00 准时结算"
-		replay_text.text = "[font_size=16][color=#b83b32]◆ 第一候沙盘军情态势（备战中）[/color][/font_size]\n天下 5 大要害据点布防已毕，各大书院同门学子正在集结待命。\n[color=#685848]今夜 21:00 定时结算后，系统将自动生成城池易帜金色光环与战场动态对决复盘。[/color]"
-		_navigate_to("S05_REPLAY")
+		replay_text.text = "[font_size=16][color=#b83b32]◆ 沙盘军情态势（备战中）[/color][/font_size]\n各据点布防已毕，各大书院同门学子正在集结待命。\n[color=#685848]今夜 21:00 定时结算后，将自动生成城池易帜复盘与战场日志。[/color]"
+		_navigate_to("S04_REPORT")
+		_switch_report_subtab("replay")
 		return
 
 	replay_turn_select.clear()
@@ -3097,7 +3512,8 @@ func _show_replay(data: Dictionary) -> void:
 		replay_turn_select.set_item_metadata(idx, i)
 	replay_turn_select.select(turns.size() - 1)
 	_render_replay_turn(turns.size() - 1)
-	_navigate_to("S05_REPLAY")
+	_navigate_to("S04_REPORT")
+	_switch_report_subtab("replay")
 
 func _render_fallback_replay() -> void:
 	var nodes: Array = state.get("map", {}).get("nodes", state.get("nodes", []))
@@ -3361,42 +3777,57 @@ func _build_all_placeholder_pages() -> void:
 
 	_build_army_composition_page()
 
-	_build_placeholder_page("S07_GENERAL", "🐾 班宠将军", "学子灵宠身份、等级与法宝", "🐾", "出战中", [
-		{"title": "出战灵宠：青竹灵猫", "desc": "等级：LV.5 | 四维：攻 35 / 防 40 / 敏 25 / 法 20。"},
-		{"title": "灵宠天赋技能", "desc": "【坚守不拔】：驻守己方据点时守备力额外 +1。"},
-		{"title": "灵宠饱食度与法宝", "desc": "饱食度 100/100，佩戴法宝【碧玉镇纸】，提升行军威仪。"}
-	])
+	_build_season_page()
 
-	_build_placeholder_page("S08_CODEX", "📜 文脉图鉴", "34 省文化地理典藏卷轴", "📜", "收录中", [
-		{"title": "三秦文脉 · 关中塞上", "desc": "陕西诗卷典藏：终南阴岭秀，积雪浮云端。收录进度 80%。"},
-		{"title": "齐鲁文脉 · 岱宗夫如何", "desc": "山东城关典藏：造化钟神秀，阴阳割昏晓。待争夺解锁。"},
-		{"title": "江南文脉 · 忆江南", "desc": "江浙行宫图卷：日出江花红胜火，春来江水绿如蓝。"}
+	# 未实装模块收起主入口，仅保留简洁“敬请期待”兜底页（已清除假任务与假商城文案）
+	_build_placeholder_page("S07_GENERAL", "🐾 班宠将军", "功能筹备中", "🐾", "敬请期待", [
+		{"title": "敬请期待", "desc": "班宠将军进阶养成与图鉴将于后续版本开放，敬请期待。"}
 	])
-
-	_build_placeholder_page("S09_SHOP", "🏮 文房榷场", "文玉换取外观与便利道具", "🏮", "营业中", [
-		{"title": "【外观】青竹折扇战旗", "desc": "兑换价：10 文玉。出征时地图旌旗幻化为雅致文竹折扇。"},
-		{"title": "【便利】神行千里灵符", "desc": "兑换价：5 文玉。急报传达提速，缩短行军流光用时。"},
-		{"title": "【外观】古玉镇纸城池皮肤", "desc": "兑换价：20 文玉。将己方大本营外观升级为汉白玉飞檐楼阁。"}
+	_build_placeholder_page("S08_CODEX", "📜 文脉图鉴", "功能筹备中", "📜", "敬请期待", [
+		{"title": "敬请期待", "desc": "九州文脉诗卷典藏将于后续版本开放，敬请期待。"}
 	])
-
-	_build_placeholder_page("S10_SEASON", "🏆 四候赛季", "四周加速赛季进度与丰厚犒赏", "🏆", "第 1 周", [
-		{"title": "第一周 · 破关争雄", "desc": "目标：合力攻克 1 座中立关隘。奖励：全员获得文玉 20。"},
-		{"title": "第二周 · 纵横开阖", "desc": "目标：连通两省关防驰道，触发文脉共鸣事件。"},
-		{"title": "赛季终章 · 九州问鼎", "desc": "四周推演总战功最高阵营加冕【山河首座】，班宠外观永续珍藏。"}
+	_build_placeholder_page("S09_SHOP", "🏮 文房榷场", "功能筹备中", "🏮", "敬请期待", [
+		{"title": "敬请期待", "desc": "文玉外观兑换阁将于后续版本开放，敬请期待。"}
+	])
+	_build_placeholder_page("S12_MAIL", "✉️ 军府谕告", "请点击顶栏【晨报】查看最新战报与邸报", "✉️", "已整合至晨报", [
+		{"title": "请使用顶栏【📰 晨报】", "desc": "每日战果头条、个人战报摘要与今日邸报 2 选 1 已统一整合到【晨报】中。"}
 	])
 
 	_build_settings_page()
 
-	_build_placeholder_page("S12_MAIL", "✉️ 军府谕告", "班级通知、战役奖励与书简", "✉️", "2 封未读", [
-		{"title": "【谕告】第一候关隘争霸已打响", "desc": "诸军请于今日 21:00 前完成军令盖印，逾期将依默认驻守。"},
-		{"title": "【军饷】出征犒劳文玉到账", "desc": "恭贺学子踏入山河沙盘，学堂发放首征文玉 10 枚，请于仓库查收。"}
-	])
+func _build_season_page() -> void:
+	season_page = SeasonViewScript.new()
+	season_page.name = "SeasonPage"
+	season_page.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	season_page.visible = false
+	season_page.back_to_map_requested.connect(func(): _navigate_to("S01_MAP"))
+	season_page.refresh_requested.connect(func(): _fetch_season_and_history(true))
+	pages["S10_SEASON"] = season_page
+	pages_container.add_child(season_page)
 
-	_build_placeholder_page("S13_TASKS", "🎯 每日军务", "每日三道治军修身悬赏", "🎯", "待交付", [
-		{"title": "【军令】今日按时签发一道军令", "desc": "完成军令加盖印信。奖励：学堂积分 +2，班宠经验 +10。"},
-		{"title": "【兵法】查阅上一候战争日报", "desc": "研读胜负得失，指导军阵调整。奖励：文玉 +1。"},
-		{"title": "【修身】语文背诵任务打卡", "desc": "完成《短歌行》全文默写。奖励：出征士气增加 10 点。"}
-	])
+func _open_season_page() -> void:
+	_navigate_to("S10_SEASON")
+	_fetch_season_and_history(false)
+
+func _fetch_season_and_history(auto_check_award: bool = false) -> void:
+	if api == null or api.token == "":
+		return
+	api.get_season(func(ok: bool, sdata: Dictionary, _err: Dictionary):
+		if ok and not sdata.is_empty():
+			season_data = sdata.duplicate(true)
+			if season_page != null:
+				season_page.set_season_data(season_data, season_history_data, merit_summary_data, state.get("game", {}), me)
+			var is_over := bool(sdata.get("season_over", false)) or str(state.get("game", {}).get("status", "")) == "finished"
+			if auto_check_award and is_over and not _season_award_auto_checked and str(me.get("role", "player")) == "player":
+				_season_award_auto_checked = true
+				_navigate_to("S10_SEASON")
+	)
+	api.get_season_history(func(ok: bool, hdata: Dictionary, _err: Dictionary):
+		if ok and not hdata.is_empty():
+			season_history_data = hdata.duplicate(true)
+			if season_page != null:
+				season_page.set_season_data(season_data, season_history_data, merit_summary_data, state.get("game", {}), me)
+	)
 
 func _build_estate_page() -> void:
 	estate_page = EstateViewScript.new()
@@ -3841,7 +4272,7 @@ func _init_tutorial_ui() -> void:
 
 	tutorial_box = PanelContainer.new()
 	tutorial_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	tutorial_box.add_theme_stylebox_override("panel", _panel_style(Color("#fffdf8"), C_ZHUSHA, 2, 8, 8))
+	tutorial_box.add_theme_stylebox_override("panel", _style(Color("#fdf6e8", 0.96), C_ZHUSHA, 2, 10, 8))
 	tutorial_overlay.add_child(tutorial_box)
 
 	var row := HBoxContainer.new()
@@ -3849,39 +4280,75 @@ func _init_tutorial_ui() -> void:
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	tutorial_box.add_child(row)
 
+	tutorial_img_frame = PanelContainer.new()
+	tutorial_img_frame.custom_minimum_size = Vector2(212, 110)
+	tutorial_img_frame.size = Vector2(212, 110)
+	tutorial_img_frame.clip_contents = true
+	tutorial_img_frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tutorial_img_frame.add_theme_stylebox_override("panel", _style(Color("#f4e3cb"), C_BORDER_GOLD, 1, 6, 0))
+	row.add_child(tutorial_img_frame)
+
+	tutorial_img_clip = Control.new()
+	tutorial_img_clip.clip_contents = true
+	tutorial_img_clip.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	tutorial_img_clip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tutorial_img_frame.add_child(tutorial_img_clip)
+
 	tutorial_img = TextureRect.new()
-	tutorial_img.custom_minimum_size = Vector2(96, 54)
-	tutorial_img.size = Vector2(96, 54)
 	tutorial_img.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	tutorial_img.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	tutorial_img.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_child(tutorial_img)
+	tutorial_img_clip.add_child(tutorial_img)
 
-	var icon_badge := _label("🏮", 20, C_ZHUSHA)
-	icon_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_child(icon_badge)
+	# 第 1 步专属图文浮签：挂在普通 Control 容器 tutorial_img_clip 下，避免 PanelContainer 强制铺满遮挡原画
+	tutorial_tag_city = PanelContainer.new()
+	tutorial_tag_city.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tutorial_tag_city.z_index = 2
+	tutorial_tag_city.add_theme_stylebox_override("panel", _style(Color("#fbf2df", 0.95), C_ZHUSHA, 1, 4, 4))
+	var tag_city_lbl := _label("先点城", 11, C_ZHUSHA)
+	tag_city_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tutorial_tag_city.add_child(tag_city_lbl)
+	tutorial_img_clip.add_child(tutorial_tag_city)
+
+	tutorial_tag_card = PanelContainer.new()
+	tutorial_tag_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tutorial_tag_card.z_index = 2
+	tutorial_tag_card.add_theme_stylebox_override("panel", _style(Color("#1e3a5f", 0.94), C_BORDER_GOLD, 1, 4, 4))
+	var tag_card_lbl := _label("再选牌", 11, Color("#fae19c"))
+	tag_card_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tutorial_tag_card.add_child(tag_card_lbl)
+	tutorial_img_clip.add_child(tutorial_tag_card)
+
+	tutorial_icon_badge = _label("🏮", 18, C_ZHUSHA)
+	tutorial_icon_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tutorial_icon_badge.visible = false
+	row.add_child(tutorial_icon_badge)
 
 	var text_col := VBoxContainer.new()
 	text_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	text_col.add_theme_constant_override("separation", 2)
+	text_col.alignment = BoxContainer.ALIGNMENT_CENTER
+	text_col.add_theme_constant_override("separation", 4)
 	text_col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(text_col)
 
-	tutorial_title_lbl = _label("【第一步 · 踏勘城池】", 13, C_ZHUSHA)
+	tutorial_title_lbl = _label("【第一步 · 先点城，再选牌】", 13, C_ZHUSHA)
 	tutorial_title_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	text_col.add_child(tutorial_title_lbl)
 
-	tutorial_desc_lbl = _label("轻触地图上的任意城池，开启前线行营部署。", 12, Color("#3a2d24"))
+	tutorial_desc_lbl = _label("轻触下方沙盘城池开启军议，再选底部手牌出征（每天最多出 3 令）。", 12, Color("#3a2d24"))
+	tutorial_desc_lbl.custom_minimum_size = Vector2(180, 0)
+	tutorial_desc_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	tutorial_desc_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	text_col.add_child(tutorial_desc_lbl)
 
 	var btn_col := HBoxContainer.new()
 	btn_col.add_theme_constant_override("separation", 6)
-	row.add_child(btn_col)
+	btn_col.size_flags_vertical = Control.SIZE_SHRINK_END
+	text_col.add_child(btn_col)
 
 	tutorial_action_btn = Button.new()
 	tutorial_action_btn.text = "✓ 我已通晓"
-	tutorial_action_btn.custom_minimum_size = Vector2(80, 32)
+	tutorial_action_btn.custom_minimum_size = Vector2(80, 30)
 	tutorial_action_btn.add_theme_font_size_override("font_size", 12)
 	tutorial_action_btn.add_theme_color_override("font_color", Color("#fae19c"))
 	tutorial_action_btn.add_theme_stylebox_override("normal", _style(C_ZHUQING, C_BORDER_GOLD, 1, 4, 4))
@@ -3891,9 +4358,9 @@ func _init_tutorial_ui() -> void:
 
 	tutorial_skip_btn = Button.new()
 	tutorial_skip_btn.text = "⏩ 跳过"
-	tutorial_skip_btn.custom_minimum_size = Vector2(60, 32)
+	tutorial_skip_btn.custom_minimum_size = Vector2(64, 28)
 	tutorial_skip_btn.add_theme_font_size_override("font_size", 12)
-	tutorial_skip_btn.add_theme_color_override("font_color", Color("#8a7c6c"))
+	tutorial_skip_btn.add_theme_color_override("font_color", Color("#e7dcc8"))
 	tutorial_skip_btn.add_theme_stylebox_override("normal", _style(Color("#30241b"), Color("#5a4838"), 1, 4, 4))
 	tutorial_skip_btn.pressed.connect(_complete_tutorial)
 	btn_col.add_child(tutorial_skip_btn)
@@ -3911,9 +4378,63 @@ func _check_and_trigger_tutorial() -> void:
 	if not _is_tutorial_completed():
 		_start_tutorial()
 
+func _layout_tutorial_media() -> void:
+	if tutorial_img_frame == null or tutorial_img == null:
+		return
+	var fw := tutorial_img_frame.size.x
+	var fh := tutorial_img_frame.size.y
+	if fw <= 4.0 or fh <= 4.0:
+		return
+	var is_step1 := (tutorial_step == 1)
+	if tutorial_icon_badge != null:
+		tutorial_icon_badge.visible = not is_step1
+	if tutorial_tag_city != null:
+		tutorial_tag_city.visible = is_step1
+	if tutorial_tag_card != null:
+		tutorial_tag_card.visible = is_step1
+
+	if is_step1 and tutorial_atlas != null and tutorial_atlas.region.size.x > 0.0:
+		var reg := tutorial_atlas.region
+		var pad_x := 0.0 if AudioManager.is_reduced_motion else 6.0
+		var sc := maxf((fw + pad_x) / reg.size.x, fh / reg.size.y)
+		var draw_size := reg.size * sc
+		tutorial_img_base_pos = Vector2((fw - draw_size.x) * 0.5, (fh - draw_size.y) * 0.5)
+		tutorial_img.size = draw_size
+		tutorial_img.position = Vector2(tutorial_img_base_pos.x + tutorial_parallax_px, tutorial_img_base_pos.y)
+		# 基于当前裁剪 region，精准把“先点城”压到左下纸块中心，“再选牌”压到右上关隘城池旁
+		if tutorial_tag_city != null:
+			var tc_sz := tutorial_tag_city.get_combined_minimum_size()
+			tutorial_tag_city.size = tc_sz
+			var uv_city := Vector2((382.0 - reg.position.x) / reg.size.x, (426.0 - reg.position.y) / reg.size.y)
+			var cpos := tutorial_img_base_pos + uv_city * draw_size - tc_sz * 0.5
+			tutorial_tag_city.position = Vector2(clampf(cpos.x, 4.0, fw - tc_sz.x - 4.0), clampf(cpos.y, 4.0, fh - tc_sz.y - 4.0))
+		if tutorial_tag_card != null:
+			var tk_sz := tutorial_tag_card.get_combined_minimum_size()
+			tutorial_tag_card.size = tk_sz
+			var uv_card := Vector2((804.0 - reg.position.x) / reg.size.x, (358.0 - reg.position.y) / reg.size.y)
+			var kpos := tutorial_img_base_pos + uv_card * draw_size - tk_sz * 0.5
+			tutorial_tag_card.position = Vector2(clampf(kpos.x, 4.0, fw - tk_sz.x - 4.0), clampf(kpos.y, 4.0, fh - tk_sz.y - 4.0))
+	else:
+		tutorial_img_base_pos = Vector2.ZERO
+		tutorial_img.position = Vector2.ZERO
+		tutorial_img.size = Vector2(fw, fh)
+
 func _update_tutorial_illustration(step: int) -> void:
 	if tutorial_img == null:
 		return
+	var guide_path := "res://assets/art/ui/first_order_city_card_guide.png"
+	if step == 1 and ResourceLoader.exists(guide_path):
+		var gtex: Texture2D = load(guide_path)
+		if gtex != null:
+			var is_compact := size.x < 900.0 or size.y < 650.0
+			if tutorial_atlas == null:
+				tutorial_atlas = AtlasTexture.new()
+			tutorial_atlas.atlas = gtex
+			tutorial_atlas.region = Rect2(24.0, 52.0, 948.0, 494.0) if is_compact else Rect2(16.0, 28.0, 992.0, 532.0)
+			tutorial_img.texture = tutorial_atlas
+			tutorial_img.visible = true
+			_layout_tutorial_media()
+			return
 	var path := ""
 	match step:
 		1: path = "res://assets/art/ui/tutorial_01_choose_city.png"
@@ -3924,6 +4445,7 @@ func _update_tutorial_illustration(step: int) -> void:
 		tutorial_img.visible = true
 	else:
 		tutorial_img.visible = false
+	_layout_tutorial_media()
 
 func _start_tutorial() -> void:
 	if tutorial_overlay == null:
@@ -3932,8 +4454,8 @@ func _start_tutorial() -> void:
 	tutorial_overlay.visible = true
 	tutorial_action_btn.visible = false
 	tutorial_skip_btn.visible = true
-	tutorial_title_lbl.text = "【第一步 · 踏勘城池】"
-	tutorial_desc_lbl.text = "轻触沙盘上的任意一座城池（如松风渡、听雨台），开启前线行营。"
+	tutorial_title_lbl.text = "【第一步 · 先点城，再选牌】"
+	tutorial_desc_lbl.text = "轻触下方沙盘城池开启军议，再选底部手牌出征（每天最多出 3 令）。"
 	_update_tutorial_illustration(1)
 	_layout_responsive()
 	if not AudioManager.is_reduced_motion:
@@ -3946,13 +4468,14 @@ func _advance_tutorial(next_step: int) -> void:
 		return
 	tutorial_step = next_step
 	_update_tutorial_illustration(next_step)
+	_layout_responsive()
 	if tutorial_step == 2:
-		tutorial_title_lbl.text = "【第二步 · 谋定战策】"
-		tutorial_desc_lbl.text = "已锁定据点！在下方【每日战策】手牌中，轻触一张可用战策签发出令。"
+		tutorial_title_lbl.text = "【第二步 · 手牌出令】"
+		tutorial_desc_lbl.text = "已选中据点！无需关抽屉，直接点下方【每日将令】手牌出征（每天最多出 3 令）。"
 		tutorial_action_btn.visible = false
 	elif tutorial_step == 3:
 		tutorial_title_lbl.text = "【第三步 · 帅印盖定】"
-		tutorial_desc_lbl.text = "将令已加盖帅印！每日 21:00 锁令前可随时调整或撤回；三军将依阵位决胜。"
+		tutorial_desc_lbl.text = "已出 1 令（每天最多出 3 令）！21:00 锁令前可点已出牌撤回；三军依战策与阵位决胜。"
 		tutorial_action_btn.visible = true
 	if not AudioManager.is_reduced_motion:
 		_shake_node(tutorial_box)
@@ -3997,8 +4520,15 @@ func _build_army_composition_page() -> void:
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	army_page.add_child(bg)
 
-	var header := _create_page_header("⚔️ 每周军团编成", "4 兵种三队战阵 · 兵源城加成 · 周中可改 1 次")
+	var header := _create_page_header("⚔️ 每周军团编成", "4 兵种三队战阵 · 兵源城加成 · 本周可改 1 次")
 	army_page.add_child(header)
+	for ch in header.get_children():
+		if ch is MarginContainer:
+			for hrow in ch.get_children():
+				if hrow is HBoxContainer and hrow.get_child_count() >= 3:
+					var sub := hrow.get_child(2)
+					if sub is Label:
+						army_header_sub_lbl = sub
 
 	army_margin = MarginContainer.new()
 	army_margin.position = Vector2(16, 70)
@@ -4014,6 +4544,30 @@ func _build_army_composition_page() -> void:
 	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vbox.add_theme_constant_override("separation", 10)
 	scroll.add_child(vbox)
+
+	# 头部放今日邸报（2 选 1 · 结算前可随时调整）
+	army_bulletin_box = PanelContainer.new()
+	army_bulletin_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	army_bulletin_box.add_theme_stylebox_override("panel", _panel_style(C_XUANZHI, C_BORDER_GOLD, 1, 8, 10))
+	vbox.add_child(army_bulletin_box)
+
+	var bv := VBoxContainer.new()
+	bv.add_theme_constant_override("separation", 6)
+	army_bulletin_box.add_child(bv)
+
+	var bh := HBoxContainer.new()
+	bh.add_theme_constant_override("separation", 8)
+	bv.add_child(bh)
+	bh.add_child(_label("📜 今日邸报（2 选 1）", 14, C_ZHUSHA))
+	army_bulletin_hint_lbl = _label("每日从三策中择一加持本回合 · 结算前可改", 11, Color("#685848"))
+	army_bulletin_hint_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	army_bulletin_hint_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	bh.add_child(army_bulletin_hint_lbl)
+
+	army_bulletin_row = HBoxContainer.new()
+	army_bulletin_row.add_theme_constant_override("separation", 8)
+	army_bulletin_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bv.add_child(army_bulletin_row)
 
 	composition_panel = CompositionPanelScript.new()
 	composition_panel.name = "CompositionPanel"
@@ -4049,7 +4603,7 @@ func _build_army_composition_page() -> void:
 const ALL_TACTICAL_CARDS := [
 	{"code": "night_raid", "aliases": [], "name": "夜袭", "type": "advance", "icon": "🌙", "short_desc": "未侦察伤害+20%", "full_desc": "【朱·夜袭】：若目标城池当晚未被敌方侦察识破，进军伤害额外提升20%。"},
 	{"code": "forced_march", "aliases": ["rapid_march"], "name": "急行", "type": "advance", "icon": "🐎", "short_desc": "先手突袭 无视断连", "full_desc": "【朱·急行】：首轮先制动势，跳过断连惩罚，直击要塞。"},
-	{"code": "fire_attack", "aliases": [], "name": "火攻", "type": "advance", "icon": "🔥", "short_desc": "器械攻墙伤害+50%", "full_desc": "【朱·火攻】：火烧连营摧坚壁，大幅强化阵后器械对城墙的破坏力(+50%)。"},
+	{"code": "fire_attack", "aliases": [], "name": "火攻", "type": "advance", "icon": "🔥", "short_desc": "器械攻墙伤害+60%", "full_desc": "【朱·火攻】：火烧连营摧坚壁，大幅强化阵后器械对城墙的破坏力(+60%)。"},
 	{"code": "fortify", "aliases": ["solid_defense"], "name": "坚壁", "type": "defend", "icon": "🛡️", "short_desc": "本队防御韧性+20%", "full_desc": "【墨·坚壁】：固若金汤，全队护甲提升20%，次日手牌3选2。"},
 	{"code": "mutual_support", "aliases": ["flank_support"], "name": "犄角", "type": "defend", "icon": "🤝", "short_desc": "相邻城池防守+10%", "full_desc": "【墨·犄角】：互为倚仗，相辅相成，若相邻有己方城池则防御共振提升10%。"},
 	{"code": "empty_fort", "aliases": [], "name": "空城", "type": "defend", "icon": "🪈", "short_desc": "敌军攻势削弱10%", "full_desc": "【墨·空城】：大开城门，虚实莫测，来犯敌军攻击点数削减10%。"},
@@ -4180,6 +4734,41 @@ func _build_hand_cards_bar() -> void:
 	var sp := Control.new()
 	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top_hb.add_child(sp)
+
+	hand_lane_btn = Button.new()
+	hand_lane_btn.text = "路:自动"
+	hand_lane_btn.custom_minimum_size = Vector2(54, 20)
+	hand_lane_btn.add_theme_font_size_override("font_size", 10)
+	hand_lane_btn.add_theme_color_override("font_color", GOLD_LIGHT)
+	hand_lane_btn.add_theme_stylebox_override("normal", _style(Color("#2a221c"), Color("#78654e"), 1, 4, 2))
+	hand_lane_btn.tooltip_text = "切换出令分路（自动按槽位 1/2/3 路，点击可自选 1/2/3 路）"
+	hand_lane_btn.pressed.connect(func():
+		hand_lane_override = (hand_lane_override + 1) % 4
+		hand_lane_btn.text = "路:自动" if hand_lane_override == 0 else ("路:%d路" % hand_lane_override)
+		_schedule_forecast_recalc()
+	)
+	top_hb.add_child(hand_lane_btn)
+
+	hand_row_btn = Button.new()
+	hand_row_btn.text = "排:自动"
+	hand_row_btn.custom_minimum_size = Vector2(54, 20)
+	hand_row_btn.add_theme_font_size_override("font_size", 10)
+	hand_row_btn.add_theme_color_override("font_color", GOLD_LIGHT)
+	hand_row_btn.add_theme_stylebox_override("normal", _style(Color("#2a221c"), Color("#78654e"), 1, 4, 2))
+	hand_row_btn.tooltip_text = "切换前排/后排布阵（自动按兵种分配，点击切换前排/后排）"
+	hand_row_btn.pressed.connect(func():
+		if hand_row_override == "":
+			hand_row_override = "front"
+			hand_row_btn.text = "排:前排"
+		elif hand_row_override == "front":
+			hand_row_override = "back"
+			hand_row_btn.text = "排:后排"
+		else:
+			hand_row_override = ""
+			hand_row_btn.text = "排:自动"
+		_schedule_forecast_recalc()
+	)
+	top_hb.add_child(hand_row_btn)
 
 	hand_redraw_btn = Button.new()
 	hand_redraw_btn.text = "🔄 重抽(1/1)"
@@ -4514,8 +5103,8 @@ func _play_card_order(slot: int, card_code: String, target_code: String) -> void
 	var unit_type := "cav"
 	if slot >= 0 and slot < comp_types.size():
 		unit_type = str(comp_types[slot])
-	var row_pos := "back" if unit_type == "arc" else "front"
-	var lane := slot + 1
+	var row_pos := hand_row_override if hand_row_override != "" else ("back" if unit_type == "arc" else "front")
+	var lane := hand_lane_override if hand_lane_override > 0 else (slot + 1)
 	var req_key := _new_key("p1_t%d_s%d" % [_turn_id(), slot])
 
 	action_status.text = "将令传达中..."
@@ -4526,10 +5115,11 @@ func _play_card_order(slot: int, card_code: String, target_code: String) -> void
 		AudioManager.play_sfx("stamp")
 		var card_name := str(_get_tactical_card_meta(card_code).get("name", card_code))
 		var target_name := str(map.node_by_code(target_code).get("name", target_code))
-		_toast("【%s】将令已加盖帅印，下达至【%s】(第%d队)！" % [card_name, target_name, lane])
+		_toast("【%s】将令已下达至【%s】(%d路%s)！" % [card_name, target_name, lane, "后排" if row_pos == "back" else "前排"])
 		if tutorial_step == 2:
 			_advance_tutorial(3)
 		_refresh_state()
+		_schedule_forecast_recalc()
 	)
 
 func _withdraw_card_order(slot: int) -> void:
@@ -4541,6 +5131,7 @@ func _withdraw_card_order(slot: int) -> void:
 		AudioManager.play_sfx("card_withdraw")
 		_toast("第 %d 队将令已成功撤回！" % (slot + 1))
 		_refresh_state()
+		_schedule_forecast_recalc()
 	)
 
 func _on_hand_redraw_pressed() -> void:
@@ -4560,18 +5151,23 @@ func _on_hand_redraw_pressed() -> void:
 			return
 		_toast("已消耗重抽机会，生成全新将令手牌！")
 		_refresh_state()
+		_schedule_forecast_recalc()
 	)
 
 func _on_composition_confirmed(types: Array) -> void:
 	action_status.text = "提交军团编成中..."
-	api.set_composition(1, types, func(ok: bool, data: Dictionary, err: Dictionary):
+	api.set_composition(_current_week(), types, func(ok: bool, data: Dictionary, err: Dictionary):
 		if not ok:
 			_show_error(err)
 			return
 		_toast("军团编成已成功确认保存！")
+		var c_used := int(data.get("changes_used", 1 if bool(data.get("changed_once", false)) else 0))
+		var c_allowed := int(data.get("changes_allowed", 1))
 		if composition_panel:
-			composition_panel.set_composition_state(data.get("types", types), bool(data.get("changed_once", false)))
+			composition_panel.set_composition_state(data.get("types", types), bool(data.get("changed_once", false)), c_used, c_allowed)
+		_update_army_header_text(c_used, c_allowed)
 		_refresh_state()
+		_schedule_forecast_recalc()
 	)
 
 func _start_demo_battle(node_code: String = "", fire: bool = true, callback: Callable = Callable()) -> void:
@@ -4590,6 +5186,7 @@ func _start_demo_battle(node_code: String = "", fire: bool = true, callback: Cal
 		current_battle_id = b_id
 		
 		# 打开回放浮层并启动确定性播放
+		AudioManager.play_bgm("battle", 0.25)
 		battle_replay_overlay.visible = true
 		battle_replay_instance.play_data(log)
 		_toast("⚔️ 演武决战推演开始！")
@@ -4635,6 +5232,7 @@ func play_card(slot: int, card_code: String, target_node_code: String = "N2", la
 			_show_error(err)
 		else:
 			_refresh_state()
+			_schedule_forecast_recalc()
 	)
 
 func withdraw_card(slot: int) -> void:
@@ -4722,12 +5320,16 @@ func _build_battle_replay_overlay() -> void:
 	battle_replay_instance = BattleReplayScene.instantiate()
 	battle_replay_instance.name = "BattleReplayInstance"
 	battle_replay_instance.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	battle_replay_instance.closed.connect(func(): battle_replay_overlay.visible = false)
+	battle_replay_instance.closed.connect(func():
+		battle_replay_overlay.visible = false
+		AudioManager.play_bgm("map", 0.5)
+	)
 	battle_replay_instance.replay_finished.connect(_on_battle_replay_finished)
 	battle_replay_overlay.add_child(battle_replay_instance)
 
 func _open_battle_replay_demo() -> void:
 	if battle_replay_overlay and battle_replay_instance:
+		AudioManager.play_bgm("battle", 0.25)
 		battle_replay_overlay.visible = true
 		battle_replay_overlay.move_to_front()
 		battle_replay_instance.load_sample_data()
@@ -4804,7 +5406,7 @@ func _teacher_settle() -> void:
 
 func _teacher_next() -> void:
 	action_status.text = "进入下一候..."
-	api.request("POST", "/api/slice/admin/next-turn", {"game_id": int(state.get("game", {}).get("id", 1))}, func(ok: bool, _d: Dictionary, err: Dictionary):
+	api.next_turn(_turn_id(), func(ok: bool, _d: Dictionary, err: Dictionary):
 		if not ok:
 			_show_error(err)
 			return
@@ -4830,19 +5432,19 @@ func _build_recharge_dialog() -> void:
 	v.add_theme_constant_override("separation", 10)
 	recharge_dialog.add_child(v)
 
-	recharge_info = _label("现有积分：-- | 今日已兑：0/500", 14, INK)
+	recharge_info = _label("可用积分：-- | 今日已兑：0/20", 14, INK)
 	v.add_child(recharge_info)
 
 	var h := HBoxContainer.new()
-	h.add_child(_label("兑换文玉数量：", 14, INK))
+	h.add_child(_label("消耗积分数量：", 14, INK))
 	recharge_spin = SpinBox.new()
 	recharge_spin.min_value = 1
-	recharge_spin.max_value = 50
-	recharge_spin.value = 10
+	recharge_spin.max_value = 20
+	recharge_spin.value = 5
 	h.add_child(recharge_spin)
 	v.add_child(h)
 
-	var rate_hint := _label("10 积分 = 1 文玉，兑换仅记账不扣积分余额", 12, MUTED)
+	var rate_hint := _label("1 可用积分 = 10 文玉（每日上限 20 积分，不扣 students.score）", 12, MUTED)
 	v.add_child(rate_hint)
 
 	var btns := HBoxContainer.new()
@@ -4862,28 +5464,29 @@ func _build_recharge_dialog() -> void:
 func _open_recharge() -> void:
 	if wallet.is_empty():
 		_refresh_state()
-	var score := int(wallet.get("score", 0))
-	var converted := int(wallet.get("today_converted_points", 0))
-	var cap := int(wallet.get("daily_cap", 500))
-	recharge_info.text = "现有积分：%d | 今日已转：%d/%d" % [score, converted, cap]
+	var pts := int(wallet.get("available_points", 0))
+	var converted := int(wallet.get("today_recharged_points", 0))
+	var cap := int(wallet.get("daily_cap_points", 20))
+	recharge_info.text = "可用积分：%d | 今日已转：%d/%d 分" % [pts, converted, cap]
 	recharge_dialog.popup_centered()
 
 func _do_recharge() -> void:
-	var jade := int(recharge_spin.value)
-	var req_key := "client_rech_%d_%d" % [Time.get_unix_time_from_system(), randi() % 10000]
+	var pts := int(recharge_spin.value)
+	var req_key := _new_key("rech")
 	recharge_confirm.disabled = true
-	api.request("POST", "/api/slice/recharge", {
-		"jade_amount": jade,
-		"request_key": req_key,
-	}, func(ok: bool, data: Dictionary, err: Dictionary):
+	api.recharge(pts, req_key, func(ok: bool, data: Dictionary, err: Dictionary):
 		recharge_confirm.disabled = false
 		if not ok:
 			_show_error(err)
 			return
 		recharge_dialog.hide()
-		wallet["jade"] = data.get("jade", 0)
-		wallet_label.text = "💎 文玉 %d" % int(wallet["jade"])
-		action_status.text = "成功兑换 %d 文玉！" % jade
+		var new_w: Variant = data.get("wallet", {})
+		if typeof(new_w) == TYPE_DICTIONARY and not new_w.is_empty():
+			wallet = new_w.duplicate(true)
+			state["wallet"] = wallet
+		var jade_bal := int(wallet.get("jade_balance", int(data.get("jade_added", pts * 10))))
+		wallet_label.text = ("💎%d" % jade_bal) if size.y < 650.0 else ("💎 文玉 %d" % jade_bal)
+		action_status.text = "成功兑换 %d 文玉！" % int(data.get("jade_added", pts * 10))
 		_toast("文玉加仓成功！")
 	)
 
@@ -4946,6 +5549,7 @@ func _on_login(as_teacher: bool) -> void:
 	)
 
 func _transition_login_to_game() -> void:
+	AudioManager.play_bgm("map")
 	if AudioManager.is_reduced_motion:
 		login_layer.visible = false
 		game_layer.visible = true
@@ -4985,6 +5589,15 @@ func _logout_local(message: String) -> void:
 	me = {}
 	wallet = {}
 	selected_code = ""
+	_navigate_to("S01_MAP")
+	_morning_auto_checked = false
+	_season_award_auto_checked = false
+	bulletin_data = {}
+	season_data = {}
+	season_history_data = {}
+	if morning_modal != null:
+		morning_modal.visible = false
+	AudioManager.stop_bgm()
 	game_layer.visible = false
 	login_layer.visible = true
 	login_status.text = message
@@ -5057,7 +5670,7 @@ func _render_state(data: Dictionary) -> void:
 	var role := str(me.get("role", "player"))
 	var student_name := str(me.get("name", "学子"))
 	title_label.text = student_name
-	var jade_cnt := int(wallet.get("jade", 0))
+	var jade_cnt := int(wallet.get("jade_balance", wallet.get("jade", 0)))
 	wallet_label.text = ("💎%d" % jade_cnt) if size.y < 650.0 else ("💎 文玉 %d" % jade_cnt)
 
 	var faction: Variant = me.get("faction", null)
@@ -5075,14 +5688,17 @@ func _render_state(data: Dictionary) -> void:
 	teacher_box.visible = (role == "teacher")
 	_update_order_ui()
 
-	# Phase 1: 同步军团编成 (composition)
+	# Phase 1: 同步军团编成 (composition · 动态 changes_allowed)
 	var comp_val: Variant = data.get("composition", {})
 	var comp_info: Dictionary = comp_val if typeof(comp_val) == TYPE_DICTIONARY else {}
 	var comp_types_val: Variant = comp_info.get("types", [])
 	var comp_types: Array = comp_types_val if typeof(comp_types_val) == TYPE_ARRAY else []
 	var comp_changed_once: bool = bool(comp_info.get("changed_once", false))
+	var comp_used: int = int(comp_info.get("changes_used", 1 if comp_changed_once else 0))
+	var comp_allowed: int = int(comp_info.get("changes_allowed", 1))
 	if composition_panel and not comp_types.is_empty():
-		composition_panel.set_composition_state(comp_types, comp_changed_once)
+		composition_panel.set_composition_state(comp_types, comp_changed_once, comp_used, comp_allowed)
+	_update_army_header_text(comp_used, comp_allowed)
 
 	# S02: 同步文房小院 (estate) 与个人军功摘要 (merit)
 	var es_val: Variant = data.get("estate", {})
@@ -5094,8 +5710,20 @@ func _render_state(data: Dictionary) -> void:
 	if estate_page != null:
 		estate_page.set_estate_state(estate_data, me, merit_summary_data)
 
+	# D6: 同步今日邸报 (bulletin)
+	var bul_val: Variant = data.get("bulletin", {})
+	if typeof(bul_val) == TYPE_DICTIONARY and not bul_val.is_empty():
+		bulletin_data = bul_val.duplicate(true)
+	_render_army_bulletin()
+
 	# Phase 1: 同步每日手牌 (hand) 与已出令 (card_orders)
 	_sync_hand_and_orders(data)
+
+	# 晨报红点与自动轻弹（首日无战报不弹，让位 3 步教学） + 终局赛季承接检查
+	_update_morning_red_dot()
+	_maybe_auto_open_morning_report()
+	if not _season_award_auto_checked and str(data.get("game", {}).get("status", "")) == "finished" and role == "player":
+		_fetch_season_and_history(true)
 
 func _rebuild_node_buttons(nodes: Array) -> void:
 	for b in node_buttons.values():
@@ -5157,14 +5785,14 @@ func _update_order_ui() -> void:
 	var order: Variant = state.get("my_order", null)
 	map.set_my_order(order)
 
-	if typeof(order) == TYPE_DICTIONARY:
-		my_order_label.text = "📜 军令已下：【%s】向【%s】%s" % [
-			str(order.get("origin_name", "")),
-			str(order.get("target_name", "")),
-			"进军" if str(order.get("action", "")) == "advance" else "驻守"
-		]
+	var c_ords: Variant = state.get("card_orders", [])
+	var c_cnt := (c_ords as Array).size() if typeof(c_ords) == TYPE_ARRAY else 0
+	if c_cnt > 0:
+		my_order_label.text = "📜 今日已出 %d / 3 令（每天最多出 3 令）" % c_cnt
+	elif typeof(order) == TYPE_DICTIONARY:
+		my_order_label.text = "📜 已出令：【%s】向【%s】" % [str(order.get("origin_name", "")), str(order.get("target_name", ""))]
 	else:
-		my_order_label.text = "⏳ 今日待命：点击地图城池下达军令"
+		my_order_label.text = "⏳ 今日待命：点击地图城池并用下方手牌出令（每天最多出 3 令）"
 
 func _on_countdown_tick() -> void:
 	if not game_layer.visible or countdown_last_msec == 0:
@@ -5183,91 +5811,189 @@ func _turn_id() -> int:
 	return int(state.get("turn", {}).get("id", 0))
 
 func _submit_advance() -> void:
-	var origin := ""
-	var target := ""
-	if origin_select.item_count > 0:
-		origin = str(origin_select.get_item_metadata(0))
-	if target_select.item_count > 0:
-		target = str(target_select.get_item_metadata(0))
-	if origin == "" or target == "":
-		_toast("请先选择进军城池。", true)
-		return
-	_submit_advance_direct(origin, target)
-
-func _submit_advance_direct(origin: String, target: String) -> void:
-	if order_submitting:
-		return
-	order_submitting = true
-	action_status.text = "传达军令中..."
-	api.request("POST", "/api/slice/orders", {
-		"request_key": _new_key("adv"),
-		"turn_id": _turn_id(),
-		"action": "advance",
-		"origin_node": origin,
-		"target_node": target,
-	}, func(ok: bool, data: Dictionary, err: Dictionary):
-		order_submitting = false
-		if not ok:
-			_show_error(err)
-			return
-		action_status.text = "军令已盖印！"
-		_toast("进军军令已加盖军印！")
-		state["my_order"] = data.get("order", {})
-		_update_order_ui()
-	)
+	var tgt := selected_code if selected_code != "" else "N2"
+	var hand_cards: Array = state.get("hand", {}).get("cards", [])
+	if not hand_cards.is_empty():
+		play_card(0, str(hand_cards[0]), tgt)
 
 func _submit_defend() -> void:
-	var origin := ""
+	var origin := "A_START"
 	for n in state.get("map", {}).get("nodes", []):
 		if bool(n.get("is_my_faction", false)):
-			origin = str(n.get("code", ""))
+			origin = str(n.get("code", "A_START"))
 			break
-	if origin == "":
-		origin = "A_START"
-	_submit_defend_direct(origin)
-
-func _submit_defend_direct(origin: String) -> void:
-	if order_submitting:
-		return
-	order_submitting = true
-	action_status.text = "传达军令中..."
-	print("SUBMIT DEFEND: origin=", origin, " turn_id=", _turn_id())
-	api.request("POST", "/api/slice/orders", {
-		"request_key": _new_key("def"),
-		"turn_id": _turn_id(),
-		"action": "defend",
-		"origin_node": origin,
-		"target_node": origin,
-	}, func(ok: bool, data: Dictionary, err: Dictionary):
-		order_submitting = false
-		if not ok:
-			_show_error(err)
-			return
-		action_status.text = "坚守军令已定！"
-		_toast("驻守军令已加盖军印！")
-		state["my_order"] = data.get("order", {})
-		_update_order_ui()
-	)
+	var hand_cards: Array = state.get("hand", {}).get("cards", [])
+	if not hand_cards.is_empty():
+		play_card(0, str(hand_cards[0]), origin)
 
 func _withdraw_order() -> void:
-	if order_submitting:
+	var card_ords: Array = state.get("card_orders", []) if typeof(state.get("card_orders", null)) == TYPE_ARRAY else []
+	if not card_ords.is_empty():
+		var last_ord: Dictionary = card_ords[card_ords.size() - 1]
+		_withdraw_card_order(int(last_ord.get("slot", 0)))
+
+# ---------------------------------------------------------------------------
+# P0 新增逻辑：晨报自动轻弹/红点 + 今日邸报 2 选 1 + 动态编成标题
+# ---------------------------------------------------------------------------
+
+func _open_army_page() -> void:
+	_navigate_to("S03_ARMY")
+	_fetch_bulletin()
+
+func _update_army_header_text(used: int, allowed: int) -> void:
+	if army_header_sub_lbl == null:
 		return
-	order_submitting = true
-	action_status.text = "撤销中..."
-	api.request("POST", "/api/slice/orders/withdraw", {
-		"turn_id": _turn_id(),
-	}, func(ok: bool, _data: Dictionary, err: Dictionary):
-		order_submitting = false
+	var remain := maxi(0, allowed - used)
+	army_header_sub_lbl.text = "4 兵种三队战阵 · 兵源城加成 · 本周可改 %d 次（余 %d 次）" % [allowed, remain]
+
+func _fetch_bulletin() -> void:
+	if api == null or api.token == "" or _turn_id() <= 0:
+		return
+	api.get_bulletin(_turn_id(), func(ok: bool, data: Dictionary, _err: Dictionary):
+		if ok and not data.is_empty():
+			bulletin_data = data.duplicate(true)
+			state["bulletin"] = bulletin_data
+			_render_army_bulletin()
+			if morning_modal != null and morning_modal.visible:
+				morning_modal.set_bulletin_data(bulletin_data, false)
+	)
+
+func _choose_bulletin_choice(choice_code: String) -> void:
+	if _bulletin_submitting or choice_code == "" or _turn_id() <= 0:
+		return
+	_bulletin_submitting = true
+	if morning_modal != null and morning_modal.visible:
+		morning_modal.set_bulletin_data(bulletin_data, true)
+	_render_army_bulletin()
+	api.choose_bulletin(_turn_id(), choice_code, func(ok: bool, data: Dictionary, err: Dictionary):
+		_bulletin_submitting = false
 		if not ok:
 			_show_error(err)
+			if morning_modal != null and morning_modal.visible:
+				morning_modal.set_bulletin_data(bulletin_data, false)
+			_render_army_bulletin()
 			return
-		action_status.text = "军令已撤回。"
-		_toast("军令已成功撤回。")
-		state.erase("my_order")
-		_update_order_ui()
-		if city_drawer != null and city_drawer.visible:
-			_open_city_drawer(selected_code)
+		bulletin_data = data.duplicate(true)
+		state["bulletin"] = bulletin_data
+		_render_army_bulletin()
+		if morning_modal != null and morning_modal.visible:
+			morning_modal.set_bulletin_data(bulletin_data, false)
+		_schedule_forecast_recalc()
+		_toast("📜 今日邸报已选定，本回合结算生效！")
 	)
+
+func _render_army_bulletin() -> void:
+	if army_bulletin_row == null:
+		return
+	for ch in army_bulletin_row.get_children():
+		army_bulletin_row.remove_child(ch)
+		ch.queue_free()
+	var opts: Variant = bulletin_data.get("options", [])
+	var choice := str(bulletin_data.get("choice", "")) if bulletin_data.get("choice", null) != null else ""
+	if typeof(opts) != TYPE_ARRAY or (opts as Array).is_empty():
+		if army_bulletin_hint_lbl != null:
+			army_bulletin_hint_lbl.text = "打开整军页或晨报自动读取今日邸报"
+		army_bulletin_row.add_child(_label("今日邸报读取中…（或点击顶部【晨报】查看）", 12, Color("#685848")))
+		return
+	if army_bulletin_hint_lbl != null:
+		army_bulletin_hint_lbl.text = "已选定（21:00 结算前可随时修改）" if choice != "" else "点击下方任意一项生效"
+	for ov in opts:
+		if typeof(ov) != TYPE_DICTIONARY:
+			continue
+		var code := str(ov.get("code", ""))
+		var title := str(ov.get("title", code))
+		var desc := str(ov.get("desc", ""))
+		var icon := str(ov.get("icon", "📜"))
+		var is_sel := (code != "" and code == choice)
+		var card := PanelContainer.new()
+		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		card.add_theme_stylebox_override("panel", _panel_style(Color("#ffffff") if is_sel else Color("#efe4d0"), C_ZHUQING if is_sel else Color("#bfa887"), 2 if is_sel else 1, 8, 8))
+		army_bulletin_row.add_child(card)
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		card.add_child(row)
+		var tv := VBoxContainer.new()
+		tv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		tv.add_theme_constant_override("separation", 2)
+		row.add_child(tv)
+		tv.add_child(_label("%s %s" % [icon, title], 13, C_ZHUQING if is_sel else C_WOOD_DESK))
+		tv.add_child(_label(desc, 11, Color("#554433")))
+		var b := _button("✓ 已选" if is_sel else "选用", C_ZHUQING if is_sel else C_MOLAN, 32)
+		b.custom_minimum_size = Vector2(72, 32)
+		b.disabled = _bulletin_submitting
+		b.pressed.connect(_choose_bulletin_choice.bind(code))
+		row.add_child(b)
+
+func _morning_seen_key() -> String:
+	var gid := int(state.get("game", {}).get("id", 1))
+	var pname := str(me.get("name", "player")).strip_edges()
+	return "%s_%d" % [pname if pname != "" else "player", gid]
+
+func _get_seen_morning_turn_id() -> int:
+	var cfg := ConfigFile.new()
+	if cfg.load("user://morning_report_seen.cfg") == OK:
+		return int(cfg.get_value("seen", _morning_seen_key(), 0))
+	return 0
+
+func _mark_morning_turn_seen(turn_id: int) -> void:
+	if turn_id <= 0:
+		return
+	var cfg := ConfigFile.new()
+	cfg.load("user://morning_report_seen.cfg")
+	var prev := int(cfg.get_value("seen", _morning_seen_key(), 0))
+	if turn_id > prev:
+		cfg.set_value("seen", _morning_seen_key(), turn_id)
+		cfg.save("user://morning_report_seen.cfg")
+	_update_morning_red_dot()
+
+func _on_morning_modal_dismissed(turn_id: int) -> void:
+	_mark_morning_turn_seen(turn_id)
+
+func _update_morning_red_dot() -> void:
+	if hud_morning_btn == null:
+		return
+	var is_player := (str(me.get("role", "player")) == "player")
+	hud_morning_btn.visible = is_player
+	if morning_red_dot == null:
+		return
+	var lr: Variant = state.get("last_report", null)
+	var lr_tid := int(lr.get("turn_id", 0)) if typeof(lr) == TYPE_DICTIONARY else 0
+	morning_red_dot.visible = is_player and (lr_tid > 0 and lr_tid > _get_seen_morning_turn_id())
+
+func _maybe_auto_open_morning_report() -> void:
+	if _morning_auto_checked:
+		return
+	if str(me.get("role", "player")) != "player":
+		return
+	# 第一天无战报不弹，让位 3 步教学
+	var lr: Variant = state.get("last_report", null)
+	if typeof(lr) != TYPE_DICTIONARY:
+		return
+	var lr_tid := int(lr.get("turn_id", 0))
+	if lr_tid <= 0 or lr_tid <= _get_seen_morning_turn_id():
+		return
+	# 若首次教学浮层正在展示中，也礼让教学
+	if tutorial_step > 0 or (tutorial_overlay != null and tutorial_overlay.visible):
+		return
+	_morning_auto_checked = true
+	_open_morning_report(false)
+
+func _open_morning_report(force_show: bool = true) -> void:
+	if morning_modal == null:
+		return
+	var lr_v: Variant = state.get("last_report", null)
+	var lr: Dictionary = lr_v if typeof(lr_v) == TYPE_DICTIONARY else {}
+	var lr_tid := int(lr.get("turn_id", 0))
+	if not force_show and lr_tid <= _get_seen_morning_turn_id():
+		return
+	morning_modal.open_modal(lr, {}, merit_summary_data, estate_data, _turn_id(), bulletin_data)
+	morning_modal.layout_responsive(size)
+	_fetch_bulletin()
+	if lr_tid > 0 and api != null and api.token != "":
+		api.get_me_report(lr_tid, func(ok: bool, mr: Dictionary, _err: Dictionary):
+			if ok and not mr.is_empty() and morning_modal != null and morning_modal.visible:
+				morning_modal.set_me_report(mr, merit_summary_data, estate_data)
+		)
 
 func _show_error(error: Dictionary) -> void:
 	print("API ERROR: ", error)

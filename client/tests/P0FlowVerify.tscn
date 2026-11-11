@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://p0_flow_verify_001"]
+
+[ext_resource type="Script" path="res://tests/P0FlowVerify.gd" id="1_p0v"]
+
+[node name="P0FlowVerify" type="Node"]
+script = ExtResource("1_p0v")

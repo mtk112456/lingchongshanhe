@@ -22,6 +22,8 @@ var is_reduced_motion := false
 const SFX_ALIASES := {
 	"wall_break": "wall",
 	"stamp": "victory",
+	"confirm": "play",
+	"card_withdraw": "draw",
 }
 
 func _ready() -> void:
@@ -117,8 +119,19 @@ func _load_bgm(name: String) -> AudioStream:
 		return _bgm_cache[name]
 	var path := BGM_DIR + name + ".wav"
 	var stream: AudioStream = load(path) if ResourceLoader.exists(path) else null
+	# 导入参数里 edit/loop_mode 仍是 0，这里兜底开循环，否则播完一遍就静音停住。
+	var wav := stream as AudioStreamWAV
+	if wav != null:
+		var frames := int(wav.get_length() * wav.mix_rate)
+		if frames > 0:
+			wav.loop_mode = AudioStreamWAV.LOOP_FORWARD
+			wav.loop_begin = 0
+			wav.loop_end = frames
 	_bgm_cache[name] = stream
 	return stream
+
+func has_bgm(name: String) -> bool:
+	return ResourceLoader.exists(BGM_DIR + name + ".wav")
 
 func _ensure_bus(bus_name: String) -> void:
 	if AudioServer.get_bus_index(bus_name) >= 0:

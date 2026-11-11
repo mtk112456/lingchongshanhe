@@ -129,21 +129,6 @@ func state(callback: Callable, turn_id: int = 0) -> void:
 		path += "?turn_id=" + str(turn_id)
 	request("GET", path, null, callback)
 
-func submit_order(turn_id: int, action: String, origin: String, target: String, request_key: String, callback: Callable) -> void:
-	request("POST", "/api/slice/orders", {
-		"turn_id": turn_id,
-		"action": action,
-		"origin_node": origin,
-		"target_node": target,
-		"request_key": request_key,
-	}, callback)
-
-func withdraw_order(turn_id: int, request_key: String, callback: Callable) -> void:
-	request("POST", "/api/slice/orders/withdraw", {
-		"turn_id": turn_id,
-		"request_key": request_key,
-	}, callback)
-
 func report(turn_id: int, callback: Callable) -> void:
 	request("GET", "/api/slice/report?turn_id=" + str(turn_id), null, callback)
 
@@ -233,6 +218,12 @@ func get_battle(battle_id: int, callback: Callable) -> void:
 func getBattle(battle_id: int, callback: Callable) -> void:
 	get_battle(battle_id, callback)
 
+func battle_forecast(turn_id: int, node_code: String, callback: Callable) -> void:
+	request("POST", "/api/slice/battle/forecast", {
+		"turn_id": turn_id,
+		"node": node_code,
+	}, callback)
+
 func get_intel(node_code: String, turn_id: int, callback: Callable) -> void:
 	request("GET", "/api/slice/intel?node=" + node_code + "&turn_id=" + str(turn_id), null, callback)
 
@@ -255,6 +246,24 @@ func get_merit(callback: Callable, week: int = 0) -> void:
 	if week > 0:
 		path += "?week=" + str(week)
 	request("GET", path, null, callback)
+
+func get_bulletin(turn_id: int, callback: Callable) -> void:
+	var path := "/api/slice/bulletin"
+	if turn_id > 0:
+		path += "?turn_id=" + str(turn_id)
+	request("GET", path, null, callback)
+
+func choose_bulletin(turn_id: int, choice: String, callback: Callable) -> void:
+	request("POST", "/api/slice/bulletin", {
+		"turn_id": turn_id,
+		"choice": choice,
+	}, callback)
+
+func get_season(callback: Callable) -> void:
+	request("GET", "/api/slice/season", null, callback)
+
+func get_season_history(callback: Callable) -> void:
+	request("GET", "/api/slice/season/history", null, callback)
 
 # ---------------------------------------------------------------------------
 # 教师

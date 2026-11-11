@@ -42,7 +42,7 @@ const NODES_DATA := {
 	"yecheng": {
 		"name": "邺城", "region": "东北·墨", "faction": "mo", "color": C_MOLAN,
 		"pos": Vector2(0.654, 0.159), "is_capital": false, "is_changan": false,
-		"tex": "res://assets/art/city_yanhui_trim.png", "tag": "【台】铜雀赋韵",
+		"tex": "res://assets/art/city_yecheng_trim.png", "tag": "【台】铜雀赋韵",
 		"verse": "东临碣石，以观沧海"
 	},
 	"taiyuan": {
@@ -60,7 +60,7 @@ const NODES_DATA := {
 	"chengdu": {
 		"name": "成都", "region": "西南·砚", "faction": "yan", "color": C_ZHUQING,
 		"pos": Vector2(0.179, 0.621), "is_capital": false, "is_changan": false,
-		"tex": "res://assets/art/city_tingyu_trim.png", "tag": "【庐】草堂春晓",
+		"tex": "res://assets/art/city_chengdu_trim.png", "tag": "【庐】草堂春晓",
 		"verse": "窗含西岭千秋雪，门泊东吴万里船"
 	},
 	"jiangling": {
@@ -78,7 +78,7 @@ const NODES_DATA := {
 	"jianye": {
 		"name": "建业", "region": "东南·纸", "faction": "zhi", "color": C_TENGHUANG,
 		"pos": Vector2(0.802, 0.621), "is_capital": true, "is_changan": false,
-		"tex": "res://assets/art/city_yanhui_trim.png", "tag": "【台】六朝繁华",
+		"tex": "res://assets/art/city_jianye_trim.png", "tag": "【台】六朝繁华",
 		"verse": "旧时王谢堂前燕，飞入寻常百姓家"
 	},
 	"kuaiji": {

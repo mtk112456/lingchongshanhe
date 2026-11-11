@@ -1,7 +1,7 @@
 extends PanelContainer
 
 ## 每周军团编成面板 (Weekly Composition Panel)
-## 一行 4 兵种按钮 + 一行 3 队伍槽位 + 兵源城加成 + 周中改 1 次
+## 一行 4 兵种按钮 + 一行 3 队伍槽位 + 兵源城加成 + 按练兵场等级动态可改次数
 ## 完美适配 720x514 手机横屏与 1400x1000 平板
 
 signal composition_changed(slots: Array)
@@ -71,6 +71,8 @@ var source_city_name: String = "凉州"
 var source_unit_type: String = "cav"
 var source_bonus_pct: int = 15
 
+var changes_used: int = 0
+var changes_allowed: int = 1
 var changes_remaining: int = 1
 var is_locked: bool = false
 
@@ -156,7 +158,7 @@ func _build_ui() -> void:
 	header_hbox.add_child(info_label)
 	
 	change_status_label = Label.new()
-	change_status_label.text = " [周中可改 1 次]"
+	change_status_label.text = " [本周可改 %d 次]" % changes_allowed
 	change_status_label.add_theme_color_override("font_color", Color("#cf8325"))
 	change_status_label.add_theme_font_size_override("font_size", 11)
 	header_hbox.add_child(change_status_label)
@@ -301,11 +303,16 @@ func _create_slot_card(idx: int) -> PanelContainer:
 	
 	return card
 
-func set_composition_state(types: Array, changed_once: bool) -> void:
+func set_composition_state(types: Array, changed_once: bool, p_used: int = -1, p_allowed: int = 1) -> void:
 	if types.size() == 3:
 		current_slots = types.duplicate()
-	is_locked = changed_once
-	changes_remaining = 0 if changed_once else 1
+	changes_allowed = maxi(1, p_allowed)
+	if p_used >= 0:
+		changes_used = maxi(0, p_used)
+	else:
+		changes_used = 1 if changed_once else 0
+	changes_remaining = maxi(0, changes_allowed - changes_used)
+	is_locked = (changes_remaining <= 0)
 	_update_display()
 
 func _select_slot(idx: int) -> void:
@@ -322,8 +329,9 @@ func _on_unit_picked(unit_code: String) -> void:
 
 func _on_confirm_pressed() -> void:
 	if changes_remaining > 0:
-		changes_remaining -= 1
-		is_locked = true
+		changes_used += 1
+		changes_remaining = maxi(0, changes_allowed - changes_used)
+		is_locked = (changes_remaining <= 0)
 		_update_display()
 		composition_confirmed.emit(current_slots)
 
@@ -342,12 +350,12 @@ func _update_display() -> void:
 			UNIT_DEFS.get(source_unit_type, {}).get("name", "兵")
 		]
 		if changes_remaining > 0:
-			change_status_label.text = " [余%d次]" % changes_remaining
+			change_status_label.text = " [余%d/%d次]" % [changes_remaining, changes_allowed]
 			change_status_label.add_theme_color_override("font_color", Color("#cf8325"))
 			confirm_btn.disabled = false
-			confirm_btn.text = "确认" if not is_locked else "改编(1次)"
+			confirm_btn.text = "确认" if changes_used <= 0 else "改编(余%d次)" % changes_remaining
 		else:
-			change_status_label.text = " [已锁定]"
+			change_status_label.text = " [已锁定 %d/%d]" % [changes_used, changes_allowed]
 			change_status_label.add_theme_color_override("font_color", Color("#7e7263"))
 			confirm_btn.disabled = true
 			confirm_btn.text = "已锁定"
@@ -360,12 +368,12 @@ func _update_display() -> void:
 			UNIT_DEFS.get(source_unit_type, {}).get("name", "兵种")
 		]
 		if changes_remaining > 0:
-			change_status_label.text = " [周中剩余可改 %d 次]" % changes_remaining
+			change_status_label.text = " [本周可改 %d 次 · 余 %d 次]" % [changes_allowed, changes_remaining]
 			change_status_label.add_theme_color_override("font_color", Color("#cf8325"))
 			confirm_btn.disabled = false
-			confirm_btn.text = "确认编成" if not is_locked else "提交修改(仅1次)"
+			confirm_btn.text = "确认编成" if changes_used <= 0 else "提交修改(余 %d 次)" % changes_remaining
 		else:
-			change_status_label.text = " [本周已锁定]"
+			change_status_label.text = " [本周已锁定 %d/%d]" % [changes_used, changes_allowed]
 			change_status_label.add_theme_color_override("font_color", Color("#7e7263"))
 			confirm_btn.disabled = true
 			confirm_btn.text = "编成已锁定"

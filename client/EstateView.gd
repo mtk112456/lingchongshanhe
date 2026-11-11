@@ -1242,7 +1242,7 @@ func _refresh_views() -> void:
 	# 刷新双端庭院主图与信息
 	for canvas in [ph_hero_canvas, tb_hero_canvas]:
 		if canvas != null:
-			canvas.set_estate_visual(level, f_code, f_col, estate_data.get("rooms", []))
+			canvas.set_estate_visual(level, f_code, f_col, estate_data.get("rooms", []), govs)
 
 	if ph_lvl_lbl != null:
 		ph_lvl_lbl.text = "★ Lv.%d" % level
@@ -1893,44 +1893,184 @@ func _pill_button(text: String, bg: Color, border: Color, h: int) -> Button:
 
 
 # ---------------------------------------------------------------------------
-# Style C 水彩纸雕文房庭院画布与厢房徽章（优先读取资产，无资产则程序精绘，绝不在画面烘文字）
+# Style C 水彩纸雕文房庭院画布与厢房徽章（优先接入 GPT 庭院原画 + 无拉伸裁切 + 代码叠等级/太守旗）
 # ---------------------------------------------------------------------------
 
 class _CourtyardArtCanvas extends Control:
+	const HOME_ART_PATH := "res://assets/art/ui/estate_home_base.png"
+
 	var _font: Font
 	var _level: int = 1
 	var _faction_code: String = "bi"
 	var _faction_color: Color = Color("#b83b32")
 	var _room_levels: Dictionary = {}
+	var _governorships: Array = []
 	var _tex: Texture2D = null
+
+	var _art_clip: Control
+	var _art_rect: TextureRect
+	var _sky_feather: TextureRect
+	var _atlas: AtlasTexture
+	var _overlay_fx: _CourtyardCodeOverlay
+	var _parallax_t: float = 0.0
+	var _parallax_px: float = 0.0
+	var _art_draw_pos: Vector2 = Vector2.ZERO
+	var _art_draw_size: Vector2 = Vector2.ZERO
+	var _current_region: Rect2 = Rect2(0, 0, 1600, 640)
 
 	func _init(f: Font = null) -> void:
 		_font = f
 		mouse_filter = Control.MOUSE_FILTER_STOP
+		_build_art_nodes()
 
-	func set_estate_visual(lvl: int, f_code: String, f_col: Color, rooms: Array) -> void:
+	func _build_art_nodes() -> void:
+		_art_clip = Control.new()
+		_art_clip.clip_contents = true
+		_art_clip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_art_clip.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		add_child(_art_clip)
+
+		_art_rect = TextureRect.new()
+		_art_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		_art_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		_art_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_art_rect.visible = false
+		_art_clip.add_child(_art_rect)
+
+		_sky_feather = TextureRect.new()
+		var sgrad := Gradient.new()
+		sgrad.colors = PackedColorArray([Color("#f7c9a8", 1.0), Color("#f7c9a8", 0.0)])
+		var sgtex := GradientTexture2D.new()
+		sgtex.gradient = sgrad
+		sgtex.width = 4
+		sgtex.height = 48
+		sgtex.fill = GradientTexture2D.FILL_LINEAR
+		sgtex.fill_from = Vector2(0.5, 0.0)
+		sgtex.fill_to = Vector2(0.5, 1.0)
+		_sky_feather.texture = sgtex
+		_sky_feather.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		_sky_feather.stretch_mode = TextureRect.STRETCH_SCALE
+		_sky_feather.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_sky_feather.visible = false
+		_art_clip.add_child(_sky_feather)
+
+		_overlay_fx = _CourtyardCodeOverlay.new(_font)
+		_overlay_fx.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		_overlay_fx.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(_overlay_fx)
+
+	func _notification(what: int) -> void:
+		if what == NOTIFICATION_RESIZED:
+			_layout_art_rect()
+
+	func _process(delta: float) -> void:
+		if _tex == null or _art_rect == null or not _art_rect.visible or not is_visible_in_tree():
+			return
+		if AudioManager.is_reduced_motion or DisplayServer.get_name() == "headless":
+			if absf(_parallax_px) > 0.01:
+				_parallax_px = 0.0
+				_layout_art_rect()
+			return
+		_parallax_t += delta
+		_parallax_px = sin(_parallax_t * 0.6) * 4.0
+		_art_rect.position.x = _art_draw_pos.x + _parallax_px
+		if _overlay_fx != null:
+			_overlay_fx.update_overlay(_level, _faction_color, _governorships, Vector2(_art_draw_pos.x + _parallax_px, _art_draw_pos.y), _art_draw_size, _current_region)
+
+	func set_estate_visual(lvl: int, f_code: String, f_col: Color, rooms: Array, govs: Array = []) -> void:
 		_level = clampi(lvl, 1, 3)
 		_faction_code = f_code
 		_faction_color = f_col
+		_governorships = govs.duplicate(true)
 		_room_levels.clear()
 		for r in rooms:
 			if typeof(r) == TYPE_DICTIONARY:
 				_room_levels[str(r.get("code", ""))] = int(r.get("level", 0))
+
 		var custom_path := "res://assets/art/estate/estate_courtyard_lv%d.png" % _level
-		if ResourceLoader.exists(custom_path):
+		if ResourceLoader.exists(HOME_ART_PATH):
+			_tex = load(HOME_ART_PATH)
+		elif ResourceLoader.exists(custom_path):
 			_tex = load(custom_path)
 		elif ResourceLoader.exists("res://assets/art/estate/estate_courtyard.png"):
 			_tex = load("res://assets/art/estate/estate_courtyard.png")
 		else:
 			_tex = null
+
+		_layout_art_rect()
 		queue_redraw()
+
+	func _layout_art_rect() -> void:
+		if _art_rect == null:
+			return
+		if _tex == null or size.x <= 4.0 or size.y <= 4.0:
+			_art_rect.visible = false
+			if _overlay_fx != null:
+				_overlay_fx.visible = false
+			return
+
+		var tex_w := float(_tex.get_width())
+		var tex_h := float(_tex.get_height())
+		if tex_w <= 0.0 or tex_h <= 0.0:
+			_art_rect.visible = false
+			return
+
+		var is_compact := size.x < 560.0
+		var extra_w := 0.0 if AudioManager.is_reduced_motion else 10.0
+		if _atlas == null:
+			_atlas = AtlasTexture.new()
+		_atlas.atlas = _tex
+
+		if is_compact:
+			# 手机 410x182：AtlasTexture 精确保留左侧门牌(x=20) + 院门/书案 + 右侧望楼(x=1385)，1:1 维持原图比例不拉伸
+			_current_region = Rect2(20.0, 48.0, minf(1365.0, tex_w - 20.0), minf(592.0, tex_h - 48.0))
+			_atlas.region = _current_region
+			var sc := maxf((size.x + extra_w) / _current_region.size.x, size.y / _current_region.size.y)
+			_art_draw_size = _current_region.size * sc
+			_art_draw_pos = Vector2((size.x - _art_draw_size.x) * 0.5, size.y - _art_draw_size.y)
+		else:
+			# 平板 834x544：保留完整左门牌、中书案、右望楼及右竹竿旗杆，保持原始比例居下，上方云霞由底图渐变无缝延续
+			_current_region = Rect2(16.0, 0.0, minf(1548.0, tex_w - 16.0), tex_h)
+			_atlas.region = _current_region
+			var sc := (size.x + extra_w) / _current_region.size.x
+			_art_draw_size = _current_region.size * sc
+			_art_draw_pos = Vector2((size.x - _art_draw_size.x) * 0.5, size.y - _art_draw_size.y)
+
+		_art_rect.texture = _atlas
+		_art_rect.position = Vector2(_art_draw_pos.x + _parallax_px, _art_draw_pos.y)
+		_art_rect.size = _art_draw_size
+		_art_rect.visible = true
+
+		if _sky_feather != null:
+			if not is_compact and _art_draw_pos.y > 4.0:
+				_sky_feather.position = Vector2(0.0, _art_draw_pos.y - 2.0)
+				_sky_feather.size = Vector2(size.x, 44.0)
+				_sky_feather.visible = true
+			else:
+				_sky_feather.visible = false
+
+		if _overlay_fx != null:
+			_overlay_fx.visible = true
+			_overlay_fx.update_overlay(_level, _faction_color, _governorships, _art_rect.position, _art_draw_size, _current_region)
 
 	func _draw() -> void:
 		var rect := Rect2(Vector2.ZERO, size)
 		if rect.size.x <= 4.0 or rect.size.y <= 4.0:
 			return
 		if _tex != null:
-			draw_texture_rect(_tex, rect, false)
+			# 暖霞水彩天穹渐变无缝衔接原图顶边(#f7c9a8)与石阶地砖底色
+			var sky_h := maxf(_art_draw_pos.y + 8.0, rect.size.y * 0.5)
+			var steps := 16
+			var c_top := Color("#ebb28d")
+			var c_join := Color("#f7c9a8")
+			for i in range(steps):
+				var t0 := float(i) / float(steps)
+				var t1 := float(i + 1) / float(steps)
+				var y0 := t0 * sky_h
+				var y1 := t1 * sky_h
+				draw_rect(Rect2(0.0, y0, rect.size.x, y1 - y0 + 1.0), c_top.lerp(c_join, t0))
+			if _art_draw_pos.y + _art_draw_size.y < rect.size.y:
+				draw_rect(Rect2(0.0, _art_draw_pos.y + _art_draw_size.y - 2.0, rect.size.x, rect.size.y), Color("#cfc0a6"))
 			return
 
 		var w := rect.size.x
@@ -2098,3 +2238,53 @@ class _RoomArtCanvas extends Control:
 				Vector2(cx + r * 0.85, cy - r * 0.15),
 			]), Color("#276f57"))
 			draw_circle(Vector2(cx, cy - r * 0.4), r * 0.16, Color("#fae19c"))
+
+
+class _CourtyardCodeOverlay extends Control:
+	var _font: Font
+	var _level: int = 1
+	var _faction_color: Color = Color("#b83b32")
+	var _governorships: Array = []
+	var _art_pos: Vector2 = Vector2.ZERO
+	var _art_size: Vector2 = Vector2.ZERO
+	var _region: Rect2 = Rect2(0, 0, 1600, 640)
+
+	func _init(f: Font = null) -> void:
+		_font = f
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func update_overlay(lvl: int, f_col: Color, govs: Array, art_pos: Vector2, art_size: Vector2, region: Rect2) -> void:
+		_level = lvl
+		_faction_color = f_col
+		_governorships = govs.duplicate(true)
+		_art_pos = art_pos
+		_art_size = art_size
+		_region = region
+		queue_redraw()
+
+	func _src_to_view(src_pt: Vector2) -> Vector2:
+		if _region.size.x <= 0.0 or _region.size.y <= 0.0:
+			return Vector2.ZERO
+		var uv := Vector2((src_pt.x - _region.position.x) / _region.size.x, (src_pt.y - _region.position.y) / _region.size.y)
+		return _art_pos + uv * _art_size
+
+	func _draw() -> void:
+		if _art_size.x <= 4.0 or _art_size.y <= 4.0:
+			return
+		# 右侧竹竿旗杆（原图约 1498, 268）在平板完整视口内可见：当玩家担任太守时用代码绘制阵营三角太守令旗
+		if not _governorships.is_empty():
+			var pole_src := Vector2(1498.0, 272.0)
+			if _region.has_point(pole_src):
+				var top_pt := _src_to_view(pole_src)
+				var fw := clampf(_art_size.x * 0.072, 34.0, 64.0)
+				var fh := clampf(_art_size.y * 0.125, 22.0, 44.0)
+				var flag_pts := PackedVector2Array([
+					top_pt,
+					top_pt - Vector2(fw, fh * 0.18),
+					top_pt - Vector2(fw * 0.78, -fh * 0.35),
+					top_pt + Vector2(0.0, fh * 0.85),
+				])
+				draw_colored_polygon(flag_pts, _faction_color)
+				draw_polyline(PackedVector2Array([flag_pts[0], flag_pts[1], flag_pts[2], flag_pts[3]]), Color("#fae19c"), 1.6)
+				if _font != null:
+					draw_string(_font, top_pt + Vector2(-fw * 0.72, fh * 0.42), "太守", HORIZONTAL_ALIGNMENT_LEFT, fw * 0.7, 11, Color("#fae19c"))

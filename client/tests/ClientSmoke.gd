@@ -36,8 +36,9 @@ func _process(_delta: float) -> void:
 		elif frames > 1200:
 			_fail("login timeout")
 	elif phase == 1:
-		if scene.state.get("my_order", null) != null:
-			print("CLIENT_SMOKE order ok=true status=%s" % str(scene.action_status.text))
+		var card_orders: Array = scene.state.get("card_orders", [])
+		if card_orders.size() >= 1:
+			print("CLIENT_SMOKE order ok=true card_orders=%d status=%s" % [card_orders.size(), str(scene.action_status.text)])
 			scene._logout_local("切换教师")
 			scene.name_edit.text = "teacher"
 			scene.pass_edit.text = "teacher2026"

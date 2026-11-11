@@ -571,7 +571,7 @@ const CARD_NAMES: Dictionary = {
 const CARD_EFFECTS: Dictionary = {
 	"night_raid": "攻击 +20%（本城未侦察）",
 	"forced_march": "先手行动，免疫断粮",
-	"fire_attack": "器械攻墙 +50%",
+	"fire_attack": "器械攻墙 +60%",
 	"fortify": "防御 +20%",
 	"mutual_support": "相邻路友军防御 +10%",
 	"empty_fort": "敌全军攻击 -10%",
@@ -635,6 +635,15 @@ func _show_result_overlay() -> void:
 		else:
 			result_seal_img.visible = false
 
+	# 印章音效独立于减少动效：视觉可减，声音不减；0.22s 对齐落章瞬间
+	var stamp_sfx_tw := create_tween()
+	if not AudioManager.is_reduced_motion:
+		stamp_sfx_tw.tween_interval(0.22)
+	stamp_sfx_tw.tween_callback(func():
+		if has_node("/root/AudioManager"):
+			AudioManager.play_sfx("stamp")
+	)
+
 	# 胜负：破城/守住印章重击砸落动效
 	if not AudioManager.is_reduced_motion:
 		seal_label.pivot_offset = Vector2(seal_label.size.x * 0.5, seal_label.size.y * 0.5)
@@ -651,8 +660,6 @@ func _show_result_overlay() -> void:
 			stamp_tw.tween_property(result_seal_img, "scale", Vector2(1.0, 1.0), 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
 			stamp_tw.tween_property(result_seal_img, "modulate:a", 1.0, 0.18)
 		stamp_tw.chain().tween_callback(func():
-			if has_node("/root/AudioManager"):
-				AudioManager.play_sfx("stamp")
 			if result_card_center:
 				_heavy_shake_node(result_card_center, 6.0, 0.18)
 		)
@@ -1388,7 +1395,7 @@ func _build_result_overlay() -> void:
 	page_frame_2.add_child(h2)
 	
 	var desc2 := Label.new()
-	desc2.text = "• 骑 · 1 路前 · 夜袭 · 攻击 +20%（本城未侦察）\n• 盾 · 2 路前 · 坚壁 · 防御 +20%\n• 弓 · 3 路后 · 火攻 · 器械攻墙 +50%"
+	desc2.text = "• 骑 · 1 路前 · 夜袭 · 攻击 +20%（本城未侦察）\n• 盾 · 2 路前 · 坚壁 · 防御 +20%\n• 弓 · 3 路后 · 火攻 · 器械攻墙 +60%"
 	desc2.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	desc2.add_theme_color_override("font_color", Color("#4a3e35"))
 	desc2.add_theme_font_size_override("font_size", 12)
