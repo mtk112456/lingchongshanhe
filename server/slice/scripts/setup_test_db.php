@@ -12,6 +12,14 @@ try {
 }
 
 $root = dirname(__DIR__);
+$dbName = (string)($config['db']['name'] ?? '');
+$force = in_array('--force', $argv, true);
+if (!$force && !preg_match('/(test|trial)/i', $dbName)) {
+    fwrite(STDERR, "拒绝执行：setup_test_db.php 会 DROP 表，只允许库名含 test/trial 的库；当前库 {$dbName}\n");
+    fwrite(STDERR, "如确认是演练库，请加 --force。\n");
+    exit(1);
+}
+
 $files = [
     'legacy_schema.sql',
     'schema.sql',

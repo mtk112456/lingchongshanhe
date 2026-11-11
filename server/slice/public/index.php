@@ -558,6 +558,9 @@ try {
 
     if ($method === 'POST' && $path === '/api/slice/battle/settle') {
         $player = requireAuth($service);
+        if ((string)$player['role'] !== 'teacher') {
+            throw new ApiException('FORBIDDEN', '只有教师可以结算战斗', 403);
+        }
         $body = jsonBody();
         $battleId = (int)($body['battle_id'] ?? 0);
         $battle = (new BattleService(null, $pdo))->getBattle($battleId);

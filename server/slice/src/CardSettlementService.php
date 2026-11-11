@@ -70,6 +70,14 @@ final class CardSettlementService
             return ['turn_id' => $turnId, 'already_settled' => true, 'battles' => []];
         }
 
+        $lockName = 'slice_settle_' . $turnId;
+        $stmt = $this->pdo->prepare('SELECT GET_LOCK(?, 0)');
+        $stmt->execute([$lockName]);
+        if ((int)$stmt->fetchColumn() !== 1) {
+            throw new ApiException('SETTLE_BUSY', '??????????????', 409);
+        }
+
+        try {
         $stmt = $this->pdo->prepare(
             'SELECT o.id, o.player_id, o.slot, o.card_code, o.target_node_code, o.lane, o.row_pos,
                     p.faction_id, p.student_id,
@@ -126,6 +134,10 @@ final class CardSettlementService
         $this->finishSeasonIfNeeded($gameId, (int)$turn['turn_no']);
 
         return ['turn_id' => $turnId, 'already_settled' => false, 'battles' => $battles];
+        } finally {
+            $stmt = $this->pdo->prepare('SELECT RELEASE_LOCK(?)');
+            $stmt->execute([$lockName]);
+        }
     }
 
     /**

@@ -364,6 +364,19 @@ final class HandService
         $factionId = (int)$factionId;
 
         $stmt = $this->pdo->prepare(
+            'SELECT node_type, owner_faction_id FROM slice_nodes WHERE game_id = ? AND node_code = ?'
+        );
+        $stmt->execute([$gameId, $target]);
+        $targetNode = $stmt->fetch();
+        if ($targetNode !== false
+            && (string)$targetNode['node_type'] === 'start'
+            && $targetNode['owner_faction_id'] !== null
+            && (int)$targetNode['owner_faction_id'] !== $factionId
+        ) {
+            throw new InvalidArgumentException('ENEMY_START');
+        }
+
+        $stmt = $this->pdo->prepare(
             'SELECT 1 FROM slice_nodes WHERE game_id = ? AND node_code = ? AND owner_faction_id = ? LIMIT 1'
         );
         $stmt->execute([$gameId, $target, $factionId]);
@@ -377,7 +390,7 @@ final class HandService
         $stmt->execute([$gameId, $factionId]);
         $owned = array_map('strval', $stmt->fetchAll(PDO::FETCH_COLUMN));
         if ($owned === []) {
-            return;
+            throw new InvalidArgumentException('NO_TERRITORY');
         }
 
         $in = implode(',', array_fill(0, count($owned), '?'));
