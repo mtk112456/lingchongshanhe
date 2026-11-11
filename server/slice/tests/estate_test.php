@@ -72,6 +72,12 @@ try {
     check('军功总额 > 0', $summary['merit_total'] > 0, 'total=' . $summary['merit_total']);
     check('可用军功 = 总额 - 已花', $summary['merit_balance'] === $summary['merit_total'] - $summary['merit_spent']);
 
+    $hand = (new HandService($pdo))->getOrCreateHand($gameId, $turnIds[2], $me);
+    check('书房预读 1 张', count($hand['preview'] ?? []) === 1, json_encode($hand['preview'] ?? []));
+    if (($hand['preview'] ?? []) !== []) {
+        check('预读牌不在手牌里', !in_array($hand['preview'][0], $hand['cards'], true));
+    }
+
     $study = $summary['rooms'][0];
     $upgraded = $service->upgrade($gameId, $me, 'study');
     check('书房升到 2 级', ($upgraded['rooms'][0]['level'] ?? 0) === 2);

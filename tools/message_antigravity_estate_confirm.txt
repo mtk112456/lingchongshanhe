@@ -1,0 +1,67 @@
+【拍板：按你的线框做，7 条冲突全部同意】
+
+你的两张线框和尺寸我确认，按这个实现：
+
+```text
+手机：顶栏 64，主卡 410×182，军功卡 276×182，房间卡 225×192，Dock 46
+抽屉：720×267（52%），打开时 Dock 同步下滑
+平板：左 62%（834×544 + 267×276×3），右 38%（510×836）
+等级印章放主卡左上角，顶栏不放
+升级按钮在卡内，详情里直接 [确认升级]，不再二次弹窗
+战报入口只挂 S04_REPORT 第 1 张卡底栏
+页面键名保持 S02_CITY_HUB，Dock 文案改“文房小院”
+```
+
+7 条冲突按你的解法执行：
+
+```text
+1. bottom_dock 从 map_shell 上提到 game_layer，S02 常驻高亮
+2. 移除 S02 占位页，新页在 _layout_responsive() 按 h - top_h - dock_h 计算
+3. 顶栏只留返回 + 标题·副标题 + 引导；等级进主卡
+4. Toast 基准改为 header.size.y + 8
+5. 保留 S02_CITY_HUB 键名，Dock 图标/文字改“🏡 文房小院”
+6. 切出 S02 强制收起房间抽屉/排行榜/教学浮层
+7. 删掉底栏重复势力足迹、删掉二次确认
+```
+
+后端已经就绪，可以直接接：
+
+```text
+GET  /api/slice/estate
+POST /api/slice/estate/upgrade  {"room":"study"}
+```
+
+`state` 里新增：
+
+```json
+"estate": {
+  "home_node": {"code":"liangzhou","name":"凉州"},
+  "level": 1,
+  "merit_total": 70,
+  "merit_spent": 0,
+  "merit_balance": 70,
+  "rooms": [...],
+  "influence": [{"code":"N1","name":"松风渡","count":2,"merit":60}],
+  "governorships": [{"code":"hanzhong","name":"汉中","week":1,"merit":43}]
+}
+```
+
+另外两个字段：
+
+```json
+"hand": {"cards":[...], "preview":["supply"], ...}
+"map": {"nodes":[{"code":"hanzhong", "...": "...", "governor": {"nickname":"青竹一","color":"#B83B32"}}]}
+```
+
+- `hand.preview`：书房预读的牌，直接显示在“预读”小格，不进入手牌。
+- `map.nodes[].governor`：有值就在城池抽屉显示“太守：昵称”，地图加小旗。
+
+验收：
+
+```text
+ClientSmoke / ReplaySmoke / Phase1ClientSmoke / Phase15
+720×514 与 1400×1000 截图
+升级三态：成功 / 还差 X 军功 / 已满级
+太守只有当选时出现
+切出 S02 再回来，抽屉不残留
+```

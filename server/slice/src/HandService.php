@@ -39,10 +39,12 @@ final class HandService
         $row = $stmt->fetch();
         if ($row) {
             $cards = json_decode((string)$row['cards_json'], true);
+            $seed = (string)$row['hand_seed'];
             return [
                 'cards' => is_array($cards) ? array_values($cards) : [],
                 'redraw_used' => (bool)$row['redraw_used'],
-                'seed' => (string)$row['hand_seed'],
+                'seed' => $seed,
+                'preview' => $this->previewCards($seed, $gameId, $playerId),
             ];
         }
 
@@ -54,7 +56,37 @@ final class HandService
         );
         $stmt->execute([$gameId, $turnId, $playerId, $this->encode($cards), $seed]);
 
-        return ['cards' => $cards, 'redraw_used' => false, 'seed' => $seed];
+        return [
+            'cards' => $cards,
+            'redraw_used' => false,
+            'seed' => $seed,
+            'preview' => $this->previewCards($seed, $gameId, $playerId),
+        ];
+    }
+
+    /**
+     * 书房：预读接下来 N 张牌（不改变手牌，只是提前看到）。
+     *
+     * @return string[]
+     */
+    private function previewCards(string $seed, int $gameId, int $playerId): array
+    {
+        $count = $this->studyLevel($gameId, $playerId);
+        if ($count <= 0) {
+            return [];
+        }
+        $all = HandDeck::draw($seed, HandDeck::HAND_SIZE + $count);
+        return array_slice($all, HandDeck::HAND_SIZE, $count);
+    }
+
+    private function studyLevel(int $gameId, int $playerId): int
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT study_level FROM slice_estates WHERE game_id = ? AND player_id = ?'
+        );
+        $stmt->execute([$gameId, $playerId]);
+        $level = $stmt->fetchColumn();
+        return max(0, $level === false ? 0 : (int)$level);
     }
 
     /**
@@ -75,7 +107,12 @@ final class HandService
         );
         $stmt->execute([$this->encode($cards), $newSeed, $turnId, $playerId]);
 
-        return ['cards' => $cards, 'redraw_used' => true, 'seed' => $newSeed];
+        return [
+            'cards' => $cards,
+            'redraw_used' => true,
+            'seed' => $newSeed,
+            'preview' => $this->previewCards($newSeed, $gameId, $playerId),
+        ];
     }
 
     /**
