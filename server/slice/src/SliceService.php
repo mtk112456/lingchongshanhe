@@ -2205,6 +2205,9 @@ final class SliceService
             $from = $this->loadTurnById($fromTurnId, true);
             $this->assertSameGame($teacher, $from);
             $game = $this->loadGame((int)$from['game_id']);
+            if ((string)$game['status'] === 'finished') {
+                throw new ApiException('SEASON_FINISHED', '赛季已结束，不能开启新回合', 409);
+            }
             if ((string)$from['status'] !== 'settled') {
                 throw new ApiException('SETTLE_NOT_READY', '当前回合尚未结算，不能进入下一回合', 409);
             }

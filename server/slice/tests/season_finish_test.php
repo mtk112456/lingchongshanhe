@@ -15,7 +15,7 @@ function check(string $name, bool $ok, string $detail = ''): void
     }
 }
 
-[$config, $pdo] = slice_bootstrap();
+[$config, $pdo, $service] = slice_bootstrap();
 $seed = dirname(__DIR__) . '/seed_map12.sql';
 
 try {
@@ -29,6 +29,18 @@ try {
     (new CardSettlementService($pdo))->settle($gameId, $turnId);
     $status = (string)$pdo->query("SELECT status FROM slice_games WHERE id = {$gameId}")->fetchColumn();
     check('占长安后游戏结束', $status === 'finished', 'status=' . $status);
+
+    $login = $service->loginAdmin('teacher', 'teacher2026', 'MAP12_TEST');
+    $teacher = $service->authenticate($login['token']);
+    $blocked = false;
+    $errorCode = '';
+    try {
+        $service->nextTurn($teacher, $turnId);
+    } catch (ApiException $e) {
+        $errorCode = $e->errorCode;
+        $blocked = $e->errorCode === 'SEASON_FINISHED';
+    }
+    check('结束后不能开新回合', $blocked, 'code=' . $errorCode);
 
     SqlRunner::runFile($pdo, $seed);
     $gameId = (int)$pdo->query("SELECT id FROM slice_games WHERE code = 'MAP12_TEST'")->fetchColumn();
