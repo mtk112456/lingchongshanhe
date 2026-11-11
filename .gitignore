@@ -1,6 +1,8 @@
 # 本机配置 / 凭据
 server/slice/config.local.php
 server/slice/config.trial.php
+server/slice/config.perf.php
+server/slice/config.merit.php
 .env
 .env.*
 !.env.example
