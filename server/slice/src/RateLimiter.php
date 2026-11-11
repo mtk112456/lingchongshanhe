@@ -56,7 +56,7 @@ final class RateLimiter
 
     /**
      * @param array<string, array{limit?: int, window?: int}> $rules
-     * @param list<string> $trustedProxies 只有这些来源地址才信任 CF-Connecting-IP / X-Forwarded-For
+     * @param list<string> $trustedProxies 这些来源地址/网段才信任 CF-Connecting-IP / X-Forwarded-For（支持 CIDR）
      * @param callable(): int|null $clock 仅测试用；默认 time()
      */
     public function __construct(
@@ -138,7 +138,7 @@ final class RateLimiter
             return $this->decision($ruleName, $limit, $limit, $window, $resetAt);
         }
 
-        $path = $this->pathFor($ruleName, $routeName . '|' . $subject);
+        $path = $this->pathFor($ruleName, $ruleName . '|' . $routeName . '|' . $subject);
 
         try {
             $count = $this->increment($path, $windowStart);
@@ -181,7 +181,7 @@ final class RateLimiter
         $ruleName = trim($rule) !== '' ? trim($rule) : 'default';
         $subject = trim($subject) !== '' ? trim($subject) : 'unknown';
         $routeName = $route !== null && trim($route) !== '' ? trim($route) : $ruleName;
-        $path = $this->pathFor($ruleName, $routeName . '|' . $subject);
+        $path = $this->pathFor($ruleName, $ruleName . '|' . $routeName . '|' . $subject);
         if (is_file($path)) {
             @unlink($path);
         }
@@ -339,10 +339,14 @@ final class RateLimiter
 
             rewind($handle);
             ftruncate($handle, 0);
-            fwrite($handle, (string)json_encode([
+            $payload = (string)json_encode([
                 'window_start' => $windowStart,
                 'count' => $count,
-            ]));
+            ]);
+            $written = fwrite($handle, $payload);
+            if ($written === false || $written !== strlen($payload)) {
+                throw new RuntimeException('写入限流文件失败：' . $path);
+            }
             fflush($handle);
 
             return $count;
@@ -374,5 +378,54 @@ final class RateLimiter
         }
         $ip = @inet_ntop($packed);
         return $ip === false ? null : $ip;
+    }
+
+    private static function proxyMatches(string $remote, string $proxy): bool
+    {
+        $proxy = trim($proxy);
+        if ($proxy === '*') {
+            return true;
+        }
+        if (str_contains($proxy, '/')) {
+            return self::cidrContains($remote, $proxy);
+        }
+        return self::normalizeIp($proxy) === $remote;
+    }
+
+    /**
+     * 判断 IPv4/IPv6 地址是否落在 CIDR 内。网段与地址的协议族必须一致。
+     */
+    private static function cidrContains(string $ip, string $cidr): bool
+    {
+        $parts = explode('/', $cidr, 2);
+        $bitsValue = count($parts) === 2 ? trim($parts[1]) : '';
+        if ($bitsValue === '' || !ctype_digit($bitsValue)) {
+            return false;
+        }
+
+        $ipBin = @inet_pton($ip);
+        $networkBin = @inet_pton(trim($parts[0]));
+        if ($ipBin === false || $networkBin === false || strlen($ipBin) !== strlen($networkBin)) {
+            return false;
+        }
+
+        $bits = (int)$bitsValue;
+        $maxBits = strlen($ipBin) * 8;
+        if ($bits < 0 || $bits > $maxBits) {
+            return false;
+        }
+
+        $wholeBytes = intdiv($bits, 8);
+        if ($wholeBytes > 0 && substr($ipBin, 0, $wholeBytes) !== substr($networkBin, 0, $wholeBytes)) {
+            return false;
+        }
+
+        $remainder = $bits % 8;
+        if ($remainder === 0) {
+            return true;
+        }
+
+        $mask = (0xFF << (8 - $remainder)) & 0xFF;
+        return (ord($ipBin[$wholeBytes]) & $mask) === (ord($networkBin[$wholeBytes]) & $mask);
     }
 }

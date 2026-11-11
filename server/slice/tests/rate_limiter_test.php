@@ -112,6 +112,25 @@ $proxied = RateLimiter::resolveClientIp([
 ], ['127.0.0.1']);
 check('信任代理时读取 CF-Connecting-IP 并规范化 IPv6', $proxied === '2001:db8::1', $proxied);
 
+// Docker compose 里 cloudflared 是独立容器，REMOTE_ADDR 是网桥地址，按 CIDR 信任。
+$cidrProxied = RateLimiter::resolveClientIp([
+    'REMOTE_ADDR' => '172.18.0.5',
+    'HTTP_CF_CONNECTING_IP' => '203.0.113.44',
+], ['172.18.0.0/16']);
+check('信任 CIDR 内的反向代理', $cidrProxied === '203.0.113.44', $cidrProxied);
+
+$cidrOutside = RateLimiter::resolveClientIp([
+    'REMOTE_ADDR' => '172.19.0.5',
+    'HTTP_CF_CONNECTING_IP' => '203.0.113.44',
+], ['172.18.0.0/16']);
+check('CIDR 外不信任伪造头', $cidrOutside === '172.19.0.5', $cidrOutside);
+
+$cidrV6 = RateLimiter::resolveClientIp([
+    'REMOTE_ADDR' => '2001:db8:1::5',
+    'HTTP_X_FORWARDED_FOR' => '198.51.100.7',
+], ['2001:db8::/32']);
+check('IPv6 CIDR 生效', $cidrV6 === '198.51.100.7', $cidrV6);
+
 echo PHP_EOL;
 if ($failed > 0) {
     echo 'RATE_LIMITER FAIL (' . $failed . ')' . PHP_EOL;

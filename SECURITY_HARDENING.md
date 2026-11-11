@@ -8,6 +8,8 @@
 - 关联审计：`SECURITY_AUDIT.md` 的 **S-03（默认口令 + CORS `*`）**、**S-09（无限速）**
 - 不涉及：数据库 schema、`students.score`、`bootstrap.php`、现有测试
 
+> 2026-11-11 更新：主线程已在提交 `b34e265` 中接入本中间件（`index.php` 已引用 `CorsPolicy` / `RateLimiter`）。如果代码里已经出现这两处引用，跳过本文的“新增”步骤，直接用 §7 清单核对，并处理 §8 的遗留项。
+
 ---
 
 ## 1. 接入点一：CORS（`public/index.php` 顶部）
@@ -27,7 +29,7 @@ if ($method === 'OPTIONS') {
 }
 ```
 
-**这 4 段必须整体删除**，否则会和新中间件同时输出两个 `Access-Control-Allow-Origin`，浏览器会直接拒绝响应（多个 ACAO 值无效）。
+**这些旧配置必须整体删除**，否则会和新中间件同时输出两个 `Access-Control-Allow-Origin`，浏览器会直接拒绝响应（多个 ACAO 值无效）。
 
 ### 1.2 在解析 `$path` 之后、任何输出之前接入
 
@@ -202,15 +204,48 @@ $limiter->enforce('login_account', 'name:' . $loginName, 'auth.login.account');
 
 ### 2.4 反向代理 / Cloudflare Tunnel
 
-`cloudflared` 连到本机时，`REMOTE_ADDR` 通常是 `127.0.0.1`。如果直接按 IP 限流，**全校会共用一个计数器**。必须配置：
+分两种情况：
+
+**A. `cloudflared` 跑在宿主机（或同容器）**
+
+`REMOTE_ADDR` 是 `127.0.0.1` / `::1`：
 
 ```php
-'ratelimit' => [
-    'trusted_proxies' => ['127.0.0.1', '::1'],
-],
+'trusted_proxies' => ['127.0.0.1', '::1'],
 ```
 
-只有 `REMOTE_ADDR` 命中 `trusted_proxies` 时，`clientIp()` 才读取 `CF-Connecting-IP`，其次 `X-Forwarded-For`。如果 API 端口同时直接暴露在公网/局域网，不要信任这些头，否则攻击者可以伪造 IP 绕过限流。通用反代必须**覆盖**而不是追加 `X-Forwarded-For`。
+**B. `deploy/lingchong/docker-compose.yml`（cloudflared 是独立容器）**
+
+cloudflared 通过 Docker `internal` 网络访问 `api:8080`，Apache 看到的 `REMOTE_ADDR` 是**网桥地址**（通常是 `172.x.x.x`），不是 `127.0.0.1`。只信任 localhost 会让所有学生共用一个限流 key。
+
+给 `internal` 网络固定网段（`docker-compose.yml`）：
+
+```yaml
+networks:
+  internal:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
+```
+
+然后：
+
+```php
+'trusted_proxies' => ['172.28.0.0/24'],
+```
+
+不想改 compose 时，也可以临时信任 Docker 默认地址池：
+
+```php
+'trusted_proxies' => ['172.16.0.0/12'],
+```
+
+这等于信任本机所有 Docker 网桥；只有 API 端口仍只绑 `127.0.0.1`、没有其他不可信容器时才可接受。
+
+**通用规则**
+
+只有 `REMOTE_ADDR` 命中 `trusted_proxies`（精确 IP 或 CIDR）时，`clientIp()` 才读取 `CF-Connecting-IP`，其次 `X-Forwarded-For`。如果 API 端口同时直接暴露在公网/局域网，不要信任这些头，否则攻击者可以伪造 IP 绕过限流。通用反代必须**覆盖**而不是追加 `X-Forwarded-For`。不要配置 `0.0.0.0/0` 或 `*`。
 
 ---
 
@@ -291,7 +326,7 @@ return [
             'enabled' => true,
             'dir' => __DIR__ . '/logs/ratelimit', // 不要放在 public/ 下
             'fail_open' => true,                  // 目录故障时优先保可用；严格模式改 false
-            // cloudflared / 本机 Nginx 反代；端口未直接暴露时才可信任
+            // 本机 cloudflared / 本机反代；compose 独立容器见 2.4，改用固定网段如 172.28.0.0/24
             'trusted_proxies' => ['127.0.0.1', '::1'],
             'rules' => [
                 // 公网生产 10；教室共用出口 IP 的试跑建议 30，或按 2.3 B 方案把姓名并入 key
@@ -391,7 +426,7 @@ return [
 - **固定窗口**：窗口边界最多放行 2×limit（例如 10 次/分钟在 59 秒和 61 秒各打 10 次）。登录场景可接受；需要平滑改用滑动窗口/令牌桶。
 - **fail-open**：默认目录不可写时放行并写 `error_log`，避免磁盘故障导致全员无法登录；要高安全改 `fail_open => false`（此时返回 503 `RATE_LIMIT_UNAVAILABLE`）。
 - **目录清理**：每 200 次请求有约 1 次机会清理 1 天前的 key；也可在 cron 里调用 `$limiter->prune(86400)`。目录按 key 数量增长，不按请求数增长。
-- **隐私**：文件名是 `规则名 + sha256(route|subject)`，不落 IP/玩家名明文；不要把限流目录提交到 Git 或暴露为静态目录。
+- **隐私**：文件名是 `规则名 + sha256(rule|route|subject)`，不落 IP/玩家名明文；不要把限流目录提交到 Git 或暴露为静态目录。
 - **磁盘 DoS**：大量随机 IP 仍可能产生很多小文件；公网部署必须配合网关限流/WAF。
 - **CORS 不是 CSRF 防护**：本项目用 `Authorization` 头而非 cookie，CSRF 风险较低；但白名单 origin 上的 XSS 仍能读 token，前端仍需转义与 CSP。
 
@@ -446,3 +481,25 @@ curl.exe -i -X OPTIONS http://127.0.0.1:8081/api/auth/login `
 - [ ] cloudflared/反代场景配置 `trusted_proxies`，且源站端口未直接暴露
 - [ ] 默认口令已轮换、公开页面/种子/手册已删除口令、旧 session 已清理
 - [ ] 现有 14 项后端测试仍通过
+
+---
+
+## 8. `b34e265` 接入后的复核与遗留
+
+已接入：
+
+- `index.php` 顶部已 `require` `CorsPolicy` / `RateLimiter`；
+- 学生登录、教师登录、`order/play`、`order/withdraw`、`battle/forecast` 已调用 `enforce()`；
+- CORS 已走 `handlePreflight()` / `apply()`，旧的 `Access-Control-Allow-Origin: *` 已删除。
+
+按优先级遗留：
+
+1. **`slice_bootstrap()` 被移到了 `try/catch` 外**（当前在 `index.php` 顶部、`$started` 之前）。数据库不可用时它会直接抛异常，既不会返回原来的 `BOOTSTRAP_FAILED` JSON，也不会经过 CORS。恢复原来的 `try { [$config, $pdo, $service] = slice_bootstrap(); } catch (...) { respond(500, ...); }`，或只在最前面读配置给 CORS、bootstrap 仍留在 try 内。
+2. **`POST /api/slice/orders` 未限流**。`/order/play`、`/order/withdraw` 已加，但旧入口在 `requireAuth()` 后直接 `submitOrder()`；补一行：
+   ```php
+   $rateLimiter->enforce('order', (string)$player['id']);
+   ```
+3. **旧 OPTIONS 分支仍残留**：`handlePreflight()` 已对所有 OPTIONS 返回并 `exit`，后面的 `if ($method === 'OPTIONS') { http_response_code(204); exit; }` 是死代码，建议删除以免误读。
+4. **根路径仍公开默认口令**：`GET /` 仍输出 `slice2026`，教师页/种子/试跑手册也需按 §5.1 清理。这是 S-03 的核心，限流不能替代改口令。
+5. **已提交的 `RateLimiter` 版本不含 CIDR 代理支持**。工作区已补 `trusted_proxies` 的 CIDR 解析；compose 的 `cloudflared` 是独立容器，`REMOTE_ADDR` 是 Docker 网桥地址。按 §2.4 固定 `172.28.0.0/24` 并提交工作区最新 `RateLimiter.php`、测试和本文，否则全校会共用一个 10 次/分钟计数器。
+6. 当前工作区对 `RateLimiter.php`、`rate_limiter_test.php`、`SECURITY_HARDENING.md` 有未提交修改（`CorsPolicy.php` 已与提交一致）；主线程提交前先 `git add` 这三个文件。
