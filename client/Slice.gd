@@ -464,10 +464,10 @@ func _panel_style(bg: Color = C_XUANZHI, border: Color = C_TENGHUANG, width: int
 		var tex: Texture2D = ui_kit_textures["panel_card"]
 		var s := StyleBoxTexture.new()
 		s.texture = tex
-		s.texture_margin_left = 16
-		s.texture_margin_top = 16
-		s.texture_margin_right = 16
-		s.texture_margin_bottom = 16
+		s.texture_margin_left = 32
+		s.texture_margin_top = 32
+		s.texture_margin_right = 32
+		s.texture_margin_bottom = 32
 		s.content_margin_left = pad
 		s.content_margin_top = pad
 		s.content_margin_right = pad
@@ -502,17 +502,17 @@ func _button(text: String, color: Color, height: int = 42) -> Button:
 		var tex: Texture2D = ui_kit_textures[tex_key]
 		var s := StyleBoxTexture.new()
 		s.texture = tex
-		s.texture_margin_left = 12
-		s.texture_margin_top = 12
-		s.texture_margin_right = 12
-		s.texture_margin_bottom = 12
+		s.texture_margin_left = 16
+		s.texture_margin_top = 16
+		s.texture_margin_right = 16
+		s.texture_margin_bottom = 16
 		b.add_theme_stylebox_override("normal", s)
 		var sd := StyleBoxTexture.new()
 		sd.texture = tex
-		sd.texture_margin_left = 12
-		sd.texture_margin_top = 12
-		sd.texture_margin_right = 12
-		sd.texture_margin_bottom = 12
+		sd.texture_margin_left = 16
+		sd.texture_margin_top = 16
+		sd.texture_margin_right = 16
+		sd.texture_margin_bottom = 16
 		sd.modulate_color = Color(0.55, 0.5, 0.44, 0.95)
 		b.add_theme_stylebox_override("disabled", sd)
 	else:
