@@ -85,6 +85,22 @@ final class CardSettlementService
             return ['turn_id' => $turnId, 'already_settled' => true, 'battles' => []];
         }
 
+        // ???????????? settling??????????
+        $previousStatus = (string)$turn['status'];
+        $stmt = $this->pdo->prepare(
+            'UPDATE slice_turns SET status = "settling"
+             WHERE id = ? AND game_id = ? AND status IN ("open", "locked", "failed")'
+        );
+        $stmt->execute([$turnId, $gameId]);
+        if ($stmt->rowCount() === 0) {
+            $stmt = $this->pdo->prepare('SELECT status FROM slice_turns WHERE id = ? AND game_id = ?');
+            $stmt->execute([$turnId, $gameId]);
+            if ((string)$stmt->fetchColumn() === 'settled') {
+                return ['turn_id' => $turnId, 'already_settled' => true, 'battles' => []];
+            }
+            throw new ApiException('SETTLE_BUSY', '??????????????', 409);
+        }
+
         $stmt = $this->pdo->prepare(
             'SELECT o.id, o.player_id, o.slot, o.card_code, o.target_node_code, o.lane, o.row_pos,
                     p.faction_id, p.student_id,
@@ -141,6 +157,12 @@ final class CardSettlementService
         $this->finishSeasonIfNeeded($gameId, (int)$turn['turn_no']);
 
         return ['turn_id' => $turnId, 'already_settled' => false, 'battles' => $battles];
+        } catch (Throwable $e) {
+            $stmt = $this->pdo->prepare(
+                'UPDATE slice_turns SET status = ? WHERE id = ? AND status = "settling"'
+            );
+            $stmt->execute([$previousStatus, $turnId]);
+            throw $e;
         } finally {
             $stmt = $this->pdo->prepare('SELECT RELEASE_LOCK(?)');
             $stmt->execute([$lockName]);

@@ -181,6 +181,8 @@ final class HandService
             throw new InvalidArgumentException('BAD_REQUEST_KEY');
         }
 
+        $this->pdo->beginTransaction();
+        try {
         $this->assertTurnEditable($turnId, $playerId, $gameId);
         $this->assertSeasonTarget($gameId, $turnId, $targetNodeCode);
         $this->assertAdjacentTarget($gameId, $playerId, $targetNodeCode);
@@ -222,6 +224,7 @@ final class HandService
                 last_request_key = VALUES(last_request_key)'
         );
         $stmt->execute([$gameId, $turnId, $playerId, $slot, $card, $targetNodeCode, $lane, $row, $requestKey]);
+        $this->pdo->commit();
 
         return [
             'slot' => $slot,
@@ -230,6 +233,12 @@ final class HandService
             'lane' => $lane,
             'row_pos' => $row,
         ];
+        } catch (Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $e;
+        }
     }
 
     public function withdraw(int $turnId, int $playerId, int $slot): bool
@@ -335,11 +344,13 @@ final class HandService
      */
     private function assertTurnEditable(int $turnId, int $playerId, ?int $gameId = null): void
     {
-        $stmt = $this->pdo->prepare(
-            'SELECT t.id, t.game_id, t.status, t.deadline_at, g.status AS game_status
-             FROM slice_turns t JOIN slice_games g ON g.id = t.game_id
-             WHERE t.id = ?'
-        );
+        $sql = 'SELECT t.id, t.game_id, t.status, t.deadline_at, g.status AS game_status
+                FROM slice_turns t JOIN slice_games g ON g.id = t.game_id
+                WHERE t.id = ?';
+        if ($this->pdo->inTransaction()) {
+            $sql .= ' FOR UPDATE';
+        }
+        $stmt = $this->pdo->prepare($sql);
         $stmt->execute([$turnId]);
         $turn = $stmt->fetch();
         if (!$turn) {
