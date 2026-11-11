@@ -465,6 +465,22 @@ try {
         success(['withdrawn' => (new HandService($pdo))->withdraw($turnId, (int)$player['id'], (int)($body['slot'] ?? 0))]);
     }
 
+    if ($method === 'POST' && $path === '/api/slice/battle/forecast') {
+        $player = requireAuth($service);
+        $body = jsonBody();
+        $turnId = isset($body['turn_id']) ? (int)$body['turn_id'] : (int)($player['game_current_turn_id'] ?? 0);
+        $node = (string)($body['node'] ?? $body['node_code'] ?? '');
+        if ($turnId <= 0 || $node === '') {
+            throw new ApiException('BAD_REQUEST', '缺少 turn_id 或 node');
+        }
+        success((new CardSettlementService($pdo))->forecast(
+            (int)$player['game_id'],
+            $turnId,
+            (int)$player['id'],
+            $node
+        ));
+    }
+
     if ($method === 'POST' && $path === '/api/slice/battle/demo') {
         $player = requireAuth($service);
         $body = jsonBody();

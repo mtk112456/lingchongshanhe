@@ -276,6 +276,7 @@ final class BattleEngine
             'card' => $u['card'] ?? null,
             'player_id' => $u['player_id'] ?? null,
             'troops' => round($u['troops'], 1),
+            'max_troops' => round($u['max_troops'], 1),
             'alive' => $u['alive'],
         ], $units));
 
@@ -370,6 +371,25 @@ final class BattleEngine
         }
         unset($stat);
 
+        $counterHits = [];
+        $counterDamage = [];
+        foreach ($events as $event) {
+            $sourceType = $event['source_type'] ?? null;
+            $targetType = $event['target_type'] ?? null;
+            if ($sourceType === null || $targetType === null) {
+                continue;
+            }
+            if (self::counter((string)$sourceType, (string)$targetType) <= 1.0) {
+                continue;
+            }
+            $key = $sourceType . '>' . $targetType;
+            $counterHits[$key] = ($counterHits[$key] ?? 0) + 1;
+            $counterDamage[$key] = ($counterDamage[$key] ?? 0.0) + (float)($event['damage'] ?? 0);
+        }
+        foreach ($counterDamage as $key => $damage) {
+            $counterDamage[$key] = round($damage, 1);
+        }
+
         return [
             'wall' => max(0, round($wall, 1)),
             'score' => $score,
@@ -381,6 +401,8 @@ final class BattleEngine
             'units' => $initialUnits,
             'final_units' => $finalUnits,
             'players' => $playerStats,
+            'counters' => $counterHits,
+            'counter_damage' => $counterDamage,
             'events' => $events,
         ];
     }
@@ -744,6 +766,8 @@ final class BattleEngine
             'unit' => $sourceId,
             'action' => $action,
             'target' => $targetId,
+            'source_type' => $units[$sourceId]['type'] ?? null,
+            'target_type' => $units[$targetId]['type'] ?? null,
             'damage' => round($dmg, 1),
             'target_troops' => round($units[$targetId]['troops'], 1),
             'killed' => $killed,

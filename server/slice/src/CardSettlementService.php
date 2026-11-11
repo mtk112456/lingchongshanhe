@@ -5,6 +5,7 @@ require_once __DIR__ . '/BattleService.php';
 require_once __DIR__ . '/BattleSettlementService.php';
 require_once __DIR__ . '/BulletinService.php';
 require_once __DIR__ . '/MeritService.php';
+require_once __DIR__ . '/ApiException.php';
 
 /**
  * 21:00 卡牌结算：把 slice_order_slots 按城聚合，打一场，推民心。
@@ -124,6 +125,309 @@ final class CardSettlementService
         $this->saveTurnResult($gameId, $turnId, $battles);
 
         return ['turn_id' => $turnId, 'already_settled' => false, 'battles' => $battles];
+    }
+
+    /**
+     * 战前预估：用当前已出的令，模拟一次不落库的战斗。
+     *
+     * @return array<string,mixed>
+     */
+    public function forecast(int $gameId, int $turnId, int $playerId, string $nodeCode): array
+    {
+        $stmt = $this->pdo->prepare('SELECT * FROM slice_nodes WHERE game_id = ? AND node_code = ?');
+        $stmt->execute([$gameId, $nodeCode]);
+        $node = $stmt->fetch();
+        if (!$node) {
+            throw new ApiException('NODE_NOT_FOUND', '城不存在', 404);
+        }
+
+        $stmt = $this->pdo->prepare('SELECT faction_id FROM slice_players WHERE id = ? AND game_id = ?');
+        $stmt->execute([$playerId, $gameId]);
+        $myFactionId = $stmt->fetchColumn();
+        if ($myFactionId === false || $myFactionId === null) {
+            throw new ApiException('NO_FACTION', '你还没有加入阵营', 409);
+        }
+        $myFactionId = (int)$myFactionId;
+        $ownerFactionId = $node['owner_faction_id'] === null ? null : (int)$node['owner_faction_id'];
+
+        $stmt = $this->pdo->prepare(
+            'SELECT o.id, o.player_id, o.slot, o.card_code, o.target_node_code, o.lane, o.row_pos,
+                    p.faction_id, p.student_id,
+                    sp.level, pt.base_hp, pt.base_atk, pt.base_def, pt.base_spd,
+                    pt.growth_rate, pt.code AS pet_code
+             FROM slice_order_slots o
+             JOIN slice_players p ON p.id = o.player_id
+             LEFT JOIN student_pets sp ON sp.student_id = p.student_id
+             LEFT JOIN pet_templates pt ON pt.id = sp.pet_template_id
+             WHERE o.turn_id = ? AND o.target_node_code = ? AND o.status = "active"
+             ORDER BY o.slot'
+        );
+        $stmt->execute([$turnId, $nodeCode]);
+        $allOrders = $stmt->fetchAll();
+
+        $myOrders = array_values(array_filter(
+            $allOrders,
+            fn($o) => (int)$o['player_id'] === $playerId
+        ));
+        if ($ownerFactionId !== null && $ownerFactionId === $myFactionId) {
+            return [
+                'node_code' => $nodeCode,
+                'node_name' => (string)$node['name'],
+                'role' => 'defend',
+                'ready' => false,
+                'reason' => 'DEFEND_CITY',
+                'advice' => ['这是己方城，出令 = 驻守；战前预估只用于进攻。'],
+            ];
+        }
+        if ($myOrders === []) {
+            return [
+                'node_code' => $nodeCode,
+                'node_name' => (string)$node['name'],
+                'role' => $ownerFactionId === $myFactionId ? 'defend' : 'attack',
+                'ready' => false,
+                'reason' => 'NO_ORDERS',
+                'advice' => ['先给这座城出一张令，再来预估。'],
+            ];
+        }
+
+        $weekNo = self::weekOfTurn((int)$this->pdo->query(
+            'SELECT turn_no FROM slice_turns WHERE id = ' . $turnId
+        )->fetchColumn());
+
+        $factionOrders = array_values(array_filter(
+            $allOrders,
+            fn($o) => (int)($o['faction_id'] ?? 0) === $myFactionId
+        ));
+        $teamOrders = array_values(array_filter(
+            $factionOrders,
+            fn($o) => self::isTeamCard((string)$o['card_code'])
+        ));
+        usort($teamOrders, fn($a, $b) => BattleService::petPower($b) <=> BattleService::petPower($a));
+
+        $vanguard = [];
+        $seen = [];
+        foreach ($teamOrders as $order) {
+            $pid = (int)$order['player_id'];
+            if (isset($seen[$pid])) {
+                continue;
+            }
+            $seen[$pid] = true;
+            $vanguard[] = $order;
+            if (count($vanguard) >= 3) {
+                break;
+            }
+        }
+        if ($vanguard === []) {
+            return [
+                'node_code' => $nodeCode,
+                'node_name' => (string)$node['name'],
+                'role' => $ownerFactionId === $myFactionId ? 'defend' : 'attack',
+                'ready' => false,
+                'reason' => 'NO_VANGUARD',
+                'advice' => ['队伍牌才能进战场；火攻/侦察/疑兵不占队伍位。'],
+            ];
+        }
+
+        $supporters = max(0, count(array_unique(array_column($factionOrders, 'player_id'))) - count($vanguard));
+        $supportMult = BattleService::supportMultiplier($supporters) * 1.20;
+        $bulletins = (new BulletinService($this->pdo))->choicesForTurn($turnId);
+        $teams = $this->teamsFromOrders($vanguard, $gameId, $weekNo, $supportMult, $bulletins);
+
+        $scouted = false;
+        $fire = false;
+        foreach ($factionOrders as $order) {
+            if ((string)$order['card_code'] === 'scout') {
+                $scouted = true;
+            }
+            if ((string)$order['card_code'] === 'fire_attack') {
+                $fire = true;
+            }
+        }
+
+        $attacker = [
+            'general' => $this->generalOf((string)($vanguard[0]['pet_code'] ?? '')),
+            'teams' => $teams,
+            'troops' => array_sum(array_column($teams, 'troops')),
+            'scouted' => $scouted,
+            'fire' => $fire,
+            'supporters' => $supporters,
+            'support_mult' => round($supportMult, 3),
+        ];
+        $siegeMult = 1.0;
+        foreach ($vanguard as $order) {
+            $siegeMult += BulletinService::siegeMultiplier($bulletins[(int)$order['player_id']] ?? null) - 1.0;
+        }
+        $attacker['siege_mult'] = round($siegeMult, 3);
+
+        if ($this->factionOwnsNodeType($gameId, $myFactionId, 'camp')) {
+            foreach ($teams as &$t) {
+                $t['troops'] *= 1.05;
+            }
+            unset($t);
+            $attacker['teams'] = $teams;
+            $attacker['troops'] = array_sum(array_column($teams, 'troops'));
+            $attacker['camp_bonus'] = true;
+        } else {
+            $attacker['camp_bonus'] = false;
+        }
+        if ($this->factionOwnsRegion($gameId, $myFactionId)) {
+            foreach ($teams as &$t) {
+                $t['troops'] *= 1.05;
+            }
+            unset($t);
+            $attacker['teams'] = $teams;
+            $attacker['troops'] = array_sum(array_column($teams, 'troops'));
+            $attacker['region_bonus'] = true;
+        } else {
+            $attacker['region_bonus'] = false;
+        }
+
+        $defTeams = [];
+        $defGeneral = 'def';
+        $defSupporters = 0;
+        $defSupportMult = 1.0;
+        $realGarrison = false;
+        if ($ownerFactionId !== null) {
+            $defenderOrders = array_values(array_filter(
+                $allOrders,
+                fn($o) => (int)($o['faction_id'] ?? 0) === $ownerFactionId
+                    && self::isTeamCard((string)$o['card_code'])
+            ));
+            usort($defenderOrders, fn($a, $b) => BattleService::petPower($b) <=> BattleService::petPower($a));
+            $defVanguard = [];
+            $seenDef = [];
+            foreach ($defenderOrders as $order) {
+                $pid = (int)$order['player_id'];
+                if (isset($seenDef[$pid])) {
+                    continue;
+                }
+                $seenDef[$pid] = true;
+                $defVanguard[] = $order;
+                if (count($defVanguard) >= 3) {
+                    break;
+                }
+            }
+            if ($defVanguard !== []) {
+                $defSupporters = max(0, count(array_unique(array_column($defenderOrders, 'player_id'))) - count($defVanguard));
+                $defSupportMult = BattleService::supportMultiplier($defSupporters);
+                $defTeams = $this->teamsFromOrders($defVanguard, $gameId, $weekNo, $defSupportMult, $bulletins);
+                $defGeneral = $this->generalOf((string)($defVanguard[0]['pet_code'] ?? ''));
+                $realGarrison = true;
+            }
+        }
+        if ($defTeams === []) {
+            $fixed = ($ownerFactionId === null ? 730.0 : 1200.0) * 1.10;
+            $comp = $ownerFactionId === null ? ['shield', 'shield', 'arc'] : ['shield', 'spear', 'arc'];
+            foreach ($comp as $i => $type) {
+                $defTeams[] = [
+                    'type' => $type,
+                    'troops' => $fixed / 3,
+                    'lane' => $i + 1,
+                    'row' => BattleEngine::TYPES[$type]['row'],
+                    'card' => null,
+                    'player_id' => null,
+                ];
+            }
+        }
+        $passBonus = $ownerFactionId !== null && $this->factionOwnsNodeType($gameId, $ownerFactionId, 'pass');
+        if ($passBonus) {
+            foreach ($defTeams as &$dt) {
+                $dt['troops'] *= 1.10;
+            }
+            unset($dt);
+        }
+        $defender = [
+            'general' => $defGeneral,
+            'teams' => $defTeams,
+            'troops' => array_sum(array_column($defTeams, 'troops')),
+            'real_garrison' => $realGarrison,
+            'pass_bonus' => $passBonus,
+            'supporters' => $defSupporters,
+            'support_mult' => round($defSupportMult, 3),
+        ];
+
+        $result = $this->battleService->resolve($attacker, $defender);
+
+        $intelKnown = $ownerFactionId === null
+            || $ownerFactionId === $myFactionId
+            || $scouted
+            || (new BulletinService($this->pdo))->revealsAll($turnId, $playerId);
+        $cap = BattleSettlementService::cap((string)$node['node_type']);
+        $moraleBefore = (int)$node['morale'];
+        $moraleAfter = max(0, min($cap, $moraleBefore + (int)$result['score']));
+        $captureEstimate = $moraleAfter >= $cap && $ownerFactionId !== $myFactionId;
+
+        $defTroops = (float)$defender['troops'];
+        $attTroops = (float)$attacker['troops'];
+        $verdict = '均势';
+        if ($attTroops >= $defTroops * 1.15 && (float)$result['wall'] <= 700) {
+            $verdict = '优势';
+        } elseif ($attTroops < $defTroops * 0.85 || (float)$result['wall'] > 1100) {
+            $verdict = '劣势';
+        }
+
+        $advice = [];
+        if (!$intelKnown) {
+            $advice[] = '守军未知，先派哨探或接受风险。';
+        } else {
+            $defTypes = array_count_values(array_column($defTeams, 'type'));
+            arsort($defTypes);
+            $counterMap = ['cav' => 'shield', 'shield' => 'arc', 'arc' => 'spear', 'spear' => 'cav'];
+            foreach ($defTypes as $defType => $count) {
+                $best = array_search($defType, $counterMap, true);
+                if ($best !== false) {
+                    $advice[] = sprintf('敌 %s ×%d，建议带 %s。', BattleEngine::TYPES[$defType]['name'], $count, BattleEngine::TYPES[$best]['name']);
+                }
+            }
+        }
+        if (!$fire && (float)$result['wall'] > 400) {
+            $advice[] = '带火攻可让器械攻墙 +50%。';
+        }
+        if ($supporters === 0 && count($factionOrders) < 3) {
+            $advice[] = '叫同阵营支援，每人 +2%，上限 +30%。';
+        }
+        if (count($advice) === 0) {
+            $advice[] = '阵容均衡，可以直接出令。';
+        }
+
+        return [
+            'node_code' => $nodeCode,
+            'node_name' => (string)$node['name'],
+            'role' => $ownerFactionId === $myFactionId ? 'defend' : 'attack',
+            'ready' => true,
+            'intel_known' => $intelKnown,
+            'attacker' => [
+                'faction_id' => $myFactionId,
+                'troops' => round($attTroops, 1),
+                'teams' => $attacker['teams'],
+                'supporters' => $supporters,
+                'support_mult' => $attacker['support_mult'],
+                'camp_bonus' => $attacker['camp_bonus'],
+                'region_bonus' => $attacker['region_bonus'],
+            ],
+            'defender' => [
+                'known' => $intelKnown,
+                'faction_id' => $ownerFactionId,
+                'troops' => $intelKnown ? round($defTroops, 1) : null,
+                'troops_range' => $intelKnown ? null : [round($defTroops * 0.7), round($defTroops * 1.3)],
+                'teams' => $intelKnown ? $defender['teams'] : [],
+                'real_garrison' => $realGarrison,
+                'pass_bonus' => $passBonus,
+            ],
+            'forecast' => [
+                'wall' => (float)$result['wall'],
+                'score' => (int)$result['score'],
+                'ticks' => (int)$result['ticks'],
+                'morale_before' => $moraleBefore,
+                'morale_after' => $moraleAfter,
+                'morale_cap' => $cap,
+                'capture_estimate' => $captureEstimate,
+                'verdict' => $verdict,
+            ],
+            'counters' => $result['counters'] ?? [],
+            'counter_damage' => $result['counter_damage'] ?? [],
+            'advice' => $advice,
+        ];
     }
 
     /**
@@ -480,6 +784,8 @@ final class CardSettlementService
             'real_garrison' => $realGarrison,
             'merit' => $meritAwarded,
             'contribution' => $result['players'] ?? [],
+            'counters' => $result['counters'] ?? [],
+            'counter_damage' => $result['counter_damage'] ?? [],
         ];
     }
 

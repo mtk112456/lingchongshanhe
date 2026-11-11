@@ -281,6 +281,45 @@ vanguard 先锋 / support 支援 / garrison 驻守 / scout 侦察 / fire 火攻 
 
 ---
 
+## 1.6 POST /api/slice/battle/forecast
+
+```text
+POST /api/slice/battle/forecast
+{"turn_id": 3, "node": "hanzhong"}
+Authorization: Bearer <token>
+```
+
+用当前已出的令模拟一次不落库的战斗，给战前“军议”用。
+
+```json
+{
+  "node_code": "hanzhong",
+  "node_name": "汉中",
+  "role": "attack",
+  "ready": true,
+  "intel_known": true,
+  "attacker": {"troops": 1305.0, "teams": [...], "supporters": 1, "camp_bonus": true},
+  "defender": {"known": true, "troops": 803.0, "teams": [...], "real_garrison": false},
+  "forecast": {"wall": 448.3, "score": 1, "morale_before": 0, "morale_after": 1,
+               "morale_cap": 2, "capture_estimate": false, "verdict": "优势"},
+  "counters": {"cav>shield": 3},
+  "counter_damage": {"cav>shield": 120.5},
+  "advice": ["敌盾 ×2，建议带骑。", "带火攻可让器械攻墙 +50%。"]
+}
+```
+
+规则：
+
+```text
+未侦察的敌城：intel_known=false，defender.teams=[]，只给 troops_range
+己方城：role=defend，ready=false，reason=DEFEND_CITY（出令=驻守，不模拟进攻）
+没有队伍令：ready=false，reason=NO_ORDERS
+```
+
+预估不写 slice_battles、不改回合状态、不发军功。
+
+---
+
 ## 2. POST /api/slice/composition
 
 ```json

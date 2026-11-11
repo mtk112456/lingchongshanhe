@@ -68,6 +68,7 @@ jobs:
           set -e
           php server/slice/tests/run.php
           php server/slice/tests/phase15_cards_test.php
+          php server/slice/tests/forecast_test.php
           php server/slice/tests/bulletin_test.php
           php server/slice/tests/formation_test.php
           php server/slice/tests/card_settlement_test.php

@@ -76,6 +76,7 @@ try {
             }
         }
         check("第 {$no} 回合产生战斗", $battle !== null && !empty($battle['battle_id']));
+        check("第 {$no} 回合有克制统计", !empty($battle['counters']), json_encode($battle['counters'] ?? []));
         if ($no === 1) {
             check('第 1 回合未破城', empty($battle['captured']));
             check('先锋本场 30 军功', ($battle['merit'][$vanguardIds[0]]['total'] ?? 0) === 30, json_encode($battle['merit'] ?? []));
