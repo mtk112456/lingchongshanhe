@@ -117,9 +117,13 @@ func _load_sfx(name: String) -> AudioStream:
 func _load_bgm(name: String) -> AudioStream:
 	if _bgm_cache.has(name):
 		return _bgm_cache[name]
-	var path := BGM_DIR + name + ".wav"
+	var path := BGM_DIR + name + ".ogg"
+	if not ResourceLoader.exists(path):
+		path = BGM_DIR + name + ".wav"
 	var stream: AudioStream = load(path) if ResourceLoader.exists(path) else null
-	# 导入参数里 edit/loop_mode 仍是 0，这里兜底开循环，否则播完一遍就静音停住。
+	# OGG 导入参数可能没开循环，这里统一兜底。
+	if stream is AudioStreamOggVorbis:
+		(stream as AudioStreamOggVorbis).loop = true
 	var wav := stream as AudioStreamWAV
 	if wav != null:
 		var frames := int(wav.get_length() * wav.mix_rate)
@@ -131,7 +135,7 @@ func _load_bgm(name: String) -> AudioStream:
 	return stream
 
 func has_bgm(name: String) -> bool:
-	return ResourceLoader.exists(BGM_DIR + name + ".wav")
+	return ResourceLoader.exists(BGM_DIR + name + ".ogg") or ResourceLoader.exists(BGM_DIR + name + ".wav")
 
 func _ensure_bus(bus_name: String) -> void:
 	if AudioServer.get_bus_index(bus_name) >= 0:
