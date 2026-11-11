@@ -1,0 +1,73 @@
+# 旧拓扑（保留）：不新建数据库，接入现有 teaching-app 的 MariaDB。
+#
+# 适用：家庭实验室已经用 server-deploy/stacks/teaching-app 跑着 MariaDB + Web +
+# Cloudflare Tunnel，只想把游戏 API 挂到同一个 Docker 网络。
+# 独立完整部署（自带 MariaDB + cloudflared）请用 docker-compose.yml。
+#
+# 用法：
+#   export TEACHING_ENV_FILE=/opt/home-lab/server-deploy/stacks/teaching-app/.env
+#   mkdir -p deploy/lingchong/logs && sudo chown -R 33:33 deploy/lingchong/logs
+#   docker compose -f deploy/lingchong/compose.existing-db.yml up -d --build
+#
+# 注意：此文件复用现有库，迁移必须用 scripts/apply_migration.php，
+#       不要执行 schema.sql / legacy_schema.sql / legacy_seed.sql。
+
+name: lingchong-existing-db
+
+services:
+  api:
+    build:
+      context: ../..
+      dockerfile: deploy/lingchong/Dockerfile
+    image: lingchong-api:${API_TAG:-local}
+    restart: unless-stopped
+    env_file:
+      - ${TEACHING_ENV_FILE:-/opt/home-lab/server-deploy/stacks/teaching-app/.env}
+    environment:
+      DB_HOST: db
+      DB_PORT: "3306"
+      SLICE_CONFIG: /var/www/html/config.docker.php
+      # 试跑期允许教师提前锁令；正式版改为 0，由 cron 在截止时锁定。
+      ALLOW_FORCE_LOCK: ${ALLOW_FORCE_LOCK:-0}
+    volumes:
+      - ./logs:/var/www/html/logs
+    ports:
+      # 只绑回环；公网入口走现有 Cloudflare Tunnel。
+      - "127.0.0.1:${API_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks:
+      - teaching
+
+  cron:
+    image: lingchong-api:${API_TAG:-local}
+    # 与 Apache 一致用 www-data(33)，避免日志文件归属冲突。
+    user: "33:33"
+    restart: unless-stopped
+    env_file:
+      - ${TEACHING_ENV_FILE:-/opt/home-lab/server-deploy/stacks/teaching-app/.env}
+    environment:
+      DB_HOST: db
+      DB_PORT: "3306"
+      SLICE_CONFIG: /var/www/html/config.docker.php
+      ALLOW_FORCE_LOCK: ${ALLOW_FORCE_LOCK:-0}
+    command:
+      - sh
+      - -c
+      - "while true; do php /var/www/html/scripts/cron.php || echo cron_failed >&2; sleep 60; done"
+    depends_on:
+      api:
+        condition: service_started
+    volumes:
+      - ./logs:/var/www/html/logs
+    networks:
+      - teaching
+
+networks:
+  teaching:
+    external: true
+    name: teaching-app_default

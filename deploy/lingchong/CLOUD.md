@@ -57,7 +57,7 @@
 
 | 域名 | 指向 | 用途 |
 |---|---|---|
-| `game.yourdomain.com` | 家庭实验室 Cloudflare Tunnel → `localhost:8090` | 登录、军令、战报、异步结算 |
+| `game.yourdomain.com` | 家庭实验室 Cloudflare Tunnel → `http://api:8080`（容器内回源） | 登录、军令、战报、异步结算 |
 | `rt.yourdomain.com` | 云服务器 | 实时房间 WebSocket |
 | `school.yourdomain.com` | 家庭实验室现有入口 | 班级量化系统本身 |
 

@@ -1,256 +1,127 @@
-# 灵宠山河 · 家庭实验室 Docker 部署
+# 灵宠山河 · 部署包
 
-> 面向现有 `server-deploy/stacks/teaching-app`（MariaDB + Web + Cloudflare Tunnel）的部署方式。  
-> 游戏 API 作为同机容器接入现有数据库网络，**不把 3306 暴露公网**。
-
----
-
-## 1. 拓扑
-
-```text
-Cloudflare DNS
-  game.yourdomain.com
-        │
-        ▼
-Cloudflare Tunnel（已有）
-        │  http://localhost:8090
-        ▼
-lingchong-api 容器（PHP 8.3 + Apache）
-        │  teaching-app_default 内网
-        ▼
-teaching-app 的 db 容器（MariaDB）
-        ├─ students / admin / shop_orders / student_pets
-        └─ slice_* / game_wallets / ...
-```
-
-- `lingchong-api` 只绑定宿主机 `127.0.0.1:8090`；
-- 公网只走 Cloudflare Tunnel，不需要开路由器端口；
-- 数据库不开公网，游戏容器通过 Docker 内网访问 `db:3306`；
-- HTTPS 由 Cloudflare 提供，Android 不再需要明文 HTTP；
-- `cron` 容器每 60 秒执行一次 `scripts/cron.php`，负责 21:00 锁令/结算。
+> 本目录是可交付的 Docker + Cloudflare Tunnel 部署包。  
+> **完整步骤、迁移、备份、回滚、红线见 [`../../DEPLOY_RUNBOOK.md`](../../DEPLOY_RUNBOOK.md)。**  
+> 家庭实验室与云服务器的分工见 [`CLOUD.md`](CLOUD.md)。
 
 ---
 
-## 2. 前置确认
+## 1. 两种拓扑
 
-在服务器上确认现有教学系统正常运行：
+| 拓扑 | 文件 | 适用 |
+|---|---|---|
+| **独立栈**（推荐给新机器） | `docker-compose.yml` | 自带 MariaDB 10.11 + API + cron + cloudflared，一个 compose 文件起完整环境 |
+| **接入现有教学库** | `compose.existing-db.yml` | 已有 `teaching-app` 的 MariaDB + Tunnel，只把 API 挂进同一 Docker 网络 |
 
-```bash
-docker ps
-docker network ls | grep teaching-app_default
-```
-
-应能看到 `teaching-app` 的 `db` 和 `web` 容器，以及 `teaching-app_default` 网络。
-
-确认教学库 `.env` 路径（默认）：
-
-```bash
-ls -l /opt/home-lab/server-deploy/stacks/teaching-app/.env
-```
-
-如果不在这个路径，部署时设置：
-
-```bash
-export TEACHING_ENV_FILE=/你的实际路径/.env
-```
+两者使用同一个镜像（`Dockerfile`，PHP 8.4 + Apache + `pdo_mysql`，文档根 `server/slice/public`）。
 
 ---
 
-## 3. 放置代码
+## 2. 独立栈快速开始
 
-建议把游戏仓库放到：
+```bash
+cd /opt/lingchong
+cp deploy/lingchong/.env.example deploy/lingchong/.env
+chmod 600 deploy/lingchong/.env
+# 编辑 .env：DB_PASS / DB_ROOT_PASS / TUNNEL_TOKEN
 
-```text
-/opt/home-lab/lingchong
+docker compose -f deploy/lingchong/docker-compose.yml config
+docker compose -f deploy/lingchong/docker-compose.yml up -d db
+docker compose -f deploy/lingchong/docker-compose.yml up -d --build api
+# 初始化或导入数据 → 见 RUNBOOK §1.4 / §2
+docker compose -f deploy/lingchong/docker-compose.yml up -d cron cloudflared
+curl -fsS http://127.0.0.1:8080/api/health
 ```
 
-至少需要：
+- 公网入口：Cloudflare Public Hostname → `HTTP` → `api:8080`；
+- `api` 只绑 `127.0.0.1:8080`；
+- `db` 不映射 3306。
 
-```text
-lingchong/
-  server/slice/          # API 源码
-  deploy/lingchong/      # 本目录
-  client/                # 可选，服务器不需要
-```
+### 迁移（生产）
+
+只用 `server/slice/scripts/apply_migration.php`，按 `001 → 002 → 004 → 005 → 006 → 007` 顺序执行。  
+**不要**在生产库执行 `schema.sql` / `legacy_schema.sql` / `legacy_seed.sql` / `seed.sql`（均含 `DROP TABLE`）。命令见 RUNBOOK §2.2。
 
 ---
 
-## 4. 构建并启动
+## 3. 接入现有教学库（旧拓扑）
+
+前置：服务器上已有 `teaching-app` 的 `db` 容器和 `teaching-app_default` 网络。
 
 ```bash
-cd /opt/home-lab/lingchong
-
-# 检查 Compose 配置
-docker compose -f deploy/lingchong/compose.yml config
-
-# 构建并启动 api + cron
-docker compose -f deploy/lingchong/compose.yml up -d --build
-
-# 查看状态
-docker compose -f deploy/lingchong/compose.yml ps
-docker compose -f deploy/lingchong/compose.yml logs -f api
+export TEACHING_ENV_FILE=/opt/home-lab/server-deploy/stacks/teaching-app/.env
+mkdir -p deploy/lingchong/logs
+# 容器内 cron 以 www-data(33) 运行，宿主机目录要让它可以写
+sudo chown -R 33:33 deploy/lingchong/logs
+docker compose -f deploy/lingchong/compose.existing-db.yml config
+docker compose -f deploy/lingchong/compose.existing-db.yml up -d --build
+curl -fsS http://127.0.0.1:8080/api/health
 ```
 
-本机检查：
-
-```bash
-curl -fsS http://127.0.0.1:8090/api/health
-```
-
-应返回 `{"ok":true,...}`。
+- 复用现有 `.env` 里的数据库账号；
+- API 端口只绑 `127.0.0.1:8080`，公网仍走原 Tunnel；
+- 迁移同样只走 `apply_migration.php`；
+- 应用日志落在 `deploy/lingchong/logs/`。
 
 ---
 
-## 5. 生产库迁移
+## 4. 文件说明
 
-> 先备份。生产库只执行 `001`、`002`，不要执行 `legacy_schema.sql` / `schema.sql` / `legacy_seed.sql`。
-
-备份：
-
-```bash
-docker compose -f /opt/home-lab/server-deploy/stacks/teaching-app/compose.yml exec -T db \
-  sh -c 'mysqldump -u"$MARIADB_USER" -p"$MARIADB_PASSWORD" "$MARIADB_DATABASE"' \
-  > /data/backup/class_manager_before_lingchong_$(date +%F_%H%M).sql
-```
-
-先核对 `shop_orders.type` 的现有枚举：
-
-```bash
-docker compose -f /opt/home-lab/server-deploy/stacks/teaching-app/compose.yml exec -T db \
-  sh -c 'mysql -u"$MARIADB_USER" -p"$MARIADB_PASSWORD" "$MARIADB_DATABASE" -e "SHOW COLUMNS FROM shop_orders LIKE '\''type'\'';"'
-```
-
-如果现有 ENUM 里还有 `goods/blind_box` 之外的值，先把它们补进 `001_shop_orders_game_recharge.sql` 再执行，避免被截断。
-
-执行迁移：
-
-```bash
-cd /opt/home-lab/lingchong
-
-docker compose -f /opt/home-lab/server-deploy/stacks/teaching-app/compose.yml exec -T db \
-  sh -c 'mysql -u"$MARIADB_USER" -p"$MARIADB_PASSWORD" "$MARIADB_DATABASE"' \
-  < server/slice/migrations/001_shop_orders_game_recharge.sql
-
-docker compose -f /opt/home-lab/server-deploy/stacks/teaching-app/compose.yml exec -T db \
-  sh -c 'mysql -u"$MARIADB_USER" -p"$MARIADB_PASSWORD" "$MARIADB_DATABASE"' \
-  < server/slice/migrations/002_apply_points_schema.sql
-```
-
-迁移后验证：
-
-```bash
-docker compose -f /opt/home-lab/server-deploy/stacks/teaching-app/compose.yml exec -T db \
-  sh -c 'mysql -u"$MARIADB_USER" -p"$MARIADB_PASSWORD" "$MARIADB_DATABASE" -e "SHOW COLUMNS FROM shop_orders LIKE '\''type'\''; SHOW TABLES LIKE '\''game_%'\'';"'
-```
-
-> 如果这是第一次上线，建议先在**测试库副本**演练一遍，再操作生产库。
+| 文件 | 用途 |
+|---|---|
+| `Dockerfile` | PHP 8.4 + Apache，监听 8080，生产关闭 `display_errors` / `expose_php` |
+| `Dockerfile.dockerignore` | 构建上下文过滤，本机配置和测试库不进镜像 |
+| `docker-compose.yml` | 独立栈：`db` + `api` + `cron` + `cloudflared` |
+| `compose.existing-db.yml` | 接入现有 teaching-app 数据库 |
+| `.env.example` | 密码与 Tunnel Token 占位符（复制为 `.env`，不提交） |
+| `config.docker.php` | 容器内配置，全部读环境变量 |
+| `cloudflared/config.example.yml` | 自管 Tunnel 配置，ingress → `api:8080` |
+| `cloudflared.ingress.example.yml` | 合并到现有 Tunnel 的 ingress 片段（旧方式） |
+| `backup/` | 数据库备份落点，`*.sql` 已 git 忽略 |
 
 ---
 
-## 6. Cloudflare Tunnel
-
-在 Cloudflare Zero Trust：
-
-```text
-Networks → Tunnels → 现有 Tunnel → Public Hostname → Add
-Subdomain: game
-Domain:    yourdomain.com
-Type:      HTTP
-URL:       localhost:8090
-```
-
-保存后访问：
-
-```text
-https://game.yourdomain.com/api/health
-```
-
-不需要在路由器上开 8090；Tunnel 会从本机回源。
-
-如果使用本地 `cloudflared` 配置文件，参考 `cloudflared.ingress.example.yml`，**合并**到现有 ingress，不要覆盖其他域名。
-
----
-
-## 7. 客户端
+## 5. 客户端
 
 Godot 登录页服务器地址填：
 
 ```text
-https://game.yourdomain.com
+https://game.你的域名
 ```
 
-不再需要 `adb reverse`，也不需要明文 HTTP。  
-学生用现有班级系统账号登录；教师用现有 `admin` 账号登录。
+学生用现有班级系统账号登录；教师用现有 `admin` 账号登录。  
+HTTPS 由 Cloudflare 提供，不需要 `adb reverse`，也不需要明文 HTTP。
+
+教师控制台：`https://game.你的域名/teacher`  
+（公网可访问，建议在 Cloudflare 侧加 Access 策略，见 RUNBOOK §6 红线 8。）
 
 ---
 
-## 8. 定时任务
+## 6. 定时任务
 
-`cron` 容器已经启动，每 60 秒执行：
+`cron` 容器每 60 秒执行：
 
 ```bash
 php /var/www/html/scripts/cron.php
 ```
 
-它会对已过截止时间且 `games.status='running'` 的回合执行：
-
-1. 锁令并生成快照；
-2. 结算；
-3. 失败保留快照，下一轮重试。
-
-查看日志：
-
-```bash
-docker compose -f deploy/lingchong/compose.yml logs -f cron
-```
-
+对已过截止时间且 `games.status='running'` 的回合：锁令 → 快照 → 结算；失败保留快照，下一轮重试。  
 `next-turn` 不自动执行，仍由教师确认。
 
 ---
 
-## 9. 实时战斗怎么加
+## 7. 安全红线
 
-> 家庭实验室 + 云服务器的分工、Tailscale 内网调用和域名拆分，见 [CLOUD.md](CLOUD.md)。
-
-### 推荐顺序
-
-1. 先跑通当前异步切片（本部署）；
-2. 加“战斗回放”动画：服务器仍 21:00 结算，客户端播放结果；
-3. 如果要做实时，优先做**周五同步回合制**；
-4. 最后才考虑真·实时操作。
-
-### 周五同步回合制
-
-在同一 Docker 网络加一个 WebSocket 房间服务（Node.js/Go）：
-
-```text
-Godot → wss://rt.yourdomain.com → rt 容器 → db / Redis
-```
-
-- Cloudflare Tunnel 支持 WebSocket；
-- 房间服务只读 `slice_sessions` 校验 Token，或调用游戏 API 校验；
-- 战斗结果写回 MySQL；
-- 建议空闲 30 秒发 ping，避免 Cloudflare 100 秒空闲断开；
-- 缺席玩家默认防御，不能因为一个人没上线就卡住全班。
-
-### 真·实时操作
-
-不建议放在家庭宽带 + Cloudflare Tunnel 上做核心玩法：
-
-- Cloudflare 适合 HTTP/WebSocket，不适合低延迟 UDP；
-- 真·实时操作需要公网 VPS + UDP/ENet/WebTransport、客户端预测、服务器权威、断线重连；
-- 40 人规模服务器不是瓶颈，**同时在线和公平性才是**。
-
-如果确实要做，把实时房间服放云服务器，通过 Tailscale 私有网络访问家庭实验室数据库；不要公网开 3306。
+1. 3306 不公网；
+2. 生产不跑 `schema.sql` / `legacy_*` / `seed.sql`；
+3. 密码、Tunnel Token 不进 git、不进镜像；
+4. 不改 `students.score`，积分只追加 `shop_orders`；
+5. 迁移前先备份；
+6. 不用 `docker compose down -v`（会删库卷）。
 
 ---
 
-## 10. 安全与回滚
+## 8. 实时战斗
 
-- `.env` 不提交、不放入镜像；
-- 数据库只在 Docker 内网；
-- 迁移前必须备份；
-- 回滚 `001` 前先确认没有 `game_recharge` 订单；
-- 游戏容器只挂载 `logs`，不挂载源码和数据库目录；
-- 正式版 `ALLOW_FORCE_LOCK` 改为 `0`，只由 cron 在截止时锁定；
-- 生产环境不要开启 `allow_fault_injection` / `expose_error_details`。
+家庭实验室 + 云服务器分工、Tailscale 内网调用、域名拆分见 [`CLOUD.md`](CLOUD.md)。  
+本包只覆盖异步 API；实时房间服（WebSocket）尚未实现。

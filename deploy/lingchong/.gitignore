@@ -1,0 +1,9 @@
+# 部署包本地产物：凭据与备份不进 git。
+.env
+.env.*
+!.env.example
+backup/*
+!backup/.gitkeep
+logs/
+cloudflared/config.yml
+cloudflared/*.json

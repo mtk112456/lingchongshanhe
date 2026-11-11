@@ -1,10 +1,14 @@
 # 合并到现有 Cloudflare Tunnel 的 ingress 列表，不要整体替换原有配置。
+# 适用于 cloudflared 直接跑在宿主机、API 只绑 127.0.0.1:8080 的旧拓扑。
+# 若 cloudflared 也在这个 compose 项目里（独立栈），用 cloudflared/config.example.yml，
+# 回源地址写 http://api:8080。
+#
 # 先在 Cloudflare Zero Trust → Networks → Tunnels → Public Hostname 添加：
-#   game.yourdomain.com  →  http://localhost:8090
+#   game.yourdomain.com  →  http://localhost:8080
 # 若使用本地 config.yml，可参考：
 ingress:
   - hostname: game.yourdomain.com
-    service: http://localhost:8090
+    service: http://localhost:8080
 
   # 可选：实时房间服务（WebSocket）时再加
   # - hostname: rt.yourdomain.com

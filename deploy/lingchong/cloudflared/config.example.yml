@@ -1,0 +1,23 @@
+# Cloudflare Tunnel 自管配置示例（可选）。
+#
+# 两种模式二选一：
+#   A. token 模式（docker-compose.yml 默认）：ingress 在 Zero Trust 面板配置，
+#      本文件不用，容器只读挂载本目录。
+#   B. 自管配置模式：复制本文件为 cloudflared/config.yml，放入 Tunnel 凭据 JSON，
+#      再在 deploy/lingchong/docker-compose.override.yml 覆盖 cloudflared.command。
+#
+# config.yml 和 *.json 都含凭据，deploy/lingchong/.gitignore 已忽略，不要提交。
+
+tunnel: <TUNNEL_UUID>
+credentials-file: /etc/cloudflared/<TUNNEL_UUID>.json
+
+ingress:
+  - hostname: game.yourdomain.com
+    service: http://api:8080
+    originRequest:
+      connectTimeout: 10s
+      httpHostHeader: game.yourdomain.com
+  # 需要 WebSocket 实时房间服时再加一条，指向对应容器端口。
+  # - hostname: rt.yourdomain.com
+  #   service: http://rt:8091
+  - service: http_status:404

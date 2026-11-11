@@ -1,0 +1,156 @@
+# 灵宠山河 · 独立部署栈（MariaDB + API + cron + Cloudflare Tunnel）
+#
+# 用法（在仓库根目录；首次上线先初始化数据库，见 DEPLOY_RUNBOOK.md §1）：
+#   cp deploy/lingchong/.env.example deploy/lingchong/.env
+#   docker compose -f deploy/lingchong/docker-compose.yml config
+#   docker compose -f deploy/lingchong/docker-compose.yml up -d db
+#   docker compose -f deploy/lingchong/docker-compose.yml up -d --build api
+#   docker compose -f deploy/lingchong/docker-compose.yml up -d cron cloudflared
+#
+# 安全边界：
+#   - MariaDB 不映射 3306，只在 internal 网络内可达；
+#   - api 只绑定 127.0.0.1，公网入口只走 cloudflared；
+#   - 密码与 Tunnel Token 全部来自 deploy/lingchong/.env（不进镜像、不进 git）。
+
+name: lingchong
+
+services:
+  db:
+    image: mariadb:10.11
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: ${DB_NAME:-class_manager}
+      MARIADB_USER: ${DB_USER:-lingchong_api}
+      MARIADB_PASSWORD: ${DB_PASS:?请在 deploy/lingchong/.env 中设置 DB_PASS}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASS:?请在 deploy/lingchong/.env 中设置 DB_ROOT_PASS}
+      TZ: ${TZ:-Asia/Shanghai}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --skip-name-resolve
+    volumes:
+      - db_data:/var/lib/mysql
+      # 备份落点：宿主机 deploy/lingchong/backup
+      - ./backup:/backup
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+    stop_grace_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - internal
+    # 不写 ports：3306 不对宿主机/公网开放。
+
+  api:
+    build:
+      context: ../..
+      dockerfile: deploy/lingchong/Dockerfile
+    image: lingchong-api:${API_TAG:-local}
+    restart: unless-stopped
+    environment:
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_NAME: ${DB_NAME:-class_manager}
+      DB_USER: ${DB_USER:-lingchong_api}
+      DB_PASS: ${DB_PASS:?请在 deploy/lingchong/.env 中设置 DB_PASS}
+      SLICE_CONFIG: /var/www/html/config.docker.php
+      TURN_SECONDS: ${TURN_SECONDS:-600}
+      # 正式上线保持 0，只由 cron 在截止时锁令。
+      ALLOW_FORCE_LOCK: ${ALLOW_FORCE_LOCK:-0}
+      TZ: ${TZ:-Asia/Shanghai}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - api_logs:/var/www/html/logs
+    ports:
+      # 仅供本机 curl 自检；公网只走 Cloudflare Tunnel。
+      - "${API_BIND:-127.0.0.1}:${API_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - internal
+
+  # 21:00 截止锁令/结算。没有它，回合不会自动推进。
+  cron:
+    image: lingchong-api:${API_TAG:-local}
+    # 与 Apache 一致用 www-data(33)，避免 root 先创建 api.log 后 API 无法追加。
+    user: "33:33"
+    restart: unless-stopped
+    environment:
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_NAME: ${DB_NAME:-class_manager}
+      DB_USER: ${DB_USER:-lingchong_api}
+      DB_PASS: ${DB_PASS:?请在 deploy/lingchong/.env 中设置 DB_PASS}
+      SLICE_CONFIG: /var/www/html/config.docker.php
+      TURN_SECONDS: ${TURN_SECONDS:-600}
+      ALLOW_FORCE_LOCK: ${ALLOW_FORCE_LOCK:-0}
+      TZ: ${TZ:-Asia/Shanghai}
+    command:
+      - sh
+      - -c
+      - "while true; do php /var/www/html/scripts/cron.php || echo cron_failed >&2; sleep 60; done"
+    depends_on:
+      db:
+        condition: service_healthy
+      api:
+        condition: service_started
+    volumes:
+      - api_logs:/var/www/html/logs
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - internal
+
+  cloudflared:
+    image: ${CLOUDFLARED_IMAGE:-cloudflare/cloudflared:latest}
+    restart: unless-stopped
+    # 默认 token 模式：ingress 在 Cloudflare Zero Trust 面板配置。
+    # 自管 config.yml 模式（不需要 token）见 DEPLOY_RUNBOOK.md「Cloudflare Tunnel」。
+    command:
+      - tunnel
+      - --no-autoupdate
+      - run
+      - --token
+      - "${TUNNEL_TOKEN:-}"
+    depends_on:
+      api:
+        condition: service_healthy
+    volumes:
+      - ./cloudflared:/etc/cloudflared:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - internal
+    # 不映射端口：connector 主动外连 Cloudflare。
+
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  db_data:
+  api_logs:

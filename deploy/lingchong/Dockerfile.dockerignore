@@ -1,0 +1,31 @@
+# 只影响 deploy/lingchong/Dockerfile 的构建上下文（BuildKit / Docker 20.10+）。
+# 目的：缩小上下文，并确保本机配置、数据库目录、日志永远不进入镜像。
+
+.git
+.gitignore
+.agents
+client
+art_src
+reference
+handover
+tools
+docs
+run_map12_verification.py
+*.zip
+*.apk
+*.idsig
+
+server/slice/config.local.php
+server/slice/config.trial.php
+server/slice/config.ci.php
+server/slice/config.perf.php
+server/slice/logs
+server/slice/testdb
+server/slice/tests
+server/slice/tools
+server/slice/*.ps1
+
+deploy/lingchong/.env
+deploy/lingchong/.env.*
+deploy/lingchong/backup
+deploy/lingchong/logs
