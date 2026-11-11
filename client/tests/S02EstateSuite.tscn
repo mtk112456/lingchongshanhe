@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://s02_estate_suite_001"]
+
+[ext_resource type="Script" path="res://tests/S02EstateSuite.gd" id="1_s02"]
+
+[node name="S02EstateSuite" type="Node"]
+script = ExtResource("1_s02")

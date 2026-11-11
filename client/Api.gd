@@ -147,6 +147,9 @@ func withdraw_order(turn_id: int, request_key: String, callback: Callable) -> vo
 func report(turn_id: int, callback: Callable) -> void:
 	request("GET", "/api/slice/report?turn_id=" + str(turn_id), null, callback)
 
+func get_me_report(turn_id: int, callback: Callable) -> void:
+	request("GET", "/api/slice/me/report?turn_id=" + str(turn_id), null, callback)
+
 func history(callback: Callable) -> void:
 	request("GET", "/api/slice/history", null, callback)
 
@@ -235,6 +238,23 @@ func get_intel(node_code: String, turn_id: int, callback: Callable) -> void:
 
 func getIntel(node_code: String, turn_id: int, callback: Callable) -> void:
 	get_intel(node_code, turn_id, callback)
+
+func get_estate(callback: Callable, turn_id: int = 0) -> void:
+	var path := "/api/slice/estate"
+	if turn_id > 0:
+		path += "?turn_id=" + str(turn_id)
+	request("GET", path, null, callback)
+
+func upgrade_estate(room: String, callback: Callable) -> void:
+	request("POST", "/api/slice/estate/upgrade", {
+		"room": room,
+	}, callback)
+
+func get_merit(callback: Callable, week: int = 0) -> void:
+	var path := "/api/slice/merit"
+	if week > 0:
+		path += "?week=" + str(week)
+	request("GET", path, null, callback)
 
 # ---------------------------------------------------------------------------
 # 教师

@@ -91,6 +91,8 @@ var wall_view: Control
 var result_overlay: Control
 var result_card_center: PanelContainer
 var seal_label: Label
+var result_banner_img: TextureRect
+var result_seal_img: TextureRect
 var page_frame_1: Control
 var page_frame_2: Control
 var page_frame_3: Control
@@ -305,6 +307,11 @@ func _execute_hit_impact(src_id: String, tgt_id: String, dmg: int, killed: bool,
 	if has_node("/root/AudioManager"):
 		AudioManager.play_sfx("hit")
 
+	var tgt_center := tgt_view.position + tgt_view.size * 0.5
+	# 6 帧 VFX：近战斩击 + 命中火花
+	_play_vfx_anim("slash", tgt_center, Vector2(68, 68), 0.40)
+	_play_vfx_anim("hit", tgt_center, Vector2(52, 52), 0.35)
+
 	_set_unit_sprite_state(tgt_id, "hit")
 	_play_hit_reaction(tgt_view, dir)
 	_spawn_floating_text(tgt_view.position + Vector2(16, -14), "-%d" % dmg, Color("#ff5544"))
@@ -381,6 +388,9 @@ func _spawn_flying_arrow(from_pos: Vector2, to_pos: Vector2, on_hit: Callable) -
 	tw.finished.connect(func():
 		if is_instance_valid(arrow):
 			arrow.queue_free()
+		# 6 帧 VFX：箭矢命中 + 火花
+		_play_vfx_anim("arrow", to_pos, Vector2(52, 52), 0.35)
+		_play_vfx_anim("hit", to_pos, Vector2(52, 52), 0.35)
 		on_hit.call()
 	)
 
@@ -407,6 +417,74 @@ func _play_siege_anim(dmg: int) -> void:
 		_heavy_shake_node(wall_view, 8.0, 0.25)
 		_heavy_shake_node(battlefield_rect, 3.0, 0.18)
 		_spawn_debris_particles(wall_view.position + Vector2(20, 60))
+
+		# 6 帧 VFX：城墙裂纹 + 飞扬尘土
+		var wall_center := wall_view.position + Vector2(wall_view.size.x * 0.5, wall_view.size.y * 0.45)
+		_play_vfx_anim("wall_crack", wall_center, Vector2(90, 90), 0.50)
+		_play_vfx_anim("dust", wall_view.position + Vector2(wall_view.size.x * 0.5, wall_view.size.y * 0.8), Vector2(96, 64), 0.50)
+
+		# 若攻城队伍有火攻战术，额外触发火攻火焰 6 帧
+		if _has_fire_attack_team():
+			_play_vfx_anim("fire", wall_center + Vector2(-10, -10), Vector2(80, 80), 0.50)
+
+func _has_fire_attack_team() -> bool:
+	var raw_att: Variant = replay_data.get("attacker", {})
+	if typeof(raw_att) == TYPE_DICTIONARY:
+		for t in raw_att.get("teams", []):
+			if typeof(t) == TYPE_DICTIONARY and str(t.get("card", "")) == "fire_attack":
+				return true
+	for u in units_data.values():
+		if typeof(u) == TYPE_DICTIONARY and str(u.get("side", "")) == "att" and str(u.get("card", "")) == "fire_attack":
+			return true
+	return false
+
+## 播放 6 帧战斗 VFX 动画（每帧约 83.3ms，6 帧共 0.5s；is_reduced_motion 时只显示第一帧微光后淡出）
+func _play_vfx_anim(vfx_name: String, center_pos: Vector2, custom_size: Vector2 = Vector2(72, 72), duration: float = 0.5, z_idx: int = 25) -> void:
+	if not battlefield_rect:
+		return
+	var frames: Array[Texture2D] = []
+	for i in range(1, 7):
+		var p := "res://assets/art/vfx/vfx_%s_0%d.png" % [vfx_name, i]
+		if ResourceLoader.exists(p):
+			var tex: Texture2D = load(p)
+			if tex:
+				frames.append(tex)
+
+	if frames.is_empty():
+		return
+
+	var rect := TextureRect.new()
+	rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	rect.size = custom_size
+	rect.position = center_pos - custom_size * 0.5
+	rect.z_index = z_idx
+	rect.texture = frames[0]
+	battlefield_rect.add_child(rect)
+
+	if AudioManager.is_reduced_motion:
+		var r_tw := create_tween()
+		r_tw.tween_interval(0.10)
+		r_tw.tween_property(rect, "modulate:a", 0.0, 0.08)
+		r_tw.tween_callback(func():
+			if is_instance_valid(rect): rect.queue_free()
+		)
+		return
+
+	var tw := create_tween()
+	var frame_dur := duration / float(frames.size())
+	for i in range(frames.size()):
+		var f_idx := i
+		tw.tween_callback(func():
+			if is_instance_valid(rect):
+				rect.texture = frames[f_idx]
+		)
+		tw.tween_interval(frame_dur)
+	tw.chain().tween_callback(func():
+		if is_instance_valid(rect):
+			rect.queue_free()
+	)
 
 ## 破墙碎石粒子
 func _spawn_debris_particles(center_pos: Vector2) -> void:
@@ -538,14 +616,40 @@ func _show_result_overlay() -> void:
 	seal_label.text = "【%s】" % seal_text
 	seal_label.add_theme_color_override("font_color", seal_col)
 
+	var is_victory := (score >= 1 or wall_remain_pct <= 0.0)
+
+	# 接入横幅与印章图片
+	if result_banner_img:
+		var banner_path := "res://assets/art/ui/banner_capture.png" if is_victory else "res://assets/art/ui/banner_defense.png"
+		if ResourceLoader.exists(banner_path):
+			result_banner_img.texture = load(banner_path)
+			result_banner_img.visible = true
+		else:
+			result_banner_img.visible = false
+
+	if result_seal_img:
+		var seal_path := "res://assets/art/ui/seal_victory.png" if is_victory else "res://assets/art/ui/seal_defeat.png"
+		if ResourceLoader.exists(seal_path):
+			result_seal_img.texture = load(seal_path)
+			result_seal_img.visible = true
+		else:
+			result_seal_img.visible = false
+
 	# 胜负：破城/守住印章重击砸落动效
 	if not AudioManager.is_reduced_motion:
 		seal_label.pivot_offset = Vector2(seal_label.size.x * 0.5, seal_label.size.y * 0.5)
 		seal_label.scale = Vector2(2.5, 2.5)
 		seal_label.modulate.a = 0.0
+		if result_seal_img:
+			result_seal_img.pivot_offset = Vector2(result_seal_img.size.x * 0.5, result_seal_img.size.y * 0.5)
+			result_seal_img.scale = Vector2(2.5, 2.5)
+			result_seal_img.modulate.a = 0.0
 		var stamp_tw := create_tween().set_parallel(true)
 		stamp_tw.tween_property(seal_label, "scale", Vector2(1.0, 1.0), 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
 		stamp_tw.tween_property(seal_label, "modulate:a", 1.0, 0.18)
+		if result_seal_img:
+			stamp_tw.tween_property(result_seal_img, "scale", Vector2(1.0, 1.0), 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
+			stamp_tw.tween_property(result_seal_img, "modulate:a", 1.0, 0.18)
 		stamp_tw.chain().tween_callback(func():
 			if has_node("/root/AudioManager"):
 				AudioManager.play_sfx("stamp")
@@ -734,16 +838,19 @@ func _build_ui() -> void:
 	top_hbox.add_child(play_btn)
 	
 	speed_btn = Button.new()
-	speed_btn.text = "1x"
-	speed_btn.custom_minimum_size = Vector2(40, 28)
+	speed_btn.custom_minimum_size = Vector2(44, 28)
 	speed_btn.add_theme_font_size_override("font_size", 11)
 	speed_btn.pressed.connect(_on_speed_toggle)
+	_update_speed_btn()
 	top_hbox.add_child(speed_btn)
 	
 	skip_btn = Button.new()
-	skip_btn.text = "⏭ 跳过"
+	skip_btn.text = "跳过"
 	skip_btn.custom_minimum_size = Vector2(58, 28)
 	skip_btn.add_theme_font_size_override("font_size", 11)
+	if ResourceLoader.exists("res://assets/art/ui/icon_skip.png"):
+		skip_btn.icon = load("res://assets/art/ui/icon_skip.png")
+		skip_btn.expand_icon = true
 	skip_btn.pressed.connect(_on_skip_pressed)
 	top_hbox.add_child(skip_btn)
 	
@@ -1159,7 +1266,19 @@ func _on_play_toggle() -> void:
 
 func _on_speed_toggle() -> void:
 	playback_speed = 2.0 if playback_speed == 1.0 else 1.0
-	speed_btn.text = "%.0fx" % playback_speed
+	_update_speed_btn()
+
+func _update_speed_btn() -> void:
+	if not speed_btn:
+		return
+	var icon_name := "icon_speed_2x.png" if playback_speed > 1.0 else "icon_speed_1x.png"
+	var p := "res://assets/art/ui/" + icon_name
+	if ResourceLoader.exists(p):
+		speed_btn.icon = load(p)
+		speed_btn.expand_icon = true
+		speed_btn.text = "%.0fx" % playback_speed
+	else:
+		speed_btn.text = "%.0fx" % playback_speed
 
 func _on_skip_pressed() -> void:
 	# 快进应用所有事件到最终状态
@@ -1203,12 +1322,35 @@ func _build_result_overlay() -> void:
 	vbox.add_theme_constant_override("separation", 8)
 	result_card_center.add_child(vbox)
 	
-	# 朱砂大印章居中
+	# 战局胜负横幅与朱砂印章头部
+	var top_res_box := VBoxContainer.new()
+	top_res_box.add_theme_constant_override("separation", 2)
+	vbox.add_child(top_res_box)
+
+	result_banner_img = TextureRect.new()
+	result_banner_img.custom_minimum_size = Vector2(0, 36)
+	result_banner_img.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	result_banner_img.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	result_banner_img.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	top_res_box.add_child(result_banner_img)
+
+	var seal_row := HBoxContainer.new()
+	seal_row.name = "SealRow"
+	seal_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	seal_row.add_theme_constant_override("separation", 8)
+	top_res_box.add_child(seal_row)
+
+	result_seal_img = TextureRect.new()
+	result_seal_img.custom_minimum_size = Vector2(38, 38)
+	result_seal_img.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	result_seal_img.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	seal_row.add_child(result_seal_img)
+
 	seal_label = Label.new()
 	seal_label.text = "【大获全胜】"
 	seal_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	seal_label.add_theme_font_size_override("font_size", 24)
-	vbox.add_child(seal_label)
+	seal_label.add_theme_font_size_override("font_size", 22)
+	seal_row.add_child(seal_label)
 	
 	# 3 帧折页内容容器
 	var content_box := Control.new()

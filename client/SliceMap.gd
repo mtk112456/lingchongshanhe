@@ -88,6 +88,13 @@ var my_order: Variant = null
 var pulse := 0.0
 var font: Font
 var zoom_level: float = 1.0
+var scouted_nodes: Array = []
+var reachable_targets: Array = []
+
+func set_fog_data(scouted: Array, reachable: Array) -> void:
+	scouted_nodes = scouted
+	reachable_targets = reachable
+	queue_redraw()
 
 func _init_asset_slots() -> void:
 	art_map_texture = null
@@ -440,6 +447,7 @@ func _draw_node(n: Dictionary) -> void:
 			_draw_morale_indicator(pos, int(n.get("morale", 0)), int(n.get("morale_cap", 2)), 96.0, false)
 
 	# 7. 地标建筑剪影与文化标签（LOD: zoom_level >= 1.35）
+	_draw_governor_badge(pos, -62.0, n.get("governor", null), false)
 	if zoom_level >= 1.35:
 		_draw_landmark_silhouette(pos, code, faction_color)
 		_draw_cultural_tag(pos, code)
@@ -452,22 +460,26 @@ func _draw_node(n: Dictionary) -> void:
 func _draw_node_over_art(n: Dictionary, pos: Vector2, faction_color: Color, is_start: bool, is_mine: bool, owner: Variant) -> void:
 	var code := str(n.get("code", ""))
 	var is_compact_screen := size.y < 650.0
+	var is_reachable := (reachable_targets.is_empty() or reachable_targets.has(code))
+	var is_scouted := scouted_nodes.has(code)
 
-	# 1. 独立城池 Sprite（v4 地形叠加，底边中心对齐锚点，保比例不拉伸）
+	# 1. 独立城池 Sprite（v4 地形叠加，底边中心对齐锚点，保比例不拉伸；迷雾未连通城置灰）
 	var target_h := 120.0 if is_start else 104.0
 	var target_w := target_h * 1.35
 	var drawn_trim := false
+	var tint_color := Color.WHITE if is_reachable else Color(0.48, 0.48, 0.50, 0.60)
+
 	if city_trim_textures.has(code) and city_trim_textures[code] != null:
 		var tex: Texture2D = city_trim_textures[code]
 		var tex_sz := tex.get_size()
 		if tex_sz.y > 0.0:
 			target_w = target_h * (tex_sz.x / tex_sz.y)
 			var sprite_rect := Rect2(pos.x - target_w / 2.0, pos.y - target_h, target_w, target_h)
-			draw_texture_rect(tex, sprite_rect, false)
+			draw_texture_rect(tex, sprite_rect, false, tint_color)
 			drawn_trim = true
 	# 仅在 trim 资产缺失时，才回退到旧矢量图标（杜绝双建筑、双屋顶、双塔）
 	if not drawn_trim:
-		_draw_landmark_silhouette(pos, code, faction_color)
+		_draw_landmark_silhouette(pos, code, faction_color if is_reachable else Color(0.4, 0.4, 0.4, 0.6))
 
 	# 2. 选中/归属光环（位于城池底座锚点地面，高亮战术据点）
 	if code == selected_code:
@@ -475,20 +487,25 @@ func _draw_node_over_art(n: Dictionary, pos: Vector2, faction_color: Color, is_s
 		draw_circle(pos, r, Color(GOLD.r, GOLD.g, GOLD.b, 0.16))
 		draw_arc(pos, r, 0.0, TAU, 48, GOLD, 3.5, true)
 		draw_arc(pos, r + 8.0, 0.0, TAU, 48, Color(CORAL.r, CORAL.g, CORAL.b, 0.55), 1.5, true)
-	else:
+	elif is_reachable:
 		var r := 42.0 if is_start else 36.0
 		draw_circle(pos, r, Color(faction_color.r, faction_color.g, faction_color.b, 0.10))
 		draw_arc(pos, r + 3.0, 0.0, TAU, 40, Color(CREAM.r, CREAM.g, CREAM.b, 0.72), 1.5, true)
 		draw_arc(pos, r, 0.0, TAU, 40, Color(faction_color.r, faction_color.g, faction_color.b, 0.78), 3.0, true)
 		if is_start:
 			draw_arc(pos, r + 6.0, 0.0, TAU, 40, GOLD, 2.0, true)
+	else:
+		# 不可达迷雾城：暗淡灰色圆晕
+		var r := 36.0
+		draw_circle(pos, r, Color(0.15, 0.15, 0.15, 0.12))
+		draw_arc(pos, r, 0.0, TAU, 36, Color(0.45, 0.42, 0.40, 0.45), 1.5, true)
 
 	# 3. 阵营旗帜（立于城池建筑右上方城台，迎风招展，不遮挡大门与标签）
 	var flag_pole_h := 44.0 if is_start else 36.0
 	var pole_base := pos + Vector2(target_w * 0.35, -target_h * 0.65)
 	var pole_top := pole_base + Vector2(0, -flag_pole_h)
-	draw_line(pole_base, pole_top, Color("#3a2a1a"), 3.0, true)
-	draw_circle(pole_top, 3.0, GOLD)
+	draw_line(pole_base, pole_top, Color("#3a2a1a") if is_reachable else Color("#55504a"), 3.0, true)
+	draw_circle(pole_top, 3.0, GOLD if is_reachable else Color("#777068"))
 	var wave := sin(pulse * 3.2 + pos.x * 0.05) * 3.0
 	var owner_f_code := str(n.get("owner_faction", n.get("faction", ""))).to_lower()
 	var flag_tex: Texture2D = faction_flags.get(owner_f_code, null)
@@ -497,8 +514,8 @@ func _draw_node_over_art(n: Dictionary, pos: Vector2, faction_color: Color, is_s
 		var fh := 28.0 if is_compact_screen else 32.0
 		var f_rect := Rect2(pole_top + Vector2(2, wave - 2), Vector2(fw, fh))
 		# 旗帜背后衬一层柔和宣纸光环，在任何山水背景下都清晰可辨
-		draw_circle(f_rect.get_center(), (fw / 2.0) + 1.0, Color(1, 1, 1, 0.35))
-		draw_texture_rect(flag_tex, f_rect, false)
+		draw_circle(f_rect.get_center(), (fw / 2.0) + 1.0, Color(1, 1, 1, 0.35 if is_reachable else 0.15))
+		draw_texture_rect(flag_tex, f_rect, false, Color.WHITE if is_reachable else Color(0.6, 0.6, 0.6, 0.65))
 	else:
 		var flag := PackedVector2Array([
 			pole_top,
@@ -508,13 +525,15 @@ func _draw_node_over_art(n: Dictionary, pos: Vector2, faction_color: Color, is_s
 			pole_top + Vector2(0, 19),
 		])
 		# 旗面描米白边，避免与红山蓝山背景粘连
-		draw_polyline(flag, Color(CREAM.r, CREAM.g, CREAM.b, 0.92), 4.0, true)
-		draw_colored_polygon(flag, faction_color)
-		draw_polyline(flag, Color("#2b1e13"), 1.6, true)
+		draw_polyline(flag, Color(CREAM.r, CREAM.g, CREAM.b, 0.92 if is_reachable else 0.4), 4.0, true)
+		draw_colored_polygon(flag, faction_color if is_reachable else Color(0.45, 0.45, 0.45, 0.6))
+		draw_polyline(flag, Color("#2b1e13") if is_reachable else Color("#44403a"), 1.6, true)
 
 	# 4. 城名纸签与归属小签（LOD: zoom_level >= 0.88，小于此级别只显建筑剪影、归属光环与战旗）
 	if zoom_level >= 0.88:
 		var label := str(n.get("name", code))
+		if is_scouted:
+			label = "👁 " + label
 		var fsize := 12 if is_compact_screen else 15
 		var tw := 86.0 if is_compact_screen else 100.0
 		if font != null:
@@ -523,38 +542,64 @@ func _draw_node_over_art(n: Dictionary, pos: Vector2, faction_color: Color, is_s
 		var tag_h := 20.0 if is_compact_screen else 24.0
 		var tag_rect := Rect2(pos + Vector2(-tw / 2.0, tag_y_offset), Vector2(tw, tag_h))
 		draw_rect(tag_rect.grow(2), Color(0, 0, 0, 0.18))
-		draw_rect(tag_rect, CREAM)
-		draw_rect(tag_rect, faction_color, false, 2.0)
-		draw_rect(tag_rect.grow(-3), Color("#cfbfa6"), false, 1.0)
+		draw_rect(tag_rect, CREAM if is_reachable else Color("#d9d1c5"))
+		draw_rect(tag_rect, (faction_color if is_reachable else Color("#7a7066")), false, 2.0)
+		draw_rect(tag_rect.grow(-3), Color("#cfbfa6") if is_reachable else Color("#aba095"), false, 1.0)
 		if font != null:
-			draw_string(font, tag_rect.position + Vector2(0, tag_h - 5.0), label, HORIZONTAL_ALIGNMENT_CENTER, tag_rect.size.x, fsize, INK_DARK)
+			var txt_col := INK_DARK if is_reachable else Color("#55493d")
+			draw_string(font, tag_rect.position + Vector2(0, tag_h - 5.0), label, HORIZONTAL_ALIGNMENT_CENTER, tag_rect.size.x, fsize, txt_col)
 
 		# 5. 归属小签（纸签正下方）
 		if font != null:
 			var owner_name := "中立关隘"
-			if typeof(owner) == TYPE_DICTIONARY:
-				owner_name = str(owner.get("name", "中立")) + "阵营"
-			if is_start:
-				owner_name += " [大营]"
-			var sub_color := Color("#8c3a32") if is_mine else Color("#5f5242")
+			if not is_reachable:
+				owner_name = "[不与己方领土相邻]"
+			elif is_scouted:
+				owner_name = "👁 已侦察 · "
+				if typeof(owner) == TYPE_DICTIONARY:
+					owner_name += str(owner.get("name", "中立")) + "阵营"
+				else:
+					owner_name += "中立关隘"
+			else:
+				if typeof(owner) == TYPE_DICTIONARY:
+					owner_name = str(owner.get("name", "中立")) + "阵营"
+				if is_start:
+					owner_name += " [大营]"
+			var sub_color := Color("#706050") if not is_reachable else (Color("#8c3a32") if is_mine else Color("#5f5242"))
 			var owner_y_offset := 30.0 if is_compact_screen else 36.0
 			var owner_h := 16.0 if is_compact_screen else 18.0
-			var owner_w := 104.0 if is_compact_screen else 120.0
+			var owner_w := 118.0 if not is_reachable else (104.0 if is_compact_screen else 120.0)
 			var owner_rect := Rect2(pos + Vector2(-owner_w / 2.0, owner_y_offset), Vector2(owner_w, owner_h))
-			draw_rect(owner_rect, Color(CREAM.r, CREAM.g, CREAM.b, 0.90))
-			draw_rect(owner_rect, Color(faction_color.r, faction_color.g, faction_color.b, 0.45), false, 1.0)
+			draw_rect(owner_rect, Color(CREAM.r, CREAM.g, CREAM.b, 0.90 if is_reachable else 0.70))
+			draw_rect(owner_rect, Color(faction_color.r, faction_color.g, faction_color.b, 0.45 if is_reachable else 0.20), false, 1.0)
 			draw_string(font, owner_rect.position + Vector2(0, owner_h - 4.0), owner_name, HORIZONTAL_ALIGNMENT_CENTER, owner_rect.size.x, 10 if is_compact_screen else 12, sub_color)
 
 		# 5.1 民心小格 (morale / morale_cap)
 		if n.has("morale") and n.has("morale_cap"):
 			var m_y_offset := 48.0 if is_compact_screen else 56.0
 			_draw_morale_indicator(pos, int(n.get("morale", 0)), int(n.get("morale_cap", 2)), m_y_offset, is_compact_screen)
-
+	_draw_governor_badge(pos, -target_h - 6.0, n.get("governor", null), is_compact_screen)
 	# 6. 高缩放文化标签/诗词
 	if zoom_level >= 1.35:
 		_draw_cultural_tag(pos, code, 52.0 if is_compact_screen else 62.0)
 	if zoom_level >= 1.7:
 		_draw_cultural_verse(pos, code, 78.0 if is_compact_screen else 88.0)
+
+func _draw_governor_badge(pos: Vector2, top_offset_y: float, gov: Variant, is_compact: bool) -> void:
+	if font == null or typeof(gov) != TYPE_DICTIONARY:
+		return
+	var nick := str(gov.get("nickname", "")).strip_edges()
+	if nick == "":
+		return
+	var label := "⚑ 太守·%s" % nick.substr(0, 5)
+	var fsize := 10 if is_compact else 11
+	var tw := font.get_string_size(label, HORIZONTAL_ALIGNMENT_CENTER, -1, fsize).x + 14.0
+	var th := 16.0 if is_compact else 18.0
+	var rect := Rect2(pos + Vector2(-tw / 2.0, top_offset_y - th), Vector2(tw, th))
+	draw_rect(rect.grow(1.5), Color(0, 0, 0, 0.25))
+	draw_rect(rect, Color("#7c2419", 0.94))
+	draw_rect(rect, GOLD, false, 1.4)
+	draw_string(font, rect.position + Vector2(0, th - 4.0), label, HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, fsize, GOLD_LIGHT)
 
 func _draw_morale_indicator(pos: Vector2, morale: int, cap: int, y_offset: float, is_compact: bool) -> void:
 	if cap <= 0:

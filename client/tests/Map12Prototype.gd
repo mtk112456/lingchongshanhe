@@ -3,7 +3,7 @@ extends Control
 ## 《青竹文房·灵宠山河》12 城大地图 · 13 节点沙盘叠层原型主控制器
 ## 仅用于原型验证与验收截图生成，100% 独立，不替换 5 节点主工程 Slice.tscn
 
-const Map12MapScript = preload("res://tests/Map12Map.gd")
+const Map12MapScript = preload("res://Map12Map.gd")
 const FONT_PATH := "res://fonts/NotoSerifCJKsc-Regular.otf"
 
 const C_XUANZHI := Color("#f6efe2")

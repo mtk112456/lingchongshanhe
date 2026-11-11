@@ -120,6 +120,20 @@ func _process(_delta: float) -> void:
 	elif step == 8:
 		if frames > 25:
 			_capture("screenshot_tablet_s10_season.png")
+			scene._navigate_to("S11_SETTINGS")
+			step = 81
+			frames = 0
+	elif step == 81:
+		if frames > 25:
+			_capture("screenshot_tablet_s11_settings.png")
+			scene._navigate_to("S01_MAP")
+			scene._start_tutorial()
+			step = 82
+			frames = 0
+	elif step == 82:
+		if frames > 25:
+			_capture("screenshot_tablet_tutorial.png")
+			scene._complete_tutorial()
 
 			# 切换到手机横屏 720×514（彻底移除手机竖屏）
 			_set_viewport_size(720, 514)
@@ -203,6 +217,21 @@ func _process(_delta: float) -> void:
 	elif step == 18:
 		if frames > 30:
 			_capture("screenshot_phone_landscape_phase1_battle_replay.png")
+			scene.battle_replay_overlay.visible = false
+			scene._navigate_to("S11_SETTINGS")
+			step = 19
+			frames = 0
+	elif step == 19:
+		if frames > 25:
+			_capture("screenshot_phone_landscape_s11_settings.png")
+			scene._navigate_to("S01_MAP")
+			scene._start_tutorial()
+			step = 20
+			frames = 0
+	elif step == 20:
+		if frames > 25:
+			_capture("screenshot_phone_landscape_tutorial.png")
+			scene._complete_tutorial()
 			print("CAPTURE_SUITE COMPLETE (LANDSCAPE ONLY: TABLET 1400x1000 & PHONE 720x514)")
 			get_tree().quit(0)
 

@@ -5,6 +5,7 @@ extends Control
 
 const FONT_PATH := "res://fonts/NotoSerifCJKsc-Regular.otf"
 const SliceMapScript = preload("res://SliceMap.gd")
+const Map12MapScript = preload("res://Map12Map.gd")
 const ReplayMapScript = preload("res://ReplayMap.gd")
 
 # ---------------------------------------------------------------------------
@@ -48,6 +49,10 @@ const ERROR_CODE_TRANSLATION := {
 	"INVALID_ORDER": "军令文书有误，请核验出征路径与编队！",
 	"CANNOT_ATTACK_NON_NEIGHBOR": "关河阻隔！我方行营与目标城池尚未通衢，仅能向接壤城池进军！",
 	"TARGET_NOT_REACHABLE": "关河阻隔！尚未开辟通往该据点的行军驰道！",
+	"ESTATE_MAX_LEVEL": "该厢房已达 3 级满级，文治武功皆已登峰！",
+	"ESTATE_INSUFFICIENT_MERIT": "军功尚有不足，去沙盘出令或驻守友军即可攒取！",
+	"ESTATE_BAD_ROOM": "未识得此间厢房名目，请刷新后重试。",
+	"ESTATE_NO_HOME": "暂未定位所属小院城池，请稍后刷新山河图籍。",
 	"INVALID_CREDENTIALS": "名录不合，姓名或密匙有误，请核实后重新踏入山河！",
 	"UNAUTHORIZED": "修习凭据已失效，请重新登录学堂。",
 	"SESSION_EXPIRED": "山河会话已逾时，请重新登录学堂。",
@@ -80,6 +85,7 @@ var ui_kit_textures: Dictionary = {}
 # 基础核心与通信
 # ---------------------------------------------------------------------------
 var api: Node
+var preferred_game_code: String = ""
 var login_layer: Control
 var game_layer: Control
 var login_gear_btn: Button
@@ -105,6 +111,8 @@ var initial_pinch_dist: float = 0.0
 var initial_pinch_zoom: float = 1.0
 
 var legend_panel: PanelContainer
+var legend_hbox: HBoxContainer
+var legend_node_count: int = -1
 
 # S01 顶部 HUD & 导航栏
 var top_bar: Panel
@@ -117,8 +125,15 @@ var title_label: Label
 var faction_label: Label
 var combat_power_label: Label
 var resource_bar: HBoxContainer
+var res_food_lbl: Label
+var res_wood_lbl: Label
+var res_iron_lbl: Label
 var wallet_label: Label
 var countdown_label: Label
+var hud_mail_btn: Button
+var hud_settings_btn: Button
+var hud_logout_btn: Button
+var last_hand_signature: String = ""
 var rail_buttons: Array = []
 var dock_row: HBoxContainer
 
@@ -137,6 +152,11 @@ var tutorial_desc_lbl: Label
 var tutorial_action_btn: Button
 var tutorial_skip_btn: Button
 var tutorial_step: int = 0
+var tutorial_img: TextureRect
+
+# 迷雾与侦察数据
+var scouted_nodes: Array = []
+var reachable_targets: Array = []
 
 # S01 左右侧栏与底部导航
 var left_rail: Control
@@ -153,6 +173,7 @@ var city_avatar_icon: Label
 var city_title_label: Label
 var city_type_badge: Label
 var city_faction_badge: Label
+var city_governor_badge: Label
 var city_def_badge: Label
 var city_morale_badge: Label
 var city_garrison_label: Label
@@ -172,7 +193,14 @@ var current_battle_id: int = 0
 
 # Phase 1: 军团编成、每日战术手牌与 3x2 战斗回放
 const CompositionPanelScript = preload("res://CompositionPanel.gd")
+const EstateViewScript = preload("res://EstateView.gd")
 const BattleReplayScene = preload("res://BattleReplay.tscn")
+var estate_page: Control
+var estate_data: Dictionary = {}
+var merit_summary_data: Dictionary = {}
+var hand_preview_codes: Array = []
+var hand_preview_panel: PanelContainer
+var _merit_highlight_on_open: bool = false
 var composition_panel: PanelContainer
 var army_margin: MarginContainer
 var hand_cards_bar: PanelContainer
@@ -207,8 +235,15 @@ var report_page: Control
 var report_margin: MarginContainer
 var report_headline_panel: PanelContainer
 var report_headline_lbl: Label
+var report_seal_rect: TextureRect
 var report_time_lbl: Label
 var report_my_text: RichTextLabel
+var report_my_card: PanelContainer
+var report_estate_row: HBoxContainer
+var report_estate_lbl: Label
+var report_estate_btn: Button
+var last_report_turn_id := 0
+var last_report_payload: Dictionary = {}
 var report_world_text: RichTextLabel
 var report_summary_text: RichTextLabel
 var report_dialog: Control # 兼容旧代码引用
@@ -618,14 +653,18 @@ func _set_offline(is_offline: bool, msg: String = "⚠️ 烽烟信号微弱 · 
 	if is_offline:
 		var banner_w := minf(size.x - 20.0, 400.0)
 		offline_banner.size = Vector2(banner_w, 36.0)
-		var top_bar_h := 50.0 if size.y < 650.0 else (62.0 if size.x < 900.0 else 72.0)
+		var top_bar_h := (50.0 if size.y < 650.0 else (62.0 if size.x < 900.0 else 72.0)) if current_page == "S01_MAP" else 64.0
 		offline_banner.position = Vector2((size.x - banner_w) / 2.0, top_bar_h + 4.0)
 
 # ---------------------------------------------------------------------------
 # 页面路由与分层导航管理
 # ---------------------------------------------------------------------------
 
+const DOCK_PAGES := ["S01_MAP", "S02_CITY_HUB", "S03_ARMY", "S04_REPORT", "S05_REPLAY"]
+
 func _navigate_to(page_id: String) -> void:
+	if page_id != "S02_CITY_HUB" and estate_page != null:
+		estate_page.on_exited_page()
 	current_page = page_id
 	var target_node: Control = null
 	if page_id == "S01_MAP":
@@ -641,7 +680,7 @@ func _navigate_to(page_id: String) -> void:
 		map_shell.visible = false
 		if hand_cards_bar != null:
 			hand_cards_bar.visible = false
-		if city_drawer != null:
+		if is_drawer_open or (city_drawer != null and city_drawer.visible):
 			_toggle_city_drawer(false)
 		if order_confirm_overlay != null:
 			order_confirm_overlay.visible = false
@@ -650,13 +689,58 @@ func _navigate_to(page_id: String) -> void:
 			pages[k].visible = is_target
 			if is_target:
 				target_node = pages[k]
-			
+
+	if bottom_dock != null:
+		bottom_dock.visible = (page_id in DOCK_PAGES)
+
+	if page_id == "S02_CITY_HUB" and estate_page != null:
+		estate_page.set_estate_state(estate_data, me, merit_summary_data)
+		estate_page.on_entered_page()
+		if _merit_highlight_on_open:
+			_merit_highlight_on_open = false
+			estate_page.flash_merit_card()
+
 	_update_dock_highlight(page_id)
+	_layout_responsive()
 
 	if target_node != null and not AudioManager.is_reduced_motion:
 		target_node.modulate.a = 0.0
 		var tw := create_tween()
 		tw.tween_property(target_node, "modulate:a", 1.0, 0.20).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+func _open_estate_page(highlight_merit: bool = false) -> void:
+	_merit_highlight_on_open = highlight_merit
+	_navigate_to("S02_CITY_HUB")
+	if api != null and api.token != "":
+		api.get_estate(func(ok: bool, data: Dictionary, _err: Dictionary):
+			if not ok:
+				return
+			var es_val: Variant = data.get("estate", data)
+			if typeof(es_val) == TYPE_DICTIONARY and not es_val.is_empty():
+				estate_data = es_val.duplicate(true)
+				state["estate"] = estate_data
+				if estate_page != null:
+					estate_page.set_estate_state(estate_data, me, merit_summary_data)
+		)
+		api.get_merit(func(ok: bool, data: Dictionary, _err: Dictionary):
+			if ok and estate_page != null:
+				estate_page.set_merit_leaderboard(data)
+		)
+
+func _sync_dock_for_estate_drawer(hide_dock: bool) -> void:
+	if bottom_dock == null:
+		return
+	var is_compact_h := size.y < 650.0
+	var is_phone := (size.x < 900.0) or is_compact_h
+	var dock_h := 46.0 if is_compact_h else (56.0 if is_phone else 60.0)
+	var target_y := size.y if hide_dock else (size.y - dock_h)
+	if AudioManager.is_reduced_motion:
+		bottom_dock.position.y = target_y
+	else:
+		if is_instance_valid(drawer_tween) and drawer_tween.is_running():
+			drawer_tween.kill()
+		drawer_tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		drawer_tween.tween_property(bottom_dock, "position:y", target_y, 0.22)
 
 func _update_dock_highlight(page_id: String) -> void:
 	for k in dock_tab_buttons.keys():
@@ -738,19 +822,51 @@ func _layout_responsive() -> void:
 			gold_line.position = Vector2(0, top_h - 2.0)
 			
 		if hud_left_box != null:
-			var lw := 210.0 if is_phone else 300.0
-			hud_left_box.position = Vector2(8.0 if is_phone else 16.0, safe_top + (top_h - safe_top - 44.0) / 2.0)
+			var lw := 150.0 if is_compact_h else (195.0 if is_phone else 300.0)
+			hud_left_box.position = Vector2(6.0 if is_compact_h else (8.0 if is_phone else 16.0), safe_top + (top_h - safe_top - 44.0) / 2.0)
 			hud_left_box.size = Vector2(lw, 44.0)
+			hud_left_box.add_theme_constant_override("separation", 6 if is_compact_h else 10)
+		if top_avatar_box != null:
+			top_avatar_box.custom_minimum_size = Vector2(36, 36) if is_compact_h else Vector2(44, 44)
+		if title_label != null:
+			title_label.add_theme_font_size_override("font_size", 13 if is_compact_h else 15)
+		if faction_label != null:
+			faction_label.add_theme_font_size_override("font_size", 10 if is_compact_h else 12)
+		if combat_power_label != null:
+			combat_power_label.add_theme_font_size_override("font_size", 10 if is_compact_h else 12)
 			
 		if hud_right_box != null:
-			var rw := 190.0 if is_compact_h else (240.0 if is_phone else 420.0)
-			hud_right_box.position = Vector2(w - rw - (8.0 if is_phone else 16.0), safe_top + (top_h - safe_top - 44.0) / 2.0)
+			var rw := 208.0 if is_compact_h else (260.0 if is_phone else 420.0)
+			hud_right_box.position = Vector2(w - rw - (6.0 if is_compact_h else (8.0 if is_phone else 16.0)), safe_top + (top_h - safe_top - 44.0) / 2.0)
 			hud_right_box.size = Vector2(rw, 44.0)
+			hud_right_box.add_theme_constant_override("separation", 4 if is_compact_h else 8)
+		for hbtn in [hud_mail_btn, hud_settings_btn, hud_logout_btn]:
+			if hbtn != null:
+				hbtn.custom_minimum_size = Vector2(34, 44) if is_compact_h else Vector2(44, 44)
+		if countdown_label != null:
+			countdown_label.add_theme_font_size_override("font_size", 11 if is_compact_h else 13)
+			_on_countdown_tick()
 			
 		if resource_bar != null:
+			resource_bar.add_theme_constant_override("separation", 3 if is_compact_h else 8)
+			if res_food_lbl != null:
+				res_food_lbl.text = "🌾300" if is_compact_h else "🌾 粮 300"
+				res_food_lbl.add_theme_font_size_override("font_size", 11 if is_compact_h else 13)
+			if res_wood_lbl != null:
+				res_wood_lbl.text = "🌲240" if is_compact_h else "🌲 木 240"
+				res_wood_lbl.add_theme_font_size_override("font_size", 11 if is_compact_h else 13)
+			if res_iron_lbl != null:
+				res_iron_lbl.text = "⛏180" if is_compact_h else "⛏️ 铁 180"
+				res_iron_lbl.add_theme_font_size_override("font_size", 11 if is_compact_h else 13)
+			if wallet_label != null:
+				var cur_jade := int(wallet.get("jade", 0))
+				wallet_label.text = ("💎%d" % cur_jade) if is_compact_h else ("💎 文玉 %d" % cur_jade)
+				wallet_label.add_theme_font_size_override("font_size", 11 if is_compact_h else 13)
+			if recharge_btn != null:
+				recharge_btn.custom_minimum_size = Vector2(28, 36) if is_compact_h else Vector2(32, 32)
 			if is_compact_h and hud_left_box != null and hud_right_box != null:
-				var rx := hud_left_box.position.x + hud_left_box.size.x + 8.0
-				var rw_avail := maxf(hud_right_box.position.x - rx - 8.0, 80.0)
+				var rx := hud_left_box.position.x + hud_left_box.size.x + 4.0
+				var rw_avail := maxf(hud_right_box.position.x - rx - 4.0, 120.0)
 				resource_bar.position = Vector2(rx, safe_top + (top_h - safe_top - 40.0) / 2.0)
 				resource_bar.size = Vector2(rw_avail, 40.0)
 			elif is_phone and hud_left_box != null and hud_right_box != null:
@@ -793,16 +909,19 @@ func _layout_responsive() -> void:
 			leg_y = rail_top + 225.0
 		legend_panel.position = Vector2(8 if is_phone else 14, minf(leg_y, h - 85.0))
 
-	# 5. 底部导航栏（P0: 贴底通栏，半透明条）
+	# 5. 底部导航栏（上提至 game_layer，仅主导航页常驻，抽屉滑出时同步让位）
+	var is_dock_page := current_page in DOCK_PAGES
+	var dock_h := 46.0 if is_compact_h else (56.0 if is_phone else 60.0)
+	var estate_drawer_open := (estate_page != null and bool(estate_page.get("phone_drawer_open")))
 	if bottom_dock != null:
-		var dock_h := 46.0 if is_compact_h else (56.0 if is_phone else 60.0)
+		bottom_dock.visible = is_dock_page
 		bottom_dock.size = Vector2(w, dock_h)
-		# 抽屉滑出时 Dock 向下滑出屏幕让位；关闭时贴底
-		if city_drawer != null and city_drawer.visible:
+		if is_drawer_open or estate_drawer_open or not is_dock_page:
 			bottom_dock.position = Vector2(0, h)
 		else:
+			if is_instance_valid(drawer_tween) and drawer_tween.is_running():
+				drawer_tween.kill()
 			bottom_dock.position = Vector2(0, h - dock_h)
-			
 		if dock_row != null:
 			var max_dock_w := minf(w - 20.0, 720.0)
 			dock_row.position = Vector2((w - max_dock_w) / 2.0, (dock_h - (38.0 if is_compact_h else 44.0)) / 2.0)
@@ -812,11 +931,15 @@ func _layout_responsive() -> void:
 			var btn: Button = dock_tab_buttons[tab_id]
 			btn.add_theme_font_size_override("font_size", 12 if is_compact_h else 14)
 
+	if estate_page != null:
+		estate_page.layout_responsive(Vector2(w, h), dock_h)
+
 	# 5.1 每日战术手牌栏（悬浮贴于底部导航栏上方，抽屉打开时避让）
 	if hand_cards_bar != null:
-		var dock_h := 46.0 if is_compact_h else (56.0 if is_phone else 60.0)
 		var bar_w := minf(w - 16.0, 720.0)
-		var actual_bar_h := 28.0 if hand_bar_collapsed else (102.0 if is_compact_h else 108.0)
+		var target_bar_h := 28.0 if hand_bar_collapsed else (100.0 if is_compact_h else 104.0)
+		var min_bar_h := 28.0 if hand_bar_collapsed else hand_cards_bar.get_combined_minimum_size().y
+		var actual_bar_h := maxf(target_bar_h, min_bar_h)
 		hand_cards_bar.size = Vector2(bar_w, actual_bar_h)
 		if is_drawer_open:
 			hand_cards_bar.visible = false
@@ -862,16 +985,17 @@ func _layout_responsive() -> void:
 		order_confirm_modal.size = Vector2(mw, mh)
 		order_confirm_modal.position = Vector2((w - mw) / 2.0, (h - mh) / 2.0)
 
-	# 8. S04 / S05 / S06 全屏页自适应
+	# 8. S03 / S04 / S05 / S06 页面自适应（有 Dock 页面按 h - top - dock_h 留足底部空间）
+	var dock_bottom_pad := (dock_h + 6.0) if is_dock_page else 10.0
 	if report_margin != null:
 		report_margin.position = Vector2(16, 70)
-		report_margin.size = Vector2(w - 32, h - 80)
+		report_margin.size = Vector2(w - 32, h - 70.0 - dock_bottom_pad)
 		
 	if replay_margin != null:
 		replay_margin.position = Vector2(16, 70)
-		replay_margin.size = Vector2(w - 32, h - 80)
+		replay_margin.size = Vector2(w - 32, h - 70.0 - dock_bottom_pad)
 		if replay_map != null:
-			replay_map.custom_minimum_size = Vector2(0, 200 if is_compact_h else (400 if is_portrait else 340))
+			replay_map.custom_minimum_size = Vector2(0, 180 if is_compact_h else (400 if is_portrait else 320))
 			
 	if faction_margin != null:
 		faction_margin.position = Vector2(16, 70)
@@ -880,19 +1004,21 @@ func _layout_responsive() -> void:
 			faction_cards_container.columns = 1 if is_phone else 2
 
 	if army_margin != null:
-		army_margin.position = Vector2(10.0 if is_compact_h else 16.0, 50.0 if is_compact_h else 70.0)
-		army_margin.size = Vector2(w - (20.0 if is_compact_h else 32.0), h - (58.0 if is_compact_h else 80.0))
+		var army_top := 68.0 if is_compact_h else 70.0
+		army_margin.position = Vector2(10.0 if is_compact_h else 16.0, army_top)
+		army_margin.size = Vector2(w - (20.0 if is_compact_h else 32.0), h - army_top - dock_bottom_pad)
 
-	# 9. Toast 通知条
+	# 9. Toast 通知条（非地图页统一按 64px 顶栏基准定位，防止遮挡返回栏）
+	var active_header_h := top_h if current_page == "S01_MAP" else 64.0
 	if toast_panel != null:
 		var tw := minf(w - 40.0, 480.0)
 		toast_panel.size = Vector2(tw, 44.0)
-		toast_panel.position = Vector2((w - tw) / 2.0, top_h + 8.0)
+		toast_panel.position = Vector2((w - tw) / 2.0, active_header_h + 8.0)
 
 	if offline_banner != null and offline_banner.visible:
 		var banner_w := minf(w - 20.0, 400.0)
 		offline_banner.size = Vector2(banner_w, 36.0)
-		offline_banner.position = Vector2((w - banner_w) / 2.0, top_h + 4.0)
+		offline_banner.position = Vector2((w - banner_w) / 2.0, active_header_h + 4.0)
 
 	# 10. 更新城池触控热区位置
 	if map != null and not node_buttons.is_empty():
@@ -904,10 +1030,14 @@ func _layout_responsive() -> void:
 
 	# 11. S2 首次新手引导条自适应
 	if tutorial_box != null:
-		var tb_w := minf(w - 24.0, 560.0)
-		var tb_h := 62.0 if is_compact_h else 68.0
+		var tb_w := minf(w - 24.0, 620.0 if not is_phone else 560.0)
+		var tb_h := 66.0 if is_compact_h else 76.0
 		tutorial_box.size = Vector2(tb_w, tb_h)
-		tutorial_box.position = Vector2((w - tb_w) / 2.0, top_h + 58.0)
+		tutorial_box.position = Vector2((w - tb_w) / 2.0, top_h + (38.0 if is_compact_h else 58.0))
+		if tutorial_img != null:
+			var img_sz := Vector2(96, 54) if (is_phone or is_compact_h) else Vector2(116, 64)
+			tutorial_img.custom_minimum_size = img_sz
+			tutorial_img.size = img_sz
 
 # ---------------------------------------------------------------------------
 # MapView 沙盘视口交互控制器（双指缩放、拖拽平移、双击放大、视野聚焦、边界限制）
@@ -1177,7 +1307,10 @@ func _build_login() -> void:
 	v.add_child(login_foot_lbl)
 
 	login_gear_btn = Button.new()
-	login_gear_btn.text = "⚙️ 网络设置"
+	login_gear_btn.text = " 设置"
+	if ResourceLoader.exists("res://assets/art/ui/icon_settings.png"):
+		login_gear_btn.icon = load("res://assets/art/ui/icon_settings.png")
+		login_gear_btn.expand_icon = true
 	login_gear_btn.position = Vector2(size.x - 124, 18)
 	login_gear_btn.size = Vector2(110, 34)
 	login_gear_btn.add_theme_font_size_override("font_size", 12)
@@ -1261,7 +1394,10 @@ func _build_game() -> void:
 	map_world.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	map_view.add_child(map_world)
 
-	map = SliceMapScript.new()
+	var raw_nodes: Variant = state.get("map", {}).get("nodes", [])
+	var node_count: int = raw_nodes.size() if typeof(raw_nodes) == TYPE_ARRAY else 0
+	var map_script: GDScript = SliceMapScript if node_count <= 5 else Map12MapScript
+	map = map_script.new()
 	map.size = Vector2(1400, 1000)
 	map.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	map_world.add_child(map)
@@ -1269,14 +1405,10 @@ func _build_game() -> void:
 	_build_top_hud()
 	_build_side_rails()
 	_build_map_legend()
-	_build_bottom_dock()
 	_build_hand_cards_bar()
 	_build_city_drawer()
-	_build_order_confirm_modal()
-	_build_card_tooltip()
-	_build_battle_replay_overlay()
 
-	# 2. 独立全屏页面容器（S04 战报、S05 回放、S06-S13 等）
+	# 2. 独立全屏页面容器（S02-S13 等）与常驻上浮 BottomDock
 	pages_container = Control.new()
 	pages_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	game_layer.add_child(pages_container)
@@ -1284,6 +1416,10 @@ func _build_game() -> void:
 	_build_report_page()
 	_build_replay_page()
 	_build_all_placeholder_pages()
+	_build_bottom_dock()
+	_build_order_confirm_modal()
+	_build_card_tooltip()
+	_build_battle_replay_overlay()
 
 	# 3. 教师后台（抽屉保留以满足权限隔离和无头测试需求）
 	_build_teacher_deck()
@@ -1354,9 +1490,15 @@ func _build_top_hud() -> void:
 	resource_bar.add_theme_constant_override("separation", 8)
 	top_bar.add_child(resource_bar)
 
-	resource_bar.add_child(_create_res_pill("🌾 粮 300"))
-	resource_bar.add_child(_create_res_pill("🌲 木 240"))
-	resource_bar.add_child(_create_res_pill("⛏️ 铁 180"))
+	var p_food := _create_res_pill("🌾 粮 300")
+	res_food_lbl = p_food.get_child(0) as Label
+	resource_bar.add_child(p_food)
+	var p_wood := _create_res_pill("🌲 木 240")
+	res_wood_lbl = p_wood.get_child(0) as Label
+	resource_bar.add_child(p_wood)
+	var p_iron := _create_res_pill("⛏️ 铁 180")
+	res_iron_lbl = p_iron.get_child(0) as Label
+	resource_bar.add_child(p_iron)
 
 	var wallet_pill := PanelContainer.new()
 	wallet_pill.add_theme_stylebox_override("panel", _style(Color("#26323d"), GOLD, 1, 14, 6))
@@ -1384,23 +1526,28 @@ func _build_top_hud() -> void:
 	timer_pill.add_child(countdown_label)
 	hud_right_box.add_child(timer_pill)
 
-	var mail_btn := _button("✉️", Color("#33485c"), 44)
-	mail_btn.custom_minimum_size = Vector2(44, 44)
-	mail_btn.tooltip_text = "军府信件/活动"
-	mail_btn.pressed.connect(func(): _navigate_to("S12_MAIL"))
-	hud_right_box.add_child(mail_btn)
+	hud_mail_btn = _button("✉️", Color("#33485c"), 44)
+	hud_mail_btn.custom_minimum_size = Vector2(44, 44)
+	hud_mail_btn.tooltip_text = "军府信件/活动"
+	hud_mail_btn.pressed.connect(func(): _navigate_to("S12_MAIL"))
+	hud_right_box.add_child(hud_mail_btn)
 
-	var settings_btn := _button("⚙️", Color("#3d2f26"), 44)
-	settings_btn.custom_minimum_size = Vector2(44, 44)
-	settings_btn.tooltip_text = "学堂设置"
-	settings_btn.pressed.connect(func(): _navigate_to("S11_SETTINGS"))
-	hud_right_box.add_child(settings_btn)
+	hud_settings_btn = _button("", Color("#3d2f26"), 44)
+	hud_settings_btn.custom_minimum_size = Vector2(44, 44)
+	if ResourceLoader.exists("res://assets/art/ui/icon_settings.png"):
+		hud_settings_btn.icon = load("res://assets/art/ui/icon_settings.png")
+		hud_settings_btn.expand_icon = true
+	else:
+		hud_settings_btn.text = "⚙️"
+	hud_settings_btn.tooltip_text = "学堂设置"
+	hud_settings_btn.pressed.connect(func(): _navigate_to("S11_SETTINGS"))
+	hud_right_box.add_child(hud_settings_btn)
 
-	var logout_btn := _button("🚪", Color("#3d2f26"), 44)
-	logout_btn.custom_minimum_size = Vector2(44, 44)
-	logout_btn.tooltip_text = "归隐登出"
-	logout_btn.pressed.connect(_on_logout)
-	hud_right_box.add_child(logout_btn)
+	hud_logout_btn = _button("🚪", Color("#3d2f26"), 44)
+	hud_logout_btn.custom_minimum_size = Vector2(44, 44)
+	hud_logout_btn.tooltip_text = "归隐登出"
+	hud_logout_btn.pressed.connect(_on_logout)
+	hud_right_box.add_child(hud_logout_btn)
 
 # 构建 S01 左右贴边半透明悬浮图标列（P0: 去除实心黑底栏，改为贴边半透明印章）
 func _build_side_rails() -> void:
@@ -1448,28 +1595,46 @@ func _build_map_legend() -> void:
 	legend_panel.add_theme_stylebox_override("panel", _style(Color(0.12, 0.09, 0.07, 0.78), Color(0.81, 0.51, 0.15, 0.65), 1, 6, 4))
 	map_shell.add_child(legend_panel)
 
-	var hbox := HBoxContainer.new()
-	hbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	hbox.add_theme_constant_override("separation", 6)
-	legend_panel.add_child(hbox)
+	legend_hbox = HBoxContainer.new()
+	legend_hbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	legend_hbox.add_theme_constant_override("separation", 6)
+	legend_panel.add_child(legend_hbox)
+	_update_map_legend(5)
 
+func _update_map_legend(n_count: int) -> void:
+	if legend_hbox == null or legend_node_count == n_count:
+		return
+	legend_node_count = n_count
+	for ch in legend_hbox.get_children():
+		legend_hbox.remove_child(ch)
+		ch.queue_free()
 	var tag_title := _label("势态：", 11, CREAM)
 	tag_title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	hbox.add_child(tag_title)
-
-	var tags = [["🔴笔", CORAL], ["🔵墨", C_MOLAN], ["⚪中立", Color("#dfcaa7")]]
+	legend_hbox.add_child(tag_title)
+	var tags := [
+		["● 笔", Color("#eb6a58")],
+		["● 墨", Color("#649be8")],
+		["● 中立", Color("#dfcaa7")]
+	] if n_count <= 5 else [
+		["● 笔", Color("#eb6a58")],
+		["● 墨", Color("#649be8")],
+		["● 砚", Color("#47c79c")],
+		["● 纸", Color("#f2b646")],
+		["● 中立", Color("#dfcaa7")]
+	]
 	for t in tags:
 		var l := _label(str(t[0]), 11, t[1])
 		l.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		hbox.add_child(l)
+		legend_hbox.add_child(l)
 
 # 构建 S01 底部导航栏（P0: 贴底通栏半透明条）
 func _build_bottom_dock() -> void:
 	bottom_dock = Panel.new()
 	bottom_dock.position = Vector2(0, size.y - 60)
 	bottom_dock.size = Vector2(size.x, 60)
-	bottom_dock.add_theme_stylebox_override("panel", _style(Color(0.12, 0.09, 0.07, 0.85), Color(0.81, 0.51, 0.15, 0.7), 1, 0))
-	map_shell.add_child(bottom_dock)
+	bottom_dock.add_theme_stylebox_override("panel", _style(Color(0.12, 0.09, 0.07, 0.90), Color(0.81, 0.51, 0.15, 0.7), 1, 0))
+	bottom_dock.z_index = 5
+	game_layer.add_child(bottom_dock)
 
 	dock_row = HBoxContainer.new()
 	dock_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -1477,7 +1642,7 @@ func _build_bottom_dock() -> void:
 	bottom_dock.add_child(dock_row)
 
 	_add_dock_tab(dock_row, "S01_MAP", "🗺️", "沙盘地图", func(): _navigate_to("S01_MAP"))
-	_add_dock_tab(dock_row, "S02_CITY_HUB", "🏯", "主城行营", func(): _navigate_to("S02_CITY_HUB"))
+	_add_dock_tab(dock_row, "S02_CITY_HUB", "🏡", "文房小院", func(): _open_estate_page())
 	_add_dock_tab(dock_row, "S03_ARMY", "⚔️", "军团编组", func(): _navigate_to("S03_ARMY"))
 	_add_dock_tab(dock_row, "S04_REPORT", "📜", "战争日报", func(): _open_report())
 	_add_dock_tab(dock_row, "S05_REPLAY", "🔄", "战局复盘", func(): _open_replay())
@@ -1597,6 +1762,10 @@ func _build_city_drawer() -> void:
 
 	city_faction_badge = _label("归属：中立关塞", 12, Color("#d5c4a1"))
 	row_name.add_child(city_faction_badge)
+
+	city_governor_badge = _label("", 12, Color("#fae19c"))
+	city_governor_badge.visible = false
+	row_name.add_child(city_governor_badge)
 
 	# 右上角小“传”文脉按钮与关闭
 	var top_btns := HBoxContainer.new()
@@ -1932,19 +2101,34 @@ func _open_city_drawer(code: String) -> void:
 	var owner_color := Color("#7e7263")
 	if typeof(owner) == TYPE_DICTIONARY:
 		owner_name = str(owner.get("name", "中立")) + "阵营"
-		var code_str := str(owner.get("code", ""))
-		if code_str == "bamboo":
-			owner_color = BAMBOO
-		elif code_str == "ink":
-			owner_color = Color("#1e252b")
-		elif code_str == "crimson":
-			owner_color = CORAL
-		elif code_str == "azure":
-			owner_color = Color("#2a4e6c")
+		var col_hex := str(owner.get("color", ""))
+		if col_hex != "" and Color.html_is_valid(col_hex):
+			owner_color = Color.from_string(col_hex, NEUTRAL)
+		else:
+			var code_str := str(owner.get("code", ""))
+			if code_str == "bamboo" or code_str == "bi":
+				owner_color = C_ZHUSHA
+			elif code_str == "ink" or code_str == "mo":
+				owner_color = C_MOLAN
+			elif code_str == "crimson" or code_str == "yan" or code_str == "shuang":
+				owner_color = C_ZHUQING
+			elif code_str == "azure" or code_str == "zhi" or code_str == "dan":
+				owner_color = C_TENGHUANG
 		
-	city_title_label.text = "【%s】" % c_name
+	var is_scouted: bool = scouted_nodes.has(code)
+	if is_scouted:
+		city_title_label.text = "【%s】 👁 已侦察" % c_name
+	else:
+		city_title_label.text = "【%s】" % c_name
 	city_type_badge.text = "[主营大本营]" if is_start else "[要冲关隘]"
 	city_faction_badge.text = "归属：%s" % owner_name
+	if city_governor_badge != null:
+		var gov_val: Variant = n.get("governor", null)
+		if typeof(gov_val) == TYPE_DICTIONARY and str(gov_val.get("nickname", "")) != "":
+			city_governor_badge.text = "· ⚑ 太守：%s" % str(gov_val.get("nickname", ""))
+			city_governor_badge.visible = true
+		else:
+			city_governor_badge.visible = false
 	city_avatar_box.add_theme_stylebox_override("panel", _style(owner_color, GOLD, 1, 8))
 	
 	var def_points := int(n.get("defense", 3))
@@ -1961,10 +2145,12 @@ func _open_city_drawer(code: String) -> void:
 		city_morale_badge.visible = false
 	if is_mine:
 		city_garrison_label.text = "👥 驻防状态：我方据点 · 守备严整"
+	elif is_scouted:
+		city_garrison_label.text = "👁 已侦察 · 敌军虚实皆明 (可查阅哨探情报)"
 	elif typeof(owner) == TYPE_DICTIONARY and str(owner.get("code", "")) != "" and str(owner.get("code", "")) != "neutral":
-		city_garrison_label.text = "👥 驻防状态：敌方据点 · 戒备森严"
+		city_garrison_label.text = "👥 守军兵力：虚实未知 (未侦察·须出哨探)"
 	else:
-		city_garrison_label.text = "👥 驻防状态：中立关塞 · 虚席以待"
+		city_garrison_label.text = "👥 守军兵力：虚实未知 (中立关塞·须出哨探)"
 
 	var pts_bamboo := int(n.get("points_bamboo", 0))
 	if pts_bamboo == 0:
@@ -1993,7 +2179,12 @@ func _open_city_drawer(code: String) -> void:
 		"N2": lore = "耕读传家，稻浪千顷。看似无险，却是四路交汇的粮仓。"
 		"N3": lore = "琴心竹韵，烟雨楼台。高台可望十里，是侦察与奇袭的支点。"
 		"B_START": lore = "鸿雁关山，塞下秋声。墨点精据此为营，与云麓关遥遥相望。"
-		_: lore = "山河要冲，兵家必争。"
+		_:
+			var nd: Dictionary = map.node_by_code(code)
+			if nd.has("tag") and nd.has("verse"):
+				lore = "%s · %s" % [str(nd.get("tag", "")), str(nd.get("verse", ""))]
+			else:
+				lore = "山河要冲，兵家必争。"
 	city_lore_label.text = "城池小传：" + lore
 	if city_lore_dialog != null:
 		city_lore_dialog.title = "【%s】城池文脉与小传" % c_name
@@ -2017,7 +2208,7 @@ func _open_city_drawer(code: String) -> void:
 		city_action_advance_btn.disabled = not can_edit
 		city_action_defend_btn.disabled = true
 
-	# 长安王城与赛季阶段规则
+	# 长安王城、决战周与迷雾可达性判定（按规则优先级依次裁决）
 	if is_king and cur_week < 3:
 		city_action_advance_btn.disabled = true
 		city_action_advance_btn.text = "🔒 第 3 周开放"
@@ -2026,6 +2217,10 @@ func _open_city_drawer(code: String) -> void:
 		city_action_advance_btn.disabled = true
 		city_action_advance_btn.text = "🔒 决战周限长安及邻城"
 		city_action_advance_btn.tooltip_text = "第 4 周决战周已至，诸军仅可会战长安及邻近要冲！"
+	elif not is_mine and not reachable_targets.is_empty() and not reachable_targets.has(code):
+		city_action_advance_btn.disabled = true
+		city_action_advance_btn.text = "🔒 不与己方领土相邻"
+		city_action_advance_btn.tooltip_text = "该据点关河阻隔，尚未与我方领土接壤，无法下达进军令！"
 
 	if typeof(order) == TYPE_DICTIONARY:
 		var act := str(order.get("action", ""))
@@ -2047,17 +2242,18 @@ func _open_city_drawer(code: String) -> void:
 					has_scout_on_city = true
 					break
 
+	var can_see_intel: bool = has_scout_on_city or is_scouted
 	if city_action_scout_btn != null:
-		city_action_scout_btn.visible = has_scout_on_city
-		if has_scout_on_city:
-			city_action_scout_btn.text = "🔍 哨探军报"
+		city_action_scout_btn.visible = can_see_intel
+		if can_see_intel:
+			city_action_scout_btn.text = "👁 哨探情报 (已侦察)" if is_scouted else "🔍 哨探军报"
 			city_action_scout_btn.tooltip_text = "点击查阅哨探刺探到的该城敌军军情与集结动向"
 
 	if not has_scout_on_city and city_intel_dialog != null and city_intel_dialog.visible:
 		city_intel_dialog.hide()
 
 	_toggle_city_drawer(true)
-	_render_hand_cards()
+	_render_hand_cards(false)
 	_layout_responsive()
 	focus_city(code)
 	if tutorial_step == 1:
@@ -2140,6 +2336,7 @@ func _build_order_confirm_modal() -> void:
 	order_confirm_overlay.color = Color(0, 0, 0, 0.55)
 	order_confirm_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	order_confirm_overlay.visible = false
+	order_confirm_overlay.z_index = 20
 	game_layer.add_child(order_confirm_overlay)
 
 	order_confirm_modal = Panel.new()
@@ -2272,6 +2469,14 @@ func _build_report_page() -> void:
 	hl_row.add_theme_constant_override("separation", 10)
 	hl_v.add_child(hl_row)
 
+	report_seal_rect = TextureRect.new()
+	report_seal_rect.custom_minimum_size = Vector2(38, 38)
+	report_seal_rect.size = Vector2(38, 38)
+	report_seal_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	report_seal_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	report_seal_rect.visible = false
+	hl_row.add_child(report_seal_rect)
+
 	report_headline_lbl = _label("【决战头条】九州第一候推演决战备战中", 17, C_WOOD_DESK)
 	report_headline_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hl_row.add_child(report_headline_lbl)
@@ -2296,8 +2501,23 @@ func _build_report_page() -> void:
 	scroll.add_child(scroll_v)
 
 	# 板块 1：我的出征演武与积分变动
-	report_my_text = _build_report_card(scroll_v, "◆ 个人出征演武与学分变动")
+	report_my_text = _build_report_card(scroll_v, "◆ 个人战报")
 	report_text = report_my_text
+	var my_card_v := report_my_text.get_parent()
+	report_my_card = my_card_v.get_parent() as PanelContainer
+	var es_sep := HSeparator.new()
+	my_card_v.add_child(es_sep)
+	report_estate_row = HBoxContainer.new()
+	report_estate_row.add_theme_constant_override("separation", 10)
+	my_card_v.add_child(report_estate_row)
+	report_estate_lbl = _label("🏡 小院 +0 军功", 13, Color("#8c3a32"))
+	report_estate_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	report_estate_row.add_child(report_estate_lbl)
+	report_estate_btn = _button("去看看", C_ZHUQING, 32)
+	report_estate_btn.custom_minimum_size = Vector2(92, 32)
+	report_estate_btn.add_theme_font_size_override("font_size", 12)
+	report_estate_btn.pressed.connect(func(): _open_estate_page(true))
+	report_estate_row.add_child(report_estate_btn)
 
 	# 板块 2：全域城池易帜与据点布防
 	report_world_text = _build_report_card(scroll_v, "◆ 天下大势与关隘城池易帜")
@@ -2343,15 +2563,39 @@ func _open_report() -> void:
 
 	if target_turn_id > 0:
 		action_status.text = "正在展开第 %d 候战事日报..." % target_turn_id
-		api.request("GET", "/api/slice/report?turn_id=%d" % target_turn_id, null, func(ok: bool, data: Dictionary, err: Dictionary):
+		api.report(target_turn_id, func(ok: bool, data: Dictionary, _err: Dictionary):
 			if not ok:
 				_render_in_progress_report()
 				_navigate_to("S04_REPORT")
 				return
-			_show_report(data)
-			_navigate_to("S04_REPORT")
+			var finish_open := func(payload: Dictionary):
+				last_report_turn_id = target_turn_id
+				_show_report(payload)
+				_navigate_to("S04_REPORT")
+				if api.token != "":
+					api.get_merit(func(mok: bool, mdata: Dictionary, _merr: Dictionary):
+						if not mok or not is_instance_valid(self):
+							return
+						var m_me: Variant = mdata.get("me", {})
+						if typeof(m_me) == TYPE_DICTIONARY and not m_me.is_empty():
+							merit_summary_data = m_me.duplicate(true)
+							if current_page == "S04_REPORT" and last_report_turn_id == target_turn_id:
+								_show_report(last_report_payload)
+					)
+			var me_rep_v: Variant = data.get("me_report", null)
+			if typeof(me_rep_v) != TYPE_DICTIONARY or me_rep_v.is_empty():
+				api.get_me_report(target_turn_id, func(mok: bool, mdata: Dictionary, _merr: Dictionary):
+					var merged := data.duplicate(true)
+					if mok and not mdata.is_empty():
+						merged["me_report"] = mdata
+					finish_open.call(merged)
+				)
+			else:
+				finish_open.call(data)
 		)
 	else:
+		last_report_turn_id = 0
+		last_report_payload = {}
 		_render_in_progress_report()
 		_navigate_to("S04_REPORT")
 
@@ -2380,6 +2624,8 @@ func _render_in_progress_report() -> void:
 	var cur_score := int(wallet.get("score", 0))
 	var cur_wenyu := int(wallet.get("balance", 0))
 	my_b += "• 学堂积分余额：%d 分 | 军备文玉：%d 枚（兑换比率 1:10，每日限额 20 文玉）\n" % [cur_score, cur_wenyu]
+	if report_estate_lbl != null:
+		report_estate_lbl.text = "🏡 文房小院 · 当前可用 %d 军功" % int(estate_data.get("merit_balance", 0))
 	my_b += "• 奖励规则：每日参与军令推演可获积分奖励，战报结算后自动结算入库。"
 	report_my_text.text = my_b
 
@@ -2420,52 +2666,213 @@ func _render_in_progress_report() -> void:
 	s_b += "• 结算完成后自动生成详细战报与战局回放，请及时查阅战场复盘。"
 	report_summary_text.text = s_b
 
+const REPORT_ROLE_META := {
+	"vanguard": {"icon": "⚔", "label": "先锋"},
+	"support": {"icon": "🤝", "label": "支援"},
+	"garrison": {"icon": "🛡", "label": "驻守"},
+	"scout": {"icon": "🕵", "label": "侦察"},
+	"fire": {"icon": "🔥", "label": "火攻"},
+	"feint": {"icon": "🎭", "label": "疑兵"},
+	"reserve": {"icon": "🏕", "label": "未接战"},
+}
+
+const REPORT_BULLETIN_NAMES := {
+	"ram": "器械",
+	"grain": "粮草",
+	"scout": "斥候",
+}
+
+func _resolve_me_report(data: Dictionary) -> Dictionary:
+	var mr: Variant = data.get("me_report", null)
+	if typeof(mr) == TYPE_DICTIONARY and not mr.is_empty():
+		return mr
+	if data.has("orders") and data.has("merit"):
+		return data
+	return {}
+
+func _extract_turn_merit(data: Dictionary, my_rep: Variant, me_rep: Dictionary) -> int:
+	var mr_m: Variant = me_rep.get("merit", {})
+	if typeof(mr_m) == TYPE_DICTIONARY and mr_m.has("turn_total"):
+		return int(mr_m.get("turn_total", 0))
+	if typeof(my_rep) == TYPE_DICTIONARY:
+		var legacy_m: Variant = my_rep.get("merit", {})
+		if typeof(legacy_m) == TYPE_DICTIONARY and legacy_m.has("turn_total"):
+			return int(legacy_m.get("turn_total", 0))
+	var top_m: Variant = data.get("merit", {})
+	if typeof(top_m) == TYPE_DICTIONARY and top_m.has("turn_total"):
+		return int(top_m.get("turn_total", 0))
+	return 0
+
+func _resolve_report_week_rank(data: Dictionary, me_rep: Dictionary) -> int:
+	for src in [me_rep.get("merit", {}), data.get("merit", {}), merit_summary_data]:
+		if typeof(src) == TYPE_DICTIONARY:
+			var wr := int(src.get("week_rank", 0))
+			if wr > 0:
+				return wr
+			var rk := int(src.get("rank", 0))
+			if rk > 0:
+				return rk
+	return 0
+
+func _resolve_report_bulletin_code(data: Dictionary, me_rep: Dictionary, turn_id: int) -> String:
+	for raw in [me_rep.get("bulletin", null), data.get("bulletin", null)]:
+		if typeof(raw) == TYPE_STRING and str(raw) != "":
+			return str(raw)
+		if typeof(raw) == TYPE_DICTIONARY:
+			var cv: Variant = raw.get("choice", raw.get("code", ""))
+			if typeof(cv) == TYPE_STRING and str(cv) != "":
+				return str(cv)
+
+	var my_pid := int(me.get("id", me.get("player_id", 0)))
+	var rep_val: Variant = data.get("report", {})
+	if my_pid > 0 and typeof(rep_val) == TYPE_DICTIONARY:
+		var battles: Variant = rep_val.get("battles", [])
+		if typeof(battles) == TYPE_ARRAY:
+			for b in battles:
+				if typeof(b) != TYPE_DICTIONARY:
+					continue
+				for team_key in ["teams", "defender_teams"]:
+					var tlist: Variant = b.get(team_key, [])
+					if typeof(tlist) != TYPE_ARRAY:
+						continue
+					for tm in tlist:
+						if typeof(tm) != TYPE_DICTIONARY:
+							continue
+						if int(tm.get("player_id", 0)) == my_pid:
+							var bc: Variant = tm.get("bulletin", "")
+							if typeof(bc) == TYPE_STRING and str(bc) != "":
+								return str(bc)
+
+	var st_bul: Variant = state.get("bulletin", {})
+	if typeof(st_bul) == TYPE_DICTIONARY:
+		var st_tid := int(st_bul.get("turn_id", 0))
+		if turn_id <= 0 or st_tid <= 0 or st_tid == turn_id:
+			var sc: Variant = st_bul.get("choice", "")
+			if typeof(sc) == TYPE_STRING:
+				return str(sc)
+	return ""
+
+func _format_me_report_order(ord: Dictionary) -> Array[String]:
+	var role_code := str(ord.get("role", ""))
+	var rmeta: Dictionary = REPORT_ROLE_META.get(role_code, {
+		"icon": "📜",
+		"label": role_code if role_code != "" else "出征",
+	})
+	var node_label := str(ord.get("node_name", ord.get("node_code", "")))
+	var contrib_pct := int(round(float(ord.get("contribution", 0.0)) * 100.0))
+	var dmg := int(round(float(ord.get("damage", 0.0))))
+	var wall_dmg := int(round(float(ord.get("wall_damage", 0.0))))
+	var is_combat_role := role_code in ["vanguard", "garrison", "support", "fire"]
+
+	var out: Array[String] = []
+	var head := "%s [b]%s[/b] · %s" % [str(rmeta["icon"]), node_label, str(rmeta["label"])]
+	if contrib_pct > 0 or (is_combat_role and (dmg > 0 or wall_dmg > 0)):
+		head += " · 贡献 %d%%" % contrib_pct
+	out.append(head)
+	if dmg > 0 or wall_dmg > 0:
+		out.append("[color=#5a4a3a]   伤害 %d · 破墙 %d[/color]" % [dmg, wall_dmg])
+	return out
+
+func _build_me_report_bbcode(data: Dictionary, my_rep: Variant, me_rep: Dictionary, turn_id: int) -> String:
+	var raw_orders: Variant = me_rep.get("orders", [])
+	var mr_orders: Array = raw_orders if typeof(raw_orders) == TYPE_ARRAY else []
+	var lines: Array[String] = []
+	var hl_raw: Variant = me_rep.get("highlight", "")
+	var mr_highlight := str(hl_raw).strip_edges() if hl_raw != null else ""
+	if mr_highlight != "":
+		lines.append("[b]我今天下了 %d 令[/b]  [color=#8c3a32]%s[/color]" % [mr_orders.size(), mr_highlight])
+	else:
+		lines.append("[b]我今天下了 %d 令[/b]" % mr_orders.size())
+
+	if mr_orders.is_empty() and typeof(my_rep) == TYPE_DICTIONARY:
+		var legacy_desc := str(my_rep.get("readable_text", "")).strip_edges()
+		if legacy_desc != "":
+			lines.append(legacy_desc)
+
+	for ord_v in mr_orders:
+		if typeof(ord_v) == TYPE_DICTIONARY:
+			lines.append_array(_format_me_report_order(ord_v))
+
+	var bul_code := _resolve_report_bulletin_code(data, me_rep, turn_id)
+	var bul_name: String = str(REPORT_BULLETIN_NAMES.get(bul_code, ""))
+	lines.append("🌾 邸报：%s" % (bul_name if bul_name != "" else "未选择"))
+
+	var turn_merit := _extract_turn_merit(data, my_rep, me_rep)
+	var week_rank := _resolve_report_week_rank(data, me_rep)
+	if week_rank > 0:
+		lines.append("[b][color=#8c3a32]军功 +%d · 本周第 %d[/color][/b]" % [turn_merit, week_rank])
+	else:
+		lines.append("[b][color=#8c3a32]军功 +%d[/color][/b]" % turn_merit)
+	return "\n".join(lines)
+
 func _show_report(data: Dictionary) -> void:
+	last_report_payload = data
 	var turn: Dictionary = data.get("turn", {})
 	var rep: Dictionary = data.get("report", {})
 	var summary: Dictionary = rep.get("summary", {})
 	var changes: Array = rep.get("node_changes", [])
 	var my_rep: Variant = data.get("me", data.get("my_report", null))
+	var me_rep: Dictionary = _resolve_me_report(data)
 	var reports: Array = rep.get("reports", [])
 
-	report_headline_lbl.text = str(rep.get("headline", "【决战头条】第 %d 候推演决战圆满告捷" % int(turn.get("turn_no", 1))))
-	report_time_lbl.text = "推演决算时点：%s" % str(turn.get("settled_at", "—"))
+	var turn_id := int(turn.get("id", last_report_turn_id))
+	var turn_no := int(turn.get("turn_no", me_rep.get("turn_no", 1)))
 
-	var b_my := ""
-	if typeof(my_rep) == TYPE_DICTIONARY and not my_rep.is_empty():
-		var desc := str(my_rep.get("readable_text", ""))
-		if desc != "":
-			b_my += desc + "\n\n"
+	report_headline_lbl.text = str(rep.get("headline", "【决战头条】第 %d 候推演决战圆满告捷" % turn_no))
+	if report_seal_rect != null:
+		var has_won := str(turn.get("status", "")) == "victory" or turn_no > 1
+		var seal_path := "res://assets/art/ui/seal_victory.png" if has_won else "res://assets/art/ui/seal_defeat.png"
+		if ResourceLoader.exists(seal_path):
+			report_seal_rect.texture = load(seal_path)
+			report_seal_rect.visible = true
+	var settled_raw: Variant = turn.get("settled_at", me_rep.get("settled_at", "—"))
+	var settled_str := str(settled_raw) if (settled_raw != null and str(settled_raw) != "") else "—"
+	report_time_lbl.text = "推演决算时点：%s" % settled_str
+
+	if not me_rep.is_empty():
+		report_my_text.text = _build_me_report_bbcode(data, my_rep, me_rep, turn_id)
+	else:
+		var b_my := ""
+		if typeof(my_rep) == TYPE_DICTIONARY and not my_rep.is_empty():
+			var desc := str(my_rep.get("readable_text", ""))
+			if desc != "":
+				b_my += desc + "\n\n"
+			else:
+				b_my += "出征行动：%s\n决胜战果：%s\n\n" % [str(my_rep.get("description", "")), str(my_rep.get("result_summary", ""))]
 		else:
-			b_my += "出征行动：%s\n决胜战果：%s\n\n" % [str(my_rep.get("description", "")), str(my_rep.get("result_summary", ""))]
-	else:
-		b_my += "本候出征顺利，班宠灵力激荡，守备得力，立下军功！\n\n"
-	
-	var cur_score := int(wallet.get("score", 0))
-	var cur_wenyu := int(wallet.get("balance", 0))
-	b_my += "• 学堂积分余额：%d 分 | 军备文玉：%d 枚（兑换比率 1:10）\n" % [cur_score, cur_wenyu]
-	b_my += "• 本候推演奖励已入库，积分与文玉已按学堂规则完成发放。"
+			b_my += "本候出征顺利，班宠灵力激荡，守备得力，立下军功！\n\n"
 
-	# Phase 1.5 战报折页逐队解释：回答“我的牌干了什么”
-	var tactics_lines: Array[String] = []
-	var teams_data: Array = []
-	if typeof(my_rep) == TYPE_DICTIONARY and my_rep.has("teams"):
-		var raw_teams: Variant = my_rep.get("teams", [])
-		if typeof(raw_teams) == TYPE_ARRAY and not raw_teams.is_empty():
-			teams_data = raw_teams
+		var cur_score := int(wallet.get("score", 0))
+		var cur_wenyu := int(wallet.get("balance", 0))
+		b_my += "• 学堂积分余额：%d 分 | 军备文玉：%d 枚（兑换比率 1:10）\n" % [cur_score, cur_wenyu]
+		b_my += "• 本候推演奖励已入库，积分与文玉已按学堂规则完成发放。"
 
-	if teams_data.is_empty():
-		var card_orders_list: Array = state.get("card_orders", [])
-		tactics_lines = _parse_tactics_lines_from_orders(card_orders_list)
-	else:
-		tactics_lines = _parse_tactics_lines_from_teams(teams_data)
+		var tactics_lines: Array[String] = []
+		var teams_data: Array = []
+		if typeof(my_rep) == TYPE_DICTIONARY and my_rep.has("teams"):
+			var raw_teams: Variant = my_rep.get("teams", [])
+			if typeof(raw_teams) == TYPE_ARRAY and not raw_teams.is_empty():
+				teams_data = raw_teams
 
-	if not tactics_lines.is_empty():
-		b_my += "\n\n[b][color=#fae19c]◆ 诸队战术实效清单：[/color][/b]\n"
-		for line in tactics_lines:
-			b_my += line + "\n"
+		if teams_data.is_empty():
+			var card_orders_list: Array = state.get("card_orders", [])
+			tactics_lines = _parse_tactics_lines_from_orders(card_orders_list)
+		else:
+			tactics_lines = _parse_tactics_lines_from_teams(teams_data)
 
-	report_my_text.text = b_my
+		if not tactics_lines.is_empty():
+			b_my += "\n\n[b][color=#fae19c]◆ 诸队战术实效清单：[/color][/b]\n"
+			for line in tactics_lines:
+				b_my += line + "\n"
+
+		report_my_text.text = b_my
+
+	if report_estate_lbl != null:
+		var turn_m := _extract_turn_merit(data, my_rep, me_rep)
+		if turn_m > 0:
+			report_estate_lbl.text = "🏡 文房小院 +%d 军功" % turn_m
+		else:
+			report_estate_lbl.text = "🏡 文房小院 · 可用 %d 军功" % int(estate_data.get("merit_balance", 0))
 
 	var b_world := ""
 	if changes.is_empty():
@@ -2950,11 +3357,7 @@ func _refresh_faction_page() -> void:
 func _build_all_placeholder_pages() -> void:
 	_build_faction_page()
 
-	_build_placeholder_page("S02_CITY_HUB", "🏯 主城行营", "学子营盘与城关建设", "🏯", "建设中", [
-		{"title": "行营大帐", "desc": "校场演练、策定先锋军备，等级达到 5 级开放行军提速。"},
-		{"title": "文墨工房", "desc": "开辟笔墨纸砚文房工坊，每日产出工坊积分与守城文玉。"},
-		{"title": "粮饷辎重仓", "desc": "储备战备军粮，支撑大军远征要害关塞。"}
-	])
+	_build_estate_page()
 
 	_build_army_composition_page()
 
@@ -2994,6 +3397,52 @@ func _build_all_placeholder_pages() -> void:
 		{"title": "【兵法】查阅上一候战争日报", "desc": "研读胜负得失，指导军阵调整。奖励：文玉 +1。"},
 		{"title": "【修身】语文背诵任务打卡", "desc": "完成《短歌行》全文默写。奖励：出征士气增加 10 点。"}
 	])
+
+func _build_estate_page() -> void:
+	estate_page = EstateViewScript.new()
+	estate_page.name = "EstatePage"
+	estate_page.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+	estate_page.visible = false
+	estate_page.back_to_map_requested.connect(func(): _navigate_to("S01_MAP"))
+	estate_page.focus_city_requested.connect(func(city_code: String):
+		_navigate_to("S01_MAP")
+		reset_view()
+		_open_city_drawer(city_code)
+	)
+	estate_page.upgrade_requested.connect(func(room_code: String):
+		api.upgrade_estate(room_code, func(ok: bool, data: Dictionary, err: Dictionary):
+			if estate_page != null:
+				estate_page.on_upgrade_result(ok, data, err)
+			if not ok:
+				_show_error(err)
+				return
+			var new_es: Variant = data.get("estate", data if data.has("rooms") else null)
+			if typeof(new_es) == TYPE_DICTIONARY:
+				estate_data = new_es.duplicate(true)
+				state["estate"] = estate_data
+			var ur: Variant = data.get("upgraded", data.get("upgraded_room", {}))
+			var room_names := {"study": "书房", "drill": "练兵场", "tower": "望楼"}
+			var fallback_rname := str(room_names.get(room_code, room_code))
+			var rname := str(ur.get("name", fallback_rname)) if typeof(ur) == TYPE_DICTIONARY else fallback_rname
+
+			var rlvl := int(ur.get("level", 1)) if typeof(ur) == TYPE_DICTIONARY else 1
+			_toast("🏡 【%s】已修缮至 Lv.%d！" % [rname, rlvl])
+			_refresh_state()
+		)
+	)
+	estate_page.merit_rank_requested.connect(func():
+		api.get_merit(func(ok: bool, data: Dictionary, err: Dictionary):
+			if not ok:
+				_show_error(err)
+				return
+			if estate_page != null:
+				estate_page.set_merit_leaderboard(data)
+				estate_page.open_leaderboard()
+		)
+	)
+	estate_page.toast_requested.connect(func(msg: String, is_err: bool): _toast(msg, is_err))
+	pages["S02_CITY_HUB"] = estate_page
+	pages_container.add_child(estate_page)
 
 func _build_placeholder_page(page_id: String, title: String, subtitle: String, icon: String, badge: String, cards: Array) -> void:
 	var p := Control.new()
@@ -3161,11 +3610,18 @@ func _build_settings_page() -> void:
 
 	# 音乐音量
 	var bgm_row := HBoxContainer.new()
-	bgm_row.add_theme_constant_override("separation", 12)
+	bgm_row.add_theme_constant_override("separation", 10)
 	av.add_child(bgm_row)
 	var bgm_lbl := _label("背景音乐：", 14, Color("#554433"))
-	bgm_lbl.custom_minimum_size = Vector2(80, 0)
+	bgm_lbl.custom_minimum_size = Vector2(76, 0)
 	bgm_row.add_child(bgm_lbl)
+	var bgm_mute_btn := Button.new()
+	bgm_mute_btn.custom_minimum_size = Vector2(32, 32)
+	bgm_mute_btn.expand_icon = true
+	var music_on_tex := load("res://assets/art/ui/icon_music_on.png") if ResourceLoader.exists("res://assets/art/ui/icon_music_on.png") else null
+	var music_off_tex := load("res://assets/art/ui/icon_music_off.png") if ResourceLoader.exists("res://assets/art/ui/icon_music_off.png") else null
+	bgm_mute_btn.icon = music_on_tex if AudioManager.music_volume > 0.0 else music_off_tex
+	bgm_row.add_child(bgm_mute_btn)
 	var bgm_slider := HSlider.new()
 	bgm_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bgm_slider.min_value = 0.0
@@ -3178,15 +3634,35 @@ func _build_settings_page() -> void:
 	bgm_slider.value_changed.connect(func(val: float):
 		bgm_val_lbl.text = "%d%%" % int(val)
 		AudioManager.set_music_volume(val / 100.0)
+		bgm_mute_btn.icon = music_on_tex if val > 0.0 else music_off_tex
+	)
+	bgm_mute_btn.pressed.connect(func():
+		if AudioManager.music_volume > 0.0:
+			AudioManager.set_music_volume(0.0)
+			bgm_slider.value = 0.0
+			bgm_val_lbl.text = "0%"
+			bgm_mute_btn.icon = music_off_tex
+		else:
+			AudioManager.set_music_volume(0.8)
+			bgm_slider.value = 80.0
+			bgm_val_lbl.text = "80%"
+			bgm_mute_btn.icon = music_on_tex
 	)
 
 	# 音效音量
 	var sfx_row := HBoxContainer.new()
-	sfx_row.add_theme_constant_override("separation", 12)
+	sfx_row.add_theme_constant_override("separation", 10)
 	av.add_child(sfx_row)
 	var sfx_lbl := _label("交互音效：", 14, Color("#554433"))
-	sfx_lbl.custom_minimum_size = Vector2(80, 0)
+	sfx_lbl.custom_minimum_size = Vector2(76, 0)
 	sfx_row.add_child(sfx_lbl)
+	var sfx_mute_btn := Button.new()
+	sfx_mute_btn.custom_minimum_size = Vector2(32, 32)
+	sfx_mute_btn.expand_icon = true
+	var sound_on_tex := load("res://assets/art/ui/icon_sound_on.png") if ResourceLoader.exists("res://assets/art/ui/icon_sound_on.png") else null
+	var sound_off_tex := load("res://assets/art/ui/icon_sound_off.png") if ResourceLoader.exists("res://assets/art/ui/icon_sound_off.png") else null
+	sfx_mute_btn.icon = sound_on_tex if AudioManager.sfx_volume > 0.0 else sound_off_tex
+	sfx_row.add_child(sfx_mute_btn)
 	var sfx_slider := HSlider.new()
 	sfx_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sfx_slider.min_value = 0.0
@@ -3199,6 +3675,19 @@ func _build_settings_page() -> void:
 	sfx_slider.value_changed.connect(func(val: float):
 		sfx_val_lbl.text = "%d%%" % int(val)
 		AudioManager.set_sfx_volume(val / 100.0)
+		sfx_mute_btn.icon = sound_on_tex if val > 0.0 else sound_off_tex
+	)
+	sfx_mute_btn.pressed.connect(func():
+		if AudioManager.sfx_volume > 0.0:
+			AudioManager.set_sfx_volume(0.0)
+			sfx_slider.value = 0.0
+			sfx_val_lbl.text = "0%"
+			sfx_mute_btn.icon = sound_off_tex
+		else:
+			AudioManager.set_sfx_volume(0.8)
+			sfx_slider.value = 80.0
+			sfx_val_lbl.text = "80%"
+			sfx_mute_btn.icon = sound_on_tex
 	)
 	sfx_slider.drag_ended.connect(func(_changed: bool):
 		AudioManager.play_sfx("click")
@@ -3226,7 +3715,10 @@ func _build_settings_page() -> void:
 	motion_row.add_child(motion_lbl)
 
 	var motion_btn := Button.new()
-	motion_btn.custom_minimum_size = Vector2(110, 36)
+	motion_btn.custom_minimum_size = Vector2(118, 36)
+	if ResourceLoader.exists("res://assets/art/ui/icon_reduce_motion.png"):
+		motion_btn.icon = load("res://assets/art/ui/icon_reduce_motion.png")
+		motion_btn.expand_icon = true
 	motion_btn.text = "【已开启】" if AudioManager.is_reduced_motion else "【已关闭】"
 	motion_btn.add_theme_color_override("font_color", C_ZHUQING if AudioManager.is_reduced_motion else Color("#756858"))
 	motion_btn.pressed.connect(func():
@@ -3264,8 +3756,11 @@ func _build_settings_page() -> void:
 	t_desc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	t_row.add_child(t_desc)
 
-	var restart_tut_btn := _button("重温新手教学", C_MOLAN, 38)
-	restart_tut_btn.custom_minimum_size = Vector2(130, 38)
+	var restart_tut_btn := _button(" 重温新手教学", C_MOLAN, 38)
+	if ResourceLoader.exists("res://assets/art/ui/icon_tutorial.png"):
+		restart_tut_btn.icon = load("res://assets/art/ui/icon_tutorial.png")
+		restart_tut_btn.expand_icon = true
+	restart_tut_btn.custom_minimum_size = Vector2(146, 38)
 	restart_tut_btn.pressed.connect(func():
 		var cfg := ConfigFile.new()
 		cfg.set_value("tutorial", "completed", false)
@@ -3341,6 +3836,7 @@ func _init_tutorial_ui() -> void:
 	tutorial_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	tutorial_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	tutorial_overlay.visible = false
+	tutorial_overlay.z_index = 30
 	game_layer.add_child(tutorial_overlay)
 
 	tutorial_box = PanelContainer.new()
@@ -3353,7 +3849,15 @@ func _init_tutorial_ui() -> void:
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	tutorial_box.add_child(row)
 
-	var icon_badge := _label("🏮", 22, C_ZHUSHA)
+	tutorial_img = TextureRect.new()
+	tutorial_img.custom_minimum_size = Vector2(96, 54)
+	tutorial_img.size = Vector2(96, 54)
+	tutorial_img.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	tutorial_img.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	tutorial_img.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(tutorial_img)
+
+	var icon_badge := _label("🏮", 20, C_ZHUSHA)
 	icon_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(icon_badge)
 
@@ -3407,6 +3911,20 @@ func _check_and_trigger_tutorial() -> void:
 	if not _is_tutorial_completed():
 		_start_tutorial()
 
+func _update_tutorial_illustration(step: int) -> void:
+	if tutorial_img == null:
+		return
+	var path := ""
+	match step:
+		1: path = "res://assets/art/ui/tutorial_01_choose_city.png"
+		2: path = "res://assets/art/ui/tutorial_02_choose_card.png"
+		3: path = "res://assets/art/ui/tutorial_03_confirm.png"
+	if path != "" and ResourceLoader.exists(path):
+		tutorial_img.texture = load(path)
+		tutorial_img.visible = true
+	else:
+		tutorial_img.visible = false
+
 func _start_tutorial() -> void:
 	if tutorial_overlay == null:
 		return
@@ -3416,6 +3934,7 @@ func _start_tutorial() -> void:
 	tutorial_skip_btn.visible = true
 	tutorial_title_lbl.text = "【第一步 · 踏勘城池】"
 	tutorial_desc_lbl.text = "轻触沙盘上的任意一座城池（如松风渡、听雨台），开启前线行营。"
+	_update_tutorial_illustration(1)
 	_layout_responsive()
 	if not AudioManager.is_reduced_motion:
 		tutorial_box.modulate.a = 0.0
@@ -3426,6 +3945,7 @@ func _advance_tutorial(next_step: int) -> void:
 	if tutorial_step <= 0 or tutorial_overlay == null or not tutorial_overlay.visible:
 		return
 	tutorial_step = next_step
+	_update_tutorial_illustration(next_step)
 	if tutorial_step == 2:
 		tutorial_title_lbl.text = "【第二步 · 谋定战策】"
 		tutorial_desc_lbl.text = "已锁定据点！在下方【每日战策】手牌中，轻触一张可用战策签发出令。"
@@ -3567,6 +4087,8 @@ func _sync_hand_and_orders(data: Dictionary) -> void:
 	var hand_info: Dictionary = hand_val if typeof(hand_val) == TYPE_DICTIONARY else {}
 	var cards_val: Variant = hand_info.get("cards", [])
 	var cards: Array = cards_val if typeof(cards_val) == TYPE_ARRAY else []
+	var prev_val: Variant = hand_info.get("preview", [])
+	hand_preview_codes = prev_val if typeof(prev_val) == TYPE_ARRAY else []
 	hand_redraw_used = bool(hand_info.get("redraw_used", false))
 
 	if hand_redraw_btn:
@@ -3598,7 +4120,13 @@ func _sync_hand_and_orders(data: Dictionary) -> void:
 				cmeta["assigned_team"] = -1
 				cmeta["is_discarded"] = is_full_slots
 			hand_cards_data.append(cmeta)
-		_render_hand_cards()
+		var prev_parts := PackedStringArray()
+		for pc in hand_preview_codes:
+			prev_parts.append(str(pc))
+		var sig := "|".join(cards) + "::" + "|".join(prev_parts)
+		var should_anim := (sig != last_hand_signature)
+		last_hand_signature = sig
+		_render_hand_cards(should_anim)
 
 	# 同步当前打开城池的哨探情报入口
 	if is_drawer_open and selected_code != "" and city_action_scout_btn != null:
@@ -3630,7 +4158,7 @@ func _build_hand_cards_bar() -> void:
 	
 	var root_vb := VBoxContainer.new()
 	root_vb.name = "RootVBox"
-	root_vb.add_theme_constant_override("separation", 3)
+	root_vb.add_theme_constant_override("separation", 2)
 	hand_cards_bar.add_child(root_vb)
 
 	var top_hb := HBoxContainer.new()
@@ -3655,17 +4183,19 @@ func _build_hand_cards_bar() -> void:
 
 	hand_redraw_btn = Button.new()
 	hand_redraw_btn.text = "🔄 重抽(1/1)"
-	hand_redraw_btn.custom_minimum_size = Vector2(74, 22)
+	hand_redraw_btn.custom_minimum_size = Vector2(72, 20)
 	hand_redraw_btn.add_theme_font_size_override("font_size", 10)
 	hand_redraw_btn.add_theme_color_override("font_color", Color("#ffffff"))
-	hand_redraw_btn.add_theme_stylebox_override("normal", _style(C_ZHUSHA.darkened(0.2), C_BORDER_GOLD, 1, 4, 2))
+	hand_redraw_btn.add_theme_stylebox_override("normal", _style(C_ZHUSHA.darkened(0.2), C_BORDER_GOLD, 1, 4, 1))
+	hand_redraw_btn.add_theme_stylebox_override("disabled", _style(Color("#2a221c"), Color("#5a4d3f"), 1, 4, 1))
 	hand_redraw_btn.pressed.connect(_on_hand_redraw_pressed)
 	top_hb.add_child(hand_redraw_btn)
 
 	hand_collapse_btn = Button.new()
 	hand_collapse_btn.text = "▼ 折叠"
-	hand_collapse_btn.custom_minimum_size = Vector2(46, 22)
+	hand_collapse_btn.custom_minimum_size = Vector2(46, 20)
 	hand_collapse_btn.add_theme_font_size_override("font_size", 10)
+	hand_collapse_btn.add_theme_stylebox_override("normal", _style(Color("#241b15"), Color("#6b5747"), 1, 4, 1))
 	hand_collapse_btn.pressed.connect(_toggle_hand_bar_collapse)
 	top_hb.add_child(hand_collapse_btn)
 
@@ -3678,10 +4208,11 @@ func _build_hand_cards_bar() -> void:
 	_init_hand_cards_data()
 	_render_hand_cards()
 
-func _render_hand_cards() -> void:
+func _render_hand_cards(animate: bool = false) -> void:
 	if not hand_cards_container:
 		return
 	for c in hand_cards_container.get_children():
+		hand_cards_container.remove_child(c)
 		c.queue_free()
 	hand_card_views.clear()
 
@@ -3691,34 +4222,83 @@ func _render_hand_cards() -> void:
 		hand_cards_container.add_child(card)
 		hand_card_views.append(card)
 
-		if not AudioManager.is_reduced_motion:
+		if animate and not AudioManager.is_reduced_motion:
 			card.modulate.a = 0.0
-			card.position.y += 16.0
-			var tw := create_tween().set_parallel(true)
-			tw.tween_interval(i * 0.05)
-			tw.chain().tween_property(card, "modulate:a", 1.0, 0.20)
-			tw.parallel().tween_property(card, "position:y", 0.0, 0.20).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+			var tw := create_tween()
+			tw.tween_interval(i * 0.03)
+			tw.tween_property(card, "modulate:a", 1.0, 0.16)
+
+	hand_preview_panel = null
+	if not hand_preview_codes.is_empty():
+		hand_preview_panel = _create_hand_preview_slot(hand_preview_codes)
+		hand_cards_container.add_child(hand_preview_panel)
+
+func _create_hand_preview_slot(preview_codes: Array) -> PanelContainer:
+	var slot := PanelContainer.new()
+	slot.name = "HandPreviewSlot"
+	slot.custom_minimum_size = Vector2(108 if preview_codes.size() >= 3 else 96, 68)
+	slot.add_theme_stylebox_override("panel", _style(Color("#1d2838"), Color("#78a6d1"), 1, 6, 4))
+	var pv := VBoxContainer.new()
+	pv.add_theme_constant_override("separation", 2)
+	slot.add_child(pv)
+
+	var top_l := Label.new()
+	top_l.text = "📖 明日预读"
+	top_l.add_theme_font_size_override("font_size", 10)
+	top_l.add_theme_color_override("font_color", Color("#a9d6e5"))
+	pv.add_child(top_l)
+
+	var names := PackedStringArray()
+	for c in preview_codes:
+		var meta := _get_tactical_card_meta(str(c))
+		names.append(str(meta.get("name", str(c))))
+	var list_l := Label.new()
+	list_l.text = " / ".join(names)
+	list_l.add_theme_font_size_override("font_size", 10 if preview_codes.size() >= 3 else 11)
+	list_l.add_theme_color_override("font_color", Color("#f6efe2"))
+	list_l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	list_l.clip_text = true
+	list_l.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	pv.add_child(list_l)
+
+	var tag_l := Label.new()
+	tag_l.text = "只看不出"
+	tag_l.add_theme_font_size_override("font_size", 9)
+	tag_l.add_theme_color_override("font_color", Color("#93b4d1"))
+	pv.add_child(tag_l)
+
+	var joined := "、".join(names)
+	slot.tooltip_text = "【书房特权】明日抽牌必定包含：%s（今日仅预览，不占位不耗手牌）" % joined
+	slot.gui_input.connect(func(ev: InputEvent):
+		if (ev is InputEventMouseButton and ev.pressed) or (ev is InputEventScreenTouch and ev.pressed):
+			_toast("📖 明日预读手牌：%s（书房特权，明日入手）" % joined)
+	)
+	return slot
 
 func _create_single_hand_card(idx: int, cdata: Dictionary) -> PanelContainer:
 	var card := PanelContainer.new()
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	card.custom_minimum_size = Vector2(0, 72)
+	card.custom_minimum_size = Vector2(0, 68)
 	
 	var c_type := str(cdata.get("type", "advance"))
 	var c_code := str(cdata.get("code", ""))
 	var is_played := bool(cdata.get("is_played", false))
 	var is_discarded := bool(cdata.get("is_discarded", false))
 	
-	# 四态去色高反差视觉设计（明亮宣纸 [可出]、暗金古铜 [已出]、幽暗纯黑 [弃用]）
+	# 四态去色高反差视觉设计（裁切九宫格 12px 透明空白外缘，严格适配 ~70px 紧凑手牌栏）
 	var patch_path := "res://assets/art/ui/card_frame_ninepatch.png"
 	if ResourceLoader.exists(patch_path):
 		var nine_sb := StyleBoxTexture.new()
 		nine_sb.texture = load(patch_path)
-		nine_sb.texture_margin_left = 28
-		nine_sb.texture_margin_top = 28
-		nine_sb.texture_margin_right = 28
-		nine_sb.texture_margin_bottom = 28
-		nine_sb.set_content_margin_all(5)
+		nine_sb.region_rect = Rect2(13, 12, 231, 360)
+		nine_sb.texture_margin_left = 14
+		nine_sb.texture_margin_top = 14
+		nine_sb.texture_margin_right = 14
+		nine_sb.texture_margin_bottom = 14
+		nine_sb.content_margin_left = 8
+		nine_sb.content_margin_right = 8
+		nine_sb.content_margin_top = 7
+		nine_sb.content_margin_bottom = 5
 		if is_played:
 			nine_sb.modulate_color = Color("#756858") # 已出：暗金古铜
 		elif is_discarded:
@@ -3735,10 +4315,10 @@ func _create_single_hand_card(idx: int, cdata: Dictionary) -> PanelContainer:
 			card.add_theme_stylebox_override("panel", _style(Color("#fffef6"), Color("#c4a77d"), 1, 6, 4))
 
 	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 2)
+	vb.add_theme_constant_override("separation", 1)
 	card.add_child(vb)
 
-	# 顶部标题栏（卡名 + 状态徽标 + 战术图标）
+	# 顶部标题栏（战术图标 + 卡名 + 状态徽标 + 详情按钮）
 	var h_title := HBoxContainer.new()
 	h_title.add_theme_constant_override("separation", 3)
 	vb.add_child(h_title)
@@ -3748,7 +4328,8 @@ func _create_single_hand_card(idx: int, cdata: Dictionary) -> PanelContainer:
 	if ResourceLoader.exists(tac_path):
 		var tac_icon := TextureRect.new()
 		tac_icon.texture = load(tac_path)
-		tac_icon.custom_minimum_size = Vector2(16, 16)
+		tac_icon.custom_minimum_size = Vector2(15, 15)
+		tac_icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		tac_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		tac_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		h_title.add_child(tac_icon)
@@ -3756,6 +4337,9 @@ func _create_single_hand_card(idx: int, cdata: Dictionary) -> PanelContainer:
 	var name_l := Label.new()
 	var fallback_prefix := "" if ResourceLoader.exists(tac_path) else str(cdata.get("icon", "")) + " "
 	name_l.text = "%s%s" % [fallback_prefix, cdata.get("name", "")]
+	name_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_l.clip_text = true
+	name_l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	if is_played:
 		name_l.add_theme_color_override("font_color", Color("#ffd700"))
 	elif is_discarded:
@@ -3775,24 +4359,26 @@ func _create_single_hand_card(idx: int, cdata: Dictionary) -> PanelContainer:
 	else:
 		state_badge.text = "[可出]"
 		state_badge.add_theme_color_override("font_color", Color("#276f57"))
-	state_badge.add_theme_font_size_override("font_size", 12)
+	state_badge.add_theme_font_size_override("font_size", 11)
 	h_title.add_child(state_badge)
 
-	var sp := Control.new()
-	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	h_title.add_child(sp)
-
 	var info_btn := Button.new()
-	info_btn.text = "ℹ"
-	info_btn.flat = true
-	info_btn.custom_minimum_size = Vector2(18, 16)
-	info_btn.add_theme_font_size_override("font_size", 12)
+	info_btn.text = "i"
+	info_btn.custom_minimum_size = Vector2(16, 16)
+	info_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	info_btn.add_theme_font_size_override("font_size", 10)
+	info_btn.add_theme_color_override("font_color", Color("#ffffff"))
+	info_btn.add_theme_stylebox_override("normal", _style(Color("#3273dc"), Color("#70a9ff"), 1, 3, 0))
+	info_btn.add_theme_stylebox_override("hover", _style(Color("#4788ef"), Color("#99c2ff"), 1, 3, 0))
+	info_btn.add_theme_stylebox_override("pressed", _style(Color("#255bb5"), Color("#70a9ff"), 1, 3, 0))
 	info_btn.pressed.connect(func(): _show_card_tooltip(cdata, card.global_position))
 	h_title.add_child(info_btn)
 
-	# 中部去向 / 战术简效（字号统一 >=12px）
+	# 中部去向 / 战术简效（单行省略，绝不撑高）
 	var desc_l := Label.new()
-	desc_l.add_theme_font_size_override("font_size", 12)
+	desc_l.add_theme_font_size_override("font_size", 11)
+	desc_l.clip_text = true
+	desc_l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	if is_played:
 		var order: Dictionary = cdata.get("order", {})
 		var tgt: String = str(order.get("target_node_code", ""))
@@ -3814,21 +4400,21 @@ func _create_single_hand_card(idx: int, cdata: Dictionary) -> PanelContainer:
 		desc_l.add_theme_color_override("font_color", Color("#42352a"))
 	vb.add_child(desc_l)
 
-	# 底部主要操作按钮（字号统一 >=12px，高度 26px）
+	# 底部主要操作按钮（高度 22px 契合紧凑卡面）
 	var assign_btn := Button.new()
-	assign_btn.custom_minimum_size = Vector2(0, 26)
-	assign_btn.add_theme_font_size_override("font_size", 12)
+	assign_btn.custom_minimum_size = Vector2(0, 22)
+	assign_btn.add_theme_font_size_override("font_size", 11)
 	
 	if is_played:
 		assign_btn.text = "↩️ 撤回"
 		assign_btn.add_theme_color_override("font_color", Color("#fae19c"))
-		assign_btn.add_theme_stylebox_override("normal", _style(Color("#3f3328"), Color("#dfb557"), 1, 4, 2))
+		assign_btn.add_theme_stylebox_override("normal", _style(Color("#3f3328"), Color("#dfb557"), 1, 4, 1))
 		assign_btn.tooltip_text = "点击撤回该队将令，重新谋划出征"
 		assign_btn.disabled = false
 	elif is_discarded:
 		assign_btn.text = "今日不用"
 		assign_btn.add_theme_color_override("font_color", Color("#e0ccb2"))
-		assign_btn.add_theme_stylebox_override("disabled", _style(Color("#4a3a2e"), Color("#6b5747"), 1, 4, 2))
+		assign_btn.add_theme_stylebox_override("disabled", _style(Color("#4a3a2e"), Color("#6b5747"), 1, 4, 1))
 		assign_btn.tooltip_text = "今日 3 队将令已满，此牌今日不用。撤回任一已出牌后可恢复使用！"
 		assign_btn.disabled = true
 	else:
@@ -3836,12 +4422,12 @@ func _create_single_hand_card(idx: int, cdata: Dictionary) -> PanelContainer:
 			var tgt_name: String = str(map.node_by_code(selected_code).get("name", selected_code))
 			assign_btn.text = "出令➔%s" % tgt_name
 			assign_btn.add_theme_color_override("font_color", Color("#fae19c"))
-			assign_btn.add_theme_stylebox_override("normal", _style(Color("#38271d"), C_BORDER_GOLD, 1, 4, 2))
+			assign_btn.add_theme_stylebox_override("normal", _style(Color("#38271d"), C_BORDER_GOLD, 1, 4, 1))
 			assign_btn.tooltip_text = "点击下达将令向【%s】出征" % tgt_name
 		else:
 			assign_btn.text = "点城出令"
 			assign_btn.add_theme_color_override("font_color", Color("#a89684"))
-			assign_btn.add_theme_stylebox_override("normal", _style(Color("#2b211a"), Color("#5a4838"), 1, 4, 2))
+			assign_btn.add_theme_stylebox_override("normal", _style(Color("#2b211a"), Color("#5a4838"), 1, 4, 1))
 			assign_btn.tooltip_text = "请先在地图上点击选择目标城池，再点击出令"
 		assign_btn.disabled = false
 
@@ -3880,6 +4466,28 @@ func _on_hand_card_clicked(idx: int) -> void:
 			_shake_node(hand_card_views[idx])
 		AudioManager.play_sfx("click")
 		_toast("请先在地图上点击选择目标据点，再点击手牌出令！", true)
+		return
+
+	var n_target: Dictionary = map.node_by_code(target_code)
+	var cur_w := _current_week()
+	if _is_king_node(target_code, n_target) and cur_w < 3:
+		_toast("中央帝都长安第 3 周开放，前两周专注于开拓四野！", true)
+		if idx >= 0 and idx < hand_card_views.size():
+			_shake_node(hand_card_views[idx])
+		AudioManager.play_sfx("click")
+		return
+	if cur_w >= 4 and not _is_changan_or_neighbor(target_code):
+		_toast("第 4 周决战周已至，仅可向长安及邻近要冲出征！", true)
+		if idx >= 0 and idx < hand_card_views.size():
+			_shake_node(hand_card_views[idx])
+		AudioManager.play_sfx("click")
+		return
+	var is_mine_tgt := bool(n_target.get("is_my_faction", false))
+	if not is_mine_tgt and not reachable_targets.is_empty() and not reachable_targets.has(target_code):
+		_toast("【%s】关河阻隔，不与己方领土相邻，无法出征！" % str(n_target.get("name", target_code)), true)
+		if idx >= 0 and idx < hand_card_views.size():
+			_shake_node(hand_card_views[idx])
+		AudioManager.play_sfx("click")
 		return
 
 	# 找到尚未占用的槽位 (0, 1, 2)
@@ -4316,9 +4924,11 @@ func _on_login(as_teacher: bool) -> void:
 	var path := "/api/auth/admin-login" if as_teacher else "/api/auth/login"
 	var body: Dictionary
 	if as_teacher:
-		body = {"username": name_val, "password": pass_val, "game_code": "SLICE_A"}
+		body = {"username": name_val, "password": pass_val}
 	else:
-		body = {"name": name_val, "password": pass_val, "game_code": "SLICE_A"}
+		body = {"name": name_val, "password": pass_val}
+	if preferred_game_code != "":
+		body["game_code"] = preferred_game_code
 
 	api_epoch += 1
 	var current_epoch := api_epoch
@@ -4413,8 +5023,32 @@ func _render_state(data: Dictionary) -> void:
 	me = data.get("me", {})
 	var raw_wallet: Variant = data.get("wallet", {})
 	wallet = raw_wallet if typeof(raw_wallet) == TYPE_DICTIONARY else {}
+	var raw_scouted: Variant = data.get("scouted_nodes", [])
+	scouted_nodes = raw_scouted if typeof(raw_scouted) == TYPE_ARRAY else []
+	var raw_reachable: Variant = data.get("reachable_targets", [])
+	reachable_targets = raw_reachable if typeof(raw_reachable) == TYPE_ARRAY else []
+
 	var map_data: Dictionary = data.get("map", {})
+	var nodes_arr: Array = map_data.get("nodes", [])
+	var n_count := nodes_arr.size()
+	var target_script = SliceMapScript if n_count <= 5 else Map12MapScript
+	if map == null or map.get_script() != target_script:
+		var old_size := map.size if map != null else Vector2(1400, 1000)
+		if map != null and is_instance_valid(map):
+			map.queue_free()
+		map = target_script.new()
+		map.size = old_size
+		map.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		if n_count > 5:
+			map.set("hud_safe_mode", true)
+		map_world.add_child(map)
+		map_world.move_child(map, 0)
+
 	map.setup(map_data)
+	if map != null and map.has_method("set_fog_data"):
+		map.set_fog_data(scouted_nodes, reachable_targets)
+	_update_map_legend(n_count)
+	_layout_responsive()
 
 	var turn: Dictionary = data.get("turn", {})
 	countdown_seconds = int(turn.get("seconds_remaining", 0))
@@ -4423,7 +5057,8 @@ func _render_state(data: Dictionary) -> void:
 	var role := str(me.get("role", "player"))
 	var student_name := str(me.get("name", "学子"))
 	title_label.text = student_name
-	wallet_label.text = "💎 文玉 %d" % int(wallet.get("jade", 0))
+	var jade_cnt := int(wallet.get("jade", 0))
+	wallet_label.text = ("💎%d" % jade_cnt) if size.y < 650.0 else ("💎 文玉 %d" % jade_cnt)
 
 	var faction: Variant = me.get("faction", null)
 	if typeof(faction) == TYPE_DICTIONARY:
@@ -4449,6 +5084,16 @@ func _render_state(data: Dictionary) -> void:
 	if composition_panel and not comp_types.is_empty():
 		composition_panel.set_composition_state(comp_types, comp_changed_once)
 
+	# S02: 同步文房小院 (estate) 与个人军功摘要 (merit)
+	var es_val: Variant = data.get("estate", {})
+	if typeof(es_val) == TYPE_DICTIONARY and not es_val.is_empty():
+		estate_data = es_val.duplicate(true)
+	var m_val: Variant = data.get("merit", {})
+	if typeof(m_val) == TYPE_DICTIONARY:
+		merit_summary_data = m_val.duplicate(true)
+	if estate_page != null:
+		estate_page.set_estate_state(estate_data, me, merit_summary_data)
+
 	# Phase 1: 同步每日手牌 (hand) 与已出令 (card_orders)
 	_sync_hand_and_orders(data)
 
@@ -4463,7 +5108,15 @@ func _rebuild_node_buttons(nodes: Array) -> void:
 		b.text = ""
 		b.size = Vector2(140, 140)
 		b.position = map.node_position(code) - Vector2(70, 105)
-		b.tooltip_text = str(n.get("name", code))
+		var cname := str(n.get("name", code))
+		var is_reachable: bool = reachable_targets.is_empty() or reachable_targets.has(code)
+		if not is_reachable:
+			b.tooltip_text = "%s · 不与己方领土相邻" % cname
+		else:
+			if scouted_nodes.has(code):
+				b.tooltip_text = "%s · 👁 已侦察" % cname
+			else:
+				b.tooltip_text = cname
 		b.focus_mode = Control.FOCUS_NONE
 		var empty := StyleBoxEmpty.new()
 		b.add_theme_stylebox_override("normal", empty)
@@ -4478,6 +5131,13 @@ func _rebuild_node_buttons(nodes: Array) -> void:
 		node_buttons[code] = b
 
 func _on_node_pressed(code: String) -> void:
+	if not reachable_targets.is_empty() and not reachable_targets.has(code):
+		var n: Dictionary = map.node_by_code(code)
+		var cname := str(n.get("name", code))
+		_toast("【%s】关河阻隔，不与己方领土相邻！" % cname, true)
+		if node_buttons.has(code):
+			_shake_node(node_buttons[code])
+		AudioManager.play_sfx("click")
 	_open_city_drawer(code)
 
 func _neighbors(code: String) -> Array:
@@ -4510,10 +5170,11 @@ func _on_countdown_tick() -> void:
 	if not game_layer.visible or countdown_last_msec == 0:
 		return
 	var left: int = max(0, countdown_seconds - int((Time.get_ticks_msec() - countdown_last_msec) / 1000))
+	var is_c := size.y < 650.0
 	if left <= 0:
-		countdown_label.text = "⏳ 已截止，待推演"
+		countdown_label.text = "⏳ 截止" if is_c else "⏳ 已截止，待推演"
 	else:
-		countdown_label.text = "⏳ 距 21:00 锁令: %02d:%02d" % [int(left / 60), left % 60]
+		countdown_label.text = ("⏳ %02d:%02d" % [int(left / 60), left % 60]) if is_c else ("⏳ 距 21:00 锁令: %02d:%02d" % [int(left / 60), left % 60])
 
 func _new_key(prefix: String) -> String:
 	return "%s_%d_%d" % [prefix, Time.get_unix_time_from_system(), randi() % 100000]
@@ -4613,6 +5274,8 @@ func _show_error(error: Dictionary) -> void:
 	var code := str(error.get("code", ""))
 	var raw_msg := str(error.get("message", "请求失败"))
 	var friendly_msg: String = str(ERROR_CODE_TRANSLATION.get(code, raw_msg))
+	if code == "ESTATE_INSUFFICIENT_MERIT" and typeof(error.get("details", null)) == TYPE_DICTIONARY and int(error.get("details", {}).get("gap", 0)) > 0:
+		friendly_msg = "还差 %d 军功，去出令或支援盟友。" % int(error["details"]["gap"])
 	action_status.text = friendly_msg
 	_toast(friendly_msg, true)
 	if code == "UNAUTHORIZED" or code == "SESSION_EXPIRED":
