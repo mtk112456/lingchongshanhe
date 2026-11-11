@@ -153,6 +153,86 @@ Authorization: Bearer <token>
 
 ---
 
+## 1.3 GET /api/slice/merit
+
+```text
+GET /api/slice/merit?turn_id=3&week=1
+Authorization: Bearer <token>
+```
+
+返回：
+
+```json
+{
+  "week_no": 1,
+  "me": {
+    "total": 100, "week": 100, "week_no": 1, "rank": 1, "week_rank": 1,
+    "breakdown": {"vanguard": 40, "capture": 40, "participation": 10, "assault": 10},
+    "recent": [
+      {"turn_no": 2, "kind": "capture", "label": "破城", "amount": 40,
+       "detail": {"node_code": "N1", "role": "vanguard"}}
+    ]
+  },
+  "top": [{"player_id": 10, "nickname": "青竹一", "faction": "bi", "faction_name": "笔", "color": "#B83B32", "total": 100}],
+  "week_top": []
+}
+```
+
+`state.merit` 是同一份 `me` 结构，客户端不用额外请求。
+
+---
+
+## 1.4 GET/POST /api/slice/estate
+
+```text
+GET  /api/slice/estate
+POST /api/slice/estate/upgrade  {"room": "study"}
+Authorization: Bearer <token>
+```
+
+返回文房小院（个人封地）：
+
+```json
+{
+  "home_node": {"code": "liangzhou", "name": "凉州"},
+  "level": 2,
+  "banner": "",
+  "merit_total": 186,
+  "merit_spent": 30,
+  "merit_balance": 156,
+  "next_level_at": 300,
+  "rooms": [
+    {"code": "study", "name": "书房", "icon": "📜", "level": 2, "max_level": 3,
+     "effect": "每日可预读 2 张未抽到的牌",
+     "next_effect": "每日可预读 3 张未抽到的牌", "next_cost": 80},
+    {"code": "drill", "name": "练兵场", "icon": "⚔", "level": 1, "max_level": 3,
+     "effect": "每周可改 1 次编成", "next_effect": "每周可改 2 次编成", "next_cost": 30},
+    {"code": "tower", "name": "望楼", "icon": "🔭", "level": 1, "max_level": 3,
+     "effect": "侦察时多看 1 座邻城", "next_effect": "侦察时多看 2 座邻城", "next_cost": 30}
+  ],
+  "influence": [
+    {"code": "hanzhong", "name": "汉中", "count": 3, "merit": 43}
+  ],
+  "governorships": [
+    {"code": "hanzhong", "name": "汉中", "week": 1, "merit": 43}
+  ]
+}
+```
+
+规则：
+
+```text
+书房：预读张数 = 等级
+练兵场：每周可改编成次数 = 等级
+望楼：侦察额外覆盖邻城数 = 等级
+升级消耗军功余额：2 级 30，3 级 80
+只给便利和外观，不加战力，不碰 students.score
+```
+
+`state.map.nodes[].governor` 返回本周太守（昵称/阵营/颜色），没有则为 `null`。
+
+---
+
 ## 2. POST /api/slice/composition
 
 ```json

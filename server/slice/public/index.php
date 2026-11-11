@@ -10,6 +10,7 @@ require_once dirname(__DIR__) . '/src/SeasonService.php';
 require_once dirname(__DIR__) . '/src/SeasonHistoryService.php';
 require_once dirname(__DIR__) . '/src/BulletinService.php';
 require_once dirname(__DIR__) . '/src/MeritService.php';
+require_once dirname(__DIR__) . '/src/EstateService.php';
 
 $started = microtime(true);
 $requestId = $_SERVER['HTTP_X_REQUEST_ID'] ?? bin2hex(random_bytes(6));
@@ -372,6 +373,30 @@ try {
             'top' => $merit->top((int)$player['game_id'], 10),
             'week_top' => $merit->weekTop((int)$player['game_id'], $week, 10),
         ]);
+    }
+
+    if ($method === 'GET' && $path === '/api/slice/estate') {
+        $player = requireAuth($service);
+        $turnId = isset($_GET['turn_id']) ? (int)$_GET['turn_id'] : (int)($player['game_current_turn_id'] ?? 0);
+        success((new EstateService($pdo))->summary(
+            (int)$player['game_id'],
+            (int)$player['id'],
+            weekNoForTurn($pdo, $turnId)
+        ));
+    }
+
+    if ($method === 'POST' && $path === '/api/slice/estate/upgrade') {
+        $player = requireAuth($service);
+        $body = jsonBody();
+        $room = (string)($body['room'] ?? '');
+        if ($room === '') {
+            throw new ApiException('BAD_REQUEST', '缺少 room');
+        }
+        success((new EstateService($pdo))->upgrade(
+            (int)$player['game_id'],
+            (int)$player['id'],
+            $room
+        ));
     }
 
     if ($method === 'GET' && $path === '/api/slice/composition') {

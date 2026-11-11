@@ -8,6 +8,7 @@ require_once __DIR__ . '/HandService.php';
 require_once __DIR__ . '/BattleSettlementService.php';
 require_once __DIR__ . '/BulletinService.php';
 require_once __DIR__ . '/MeritService.php';
+require_once __DIR__ . '/EstateService.php';
 
 final class SliceService
 {
@@ -483,12 +484,42 @@ final class SliceService
             $stmt->execute([(int)$turn['id'], (int)$player['id']]);
             $scoutedNodes = array_map('strval', $stmt->fetchAll(PDO::FETCH_COLUMN));
 
+            // 望楼：哨探额外覆盖相邻城
+            $extraScout = (new EstateService($this->pdo))->extraScoutNodes(
+                (int)$game['id'],
+                (int)$player['id']
+            );
+            if ($extraScout > 0 && $scoutedNodes !== []) {
+                $in = implode(',', array_fill(0, count($scoutedNodes), '?'));
+                $stmt = $this->pdo->prepare(
+                    "SELECT a_node_code, b_node_code FROM slice_edges
+                     WHERE game_id = ? AND (a_node_code IN ({$in}) OR b_node_code IN ({$in}))"
+                );
+                $stmt->execute(array_merge([(int)$game['id']], $scoutedNodes, $scoutedNodes));
+                $adjacent = [];
+                foreach ($stmt->fetchAll() as $edge) {
+                    $a = (string)$edge['a_node_code'];
+                    $b = (string)$edge['b_node_code'];
+                    $adjacent[] = in_array($a, $scoutedNodes, true) ? $b : $a;
+                }
+                $adjacent = array_values(array_diff(array_unique($adjacent), $scoutedNodes));
+                $limit = $extraScout * count($scoutedNodes);
+                foreach (array_slice($adjacent, 0, $limit) as $code) {
+                    $scoutedNodes[] = $code;
+                }
+            }
+
             $bulletin = (new BulletinService($this->pdo))->summary(
                 (int)$game['id'],
                 (int)$turn['id'],
                 (int)$player['id']
             );
             $merit = (new MeritService($this->pdo))->summary(
+                (int)$game['id'],
+                (int)$player['id'],
+                Clock::weekOfTurn((int)$turn['turn_no'])
+            );
+            $estate = (new EstateService($this->pdo))->summary(
                 (int)$game['id'],
                 (int)$player['id'],
                 Clock::weekOfTurn((int)$turn['turn_no'])
@@ -508,6 +539,7 @@ final class SliceService
         } else {
             $bulletin = null;
             $merit = null;
+            $estate = null;
         }
 
         $canEdit = (string)$turn['status'] === 'open'
@@ -527,6 +559,10 @@ final class SliceService
         $nodes = [];
         $advanceFrom = [];
         $defendTargets = [];
+        $governors = (new EstateService($this->pdo))->governorsForWeek(
+            (int)$game['id'],
+            Clock::weekOfTurn((int)$turn['turn_no'])
+        );
         foreach ($nodeRows as $n) {
             $code = (string)$n['node_code'];
             $ownerId = $n['owner_faction_id'] === null ? null : (int)$n['owner_faction_id'];
@@ -565,6 +601,7 @@ final class SliceService
                 'is_my_faction' => $isMine,
                 'can_advance_from' => $isMine,
                 'can_defend' => $isMine,
+                'governor' => $governors[$code] ?? null,
                 'reachable_targets' => $isMine ? $targets : [],
             ];
         }
@@ -680,6 +717,7 @@ final class SliceService
             'scouted_nodes' => $scoutedNodes,
             'bulletin' => $bulletin,
             'merit' => $merit,
+            'estate' => $estate,
             'reachable_targets' => $reachableTargets,
             'options' => [
                 'advance_from' => $advanceFrom,
@@ -2066,9 +2104,15 @@ final class SliceService
         ];
     }
 
-    public function nextTurn(array $teacher, int $fromTurnId): array
+    private function maxTurnsForGame(int $gameId): int
     {
-        $this->requireTeacher($teacher);
+        $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM slice_nodes WHERE game_id = ?');
+        $stmt->execute([$gameId]);
+        return (int)$stmt->fetchColumn() >= 13 ? 28 : 3;
+    }
+
+    public function nextTurn(array $teacher, int $fromTurnId): array
+    {        $this->requireTeacher($teacher);
         $this->pdo->beginTransaction();
         try {
             $from = $this->loadTurnById($fromTurnId, true);
@@ -2077,10 +2121,9 @@ final class SliceService
             if ((string)$from['status'] !== 'settled') {
                 throw new ApiException('SETTLE_NOT_READY', '当前回合尚未结算，不能进入下一回合', 409);
             }
-            if ((int)$from['turn_no'] >= 3) {
-                throw new ApiException('SEASON_FINISHED', '三回合切片已结束；请查看最终战报或重置演示', 409);
-            }
-            $stmt = $this->pdo->prepare('SELECT * FROM slice_turns WHERE game_id = ? AND turn_no = ? LIMIT 1');
+            if ((int)$from['turn_no'] >= $this->maxTurnsForGame((int)$game['id'])) {
+                throw new ApiException('SEASON_FINISHED', '赛季已结束；请查看最终战报或重置演示', 409);
+            }            $stmt = $this->pdo->prepare('SELECT * FROM slice_turns WHERE game_id = ? AND turn_no = ? LIMIT 1');
             $stmt->execute([(int)$game['id'], (int)$from['turn_no'] + 1]);
             $existing = $stmt->fetch();
             if ($existing) {
@@ -2103,6 +2146,13 @@ final class SliceService
                 (string)$game['rules_version'],
             ]);
             $newTurnId = (int)$this->pdo->lastInsertId();
+            $newTurnNo = (int)$from['turn_no'] + 1;
+            if ($newTurnNo % 7 === 1) {
+                (new EstateService($this->pdo))->refreshGovernors(
+                    (int)$game['id'],
+                    Clock::weekOfTurn($newTurnNo - 1)
+                );
+            }
             $stmt = $this->pdo->prepare('UPDATE slice_games SET current_turn_id = ? WHERE id = ?');
             $stmt->execute([$newTurnId, (int)$game['id']]);
             $this->audit((int)$game['id'], $newTurnId, (int)$teacher['id'], 'turn.next', [

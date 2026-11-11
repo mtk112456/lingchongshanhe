@@ -184,24 +184,42 @@ final class HandService
     }
 
     /**
-     * @return array{types:string[],changed_once:bool}
+     * @return array{types:string[],changed_once:bool,changes_used:int,changes_allowed:int}
      */
     public function getComposition(int $gameId, int $playerId, int $weekNo): array
     {
         $stmt = $this->pdo->prepare(
-            'SELECT types_json, changed_once FROM slice_compositions
+            'SELECT types_json, changed_once, changes_used FROM slice_compositions
              WHERE game_id = ? AND player_id = ? AND week_no = ?'
         );
         $stmt->execute([$gameId, $playerId, $weekNo]);
         $row = $stmt->fetch();
+        $allowed = $this->allowedCompositionChanges($gameId, $playerId);
         if (!$row) {
-            return ['types' => ['cav', 'shield', 'arc'], 'changed_once' => false];
+            return [
+                'types' => ['cav', 'shield', 'arc'],
+                'changed_once' => false,
+                'changes_used' => 0,
+                'changes_allowed' => $allowed,
+            ];
         }
         $types = json_decode((string)$row['types_json'], true);
         return [
             'types' => is_array($types) ? array_values($types) : ['cav', 'shield', 'arc'],
             'changed_once' => (bool)$row['changed_once'],
+            'changes_used' => (int)($row['changes_used'] ?? 0),
+            'changes_allowed' => $allowed,
         ];
+    }
+
+    private function allowedCompositionChanges(int $gameId, int $playerId): int
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT drill_level FROM slice_estates WHERE game_id = ? AND player_id = ?'
+        );
+        $stmt->execute([$gameId, $playerId]);
+        $level = $stmt->fetchColumn();
+        return max(1, $level === false ? 1 : (int)$level);
     }
 
     /**
@@ -223,23 +241,33 @@ final class HandService
 
         $current = $this->getComposition($gameId, $playerId, $weekNo);
         $stmt = $this->pdo->prepare(
-            'SELECT changed_once FROM slice_compositions
+            'SELECT changed_once, changes_used FROM slice_compositions
              WHERE game_id = ? AND player_id = ? AND week_no = ?'
         );
         $stmt->execute([$gameId, $playerId, $weekNo]);
         $row = $stmt->fetch();
-        if ($row && (bool)$row['changed_once']) {
+        $allowed = $this->allowedCompositionChanges($gameId, $playerId);
+        if ($row && (int)($row['changes_used'] ?? 0) >= $allowed) {
             throw new RuntimeException('COMPOSITION_LOCKED');
         }
 
         $stmt = $this->pdo->prepare(
-            'INSERT INTO slice_compositions (game_id, player_id, week_no, types_json, changed_once)
-             VALUES (?, ?, ?, ?, 0)
-             ON DUPLICATE KEY UPDATE types_json = VALUES(types_json), changed_once = 1'
+            'INSERT INTO slice_compositions
+                (game_id, player_id, week_no, types_json, changed_once, changes_used)
+             VALUES (?, ?, ?, ?, 0, 0)
+             ON DUPLICATE KEY UPDATE
+                types_json = VALUES(types_json),
+                changed_once = 1,
+                changes_used = changes_used + 1'
         );
         $stmt->execute([$gameId, $playerId, $weekNo, $this->encode(array_values($types))]);
 
-        return ['types' => array_values($types), 'changed_once' => $row !== false];
+        return [
+            'types' => array_values($types),
+            'changed_once' => $row !== false,
+            'changes_used' => $row === false ? 0 : (int)($row['changes_used'] ?? 0) + 1,
+            'changes_allowed' => $allowed,
+        ];
     }
 
     /**
