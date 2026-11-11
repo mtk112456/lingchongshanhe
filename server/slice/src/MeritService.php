@@ -119,6 +119,7 @@ final class MeritService
             'week_no' => $week,
             'rank' => $this->rank($gameId, $total),
             'week_rank' => $this->weekRank($gameId, $weekTotal, $weekStart, $weekEnd),
+            'roles' => $this->roleRanks($gameId, $playerId, $week, $weekStart, $weekEnd),
             'breakdown' => $breakdown,
             'recent' => $recent,
         ];
@@ -205,6 +206,51 @@ final class MeritService
             'color' => $row['color'] === null ? null : (string)$row['color'],
             'total' => (int)$row['total'],
         ], $stmt->fetchAll());
+    }
+
+    /**
+     * 本周角色榜：先锋 / 支援 / 侦察 / 守城 / 火攻。
+     *
+     * @return array<int,array{kind:string,label:string,week:int,rank:int}>
+     */
+    private function roleRanks(int $gameId, int $playerId, int $week, int $from, int $to): array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT m.kind, m.player_id, SUM(m.amount) AS total
+             FROM slice_merit_events m
+             JOIN slice_turns t ON t.id = m.turn_id
+             WHERE m.game_id = ? AND t.turn_no BETWEEN ? AND ?
+               AND m.kind IN ("vanguard", "support", "scout", "defend", "fire")
+             GROUP BY m.kind, m.player_id'
+        );
+        $stmt->execute([$gameId, $from, $to]);
+
+        $byKind = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $kind = (string)$row['kind'];
+            $byKind[$kind][(int)$row['player_id']] = (int)$row['total'];
+        }
+
+        $roles = [];
+        foreach (['vanguard', 'support', 'scout', 'defend', 'fire'] as $kind) {
+            $mine = $byKind[$kind][$playerId] ?? 0;
+            if ($mine <= 0) {
+                continue;
+            }
+            $rank = 1;
+            foreach ($byKind[$kind] as $pid => $total) {
+                if ($pid !== $playerId && $total > $mine) {
+                    $rank++;
+                }
+            }
+            $roles[] = [
+                'kind' => $kind,
+                'label' => self::LABELS[$kind] ?? $kind,
+                'week' => $week,
+                'rank' => $rank,
+            ];
+        }
+        return $roles;
     }
 
     private function rank(int $gameId, int $total): int

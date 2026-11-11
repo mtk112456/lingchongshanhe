@@ -167,6 +167,9 @@ Authorization: Bearer <token>
   "week_no": 1,
   "me": {
     "total": 100, "week": 100, "week_no": 1, "rank": 1, "week_rank": 1,
+    "roles": [
+      {"kind": "vanguard", "label": "先锋", "week": 1, "rank": 1}
+    ],
     "breakdown": {"vanguard": 40, "capture": 40, "participation": 10, "assault": 10},
     "recent": [
       {"turn_no": 2, "kind": "capture", "label": "破城", "amount": 40,

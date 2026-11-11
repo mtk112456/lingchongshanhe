@@ -93,6 +93,15 @@ try {
     check('周军功 100', $summary['week'] === 100, 'week=' . $summary['week']);
     check('军功有分类明细', isset($summary['breakdown']['vanguard'], $summary['breakdown']['capture']));
     check('军功榜第 1', $summary['rank'] === 1, 'rank=' . $summary['rank']);
+    $roleKinds = array_column($summary['roles'] ?? [], 'kind');
+    check('本周角色榜含先锋', in_array('vanguard', $roleKinds, true), json_encode($summary['roles'] ?? []));
+    $vanguardRole = null;
+    foreach ($summary['roles'] ?? [] as $role) {
+        if ($role['kind'] === 'vanguard') {
+            $vanguardRole = $role;
+        }
+    }
+    check('先锋本周第 1', ($vanguardRole['rank'] ?? 0) === 1, json_encode($vanguardRole));
 
     $supportSummary = $merit->summary($gameId, $supporterId, 1);
     check('支援者累计 61 军功', $supportSummary['total'] === 61, 'total=' . $supportSummary['total']);
