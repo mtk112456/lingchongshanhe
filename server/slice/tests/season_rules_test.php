@@ -10,6 +10,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/../src/HandService.php';
+require_once __DIR__ . '/../src/SqlRunner.php';
 
 $failed = 0;
 function check(string $name, bool $ok, string $detail = ''): void
@@ -22,6 +23,7 @@ function check(string $name, bool $ok, string $detail = ''): void
 }
 
 [$config, $pdo] = slice_bootstrap();
+SqlRunner::runFile($pdo, dirname(__DIR__) . '/seed_map12.sql');
 
 $gameId = (int)$pdo->query("SELECT id FROM slice_games WHERE code = 'MAP12_TEST'")->fetchColumn();
 if ($gameId <= 0) {
@@ -37,6 +39,8 @@ if ($turnId <= 0 || $playerId <= 0) {
     fwrite(STDERR, "MAP12_TEST 缺少回合或玩家\n");
     exit(1);
 }
+
+$pdo->prepare("UPDATE slice_nodes SET owner_faction_id = (SELECT faction_id FROM slice_players WHERE id = ?) WHERE game_id = ? AND node_code = 'hanzhong'")->execute([$playerId, $gameId]);
 
 $handService = new HandService($pdo);
 $hand = $handService->getOrCreateHand($gameId, $turnId, $playerId);

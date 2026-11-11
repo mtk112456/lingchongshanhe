@@ -28,9 +28,9 @@ function throws(callable $fn): bool
 [$config, $pdo] = slice_bootstrap();
 $service = new HandService($pdo);
 
-$gameId = (int)$pdo->query('SELECT id FROM slice_games LIMIT 1')->fetchColumn();
-$turnId = (int)$pdo->query('SELECT id FROM slice_turns ORDER BY id LIMIT 1')->fetchColumn();
-$playerId = (int)$pdo->query('SELECT id FROM slice_players ORDER BY id LIMIT 1')->fetchColumn();
+$gameId = (int)$pdo->query("SELECT id FROM slice_games WHERE code = 'SLICE_A'")->fetchColumn();
+$turnId = (int)$pdo->query("SELECT id FROM slice_turns WHERE game_id = {$gameId} ORDER BY turn_no LIMIT 1")->fetchColumn();
+$playerId = (int)$pdo->query("SELECT id FROM slice_players WHERE game_id = {$gameId} AND role = 'player' ORDER BY id LIMIT 1")->fetchColumn();
 $weekNo = 1;
 
 check('有测试局', $gameId > 0 && $turnId > 0 && $playerId > 0, "game={$gameId} turn={$turnId} player={$playerId}");
@@ -56,24 +56,24 @@ check('第二次重抽被拒', throws(fn() => $service->redraw($gameId, $turnId,
 
 // 3. 出牌
 $cards = $redraw['cards'];
-$order = $service->play($gameId, $turnId, $playerId, 0, $cards[0], 'hanzhong', 1, 'front', 'req_test_001');
+$order = $service->play($gameId, $turnId, $playerId, 0, $cards[0], 'N1', 1, 'front', 'req_test_001');
 check('出牌成功', $order['card_code'] === $cards[0]);
 check('订单 1 条', count($service->getOrders($turnId, $playerId)) === 1);
 
 // 4. 同一张牌不能出两次
 check(
     '同一张牌不能出两次',
-    throws(fn() => $service->play($gameId, $turnId, $playerId, 1, $cards[0], 'hanzhong', 2, 'front', 'req_test_002'))
+    throws(fn() => $service->play($gameId, $turnId, $playerId, 1, $cards[0], 'N1', 2, 'front', 'req_test_002'))
 );
 
 // 5. 同一槽位可以改目标
-$order2 = $service->play($gameId, $turnId, $playerId, 0, $cards[0], 'xiangyang', 2, 'back', 'req_test_003');
-check('同一槽位可改目标', $order2['target_node_code'] === 'xiangyang');
+$order2 = $service->play($gameId, $turnId, $playerId, 0, $cards[0], 'N2', 2, 'back', 'req_test_003');
+check('同一槽位可改目标', $order2['target_node_code'] === 'N2');
 check('订单仍 1 条', count($service->getOrders($turnId, $playerId)) === 1);
 
 // 6. 填满 3 个槽位
-$service->play($gameId, $turnId, $playerId, 1, $cards[1], 'hanzhong', 1, 'back', 'req_test_004');
-$service->play($gameId, $turnId, $playerId, 2, $cards[2], 'hanzhong', 3, 'front', 'req_test_005');
+$service->play($gameId, $turnId, $playerId, 1, $cards[1], 'N1', 1, 'back', 'req_test_004');
+$service->play($gameId, $turnId, $playerId, 2, $cards[2], 'N1', 3, 'front', 'req_test_005');
 check('3 个槽位满', count($service->getOrders($turnId, $playerId)) === 3);
 
 // 7. 撤回

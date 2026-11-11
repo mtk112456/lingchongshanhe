@@ -64,4 +64,22 @@ jobs:
           DB_NAME: qingzhu_slice_test
           DB_USER: qingzhu_test
           DB_PASS: slice_dev_only_2026
-        run: php server/slice/tests/run.php
+        run: |
+          set -e
+          php server/slice/tests/run.php
+          php server/slice/tests/phase15_cards_test.php
+          php server/slice/tests/bulletin_test.php
+          php server/slice/tests/formation_test.php
+          php server/slice/tests/card_settlement_test.php
+          php server/slice/tests/scout_state_test.php
+          php server/slice/tests/hand_service_test.php
+          php server/slice/tests/merit_test.php
+          php server/slice/tests/estate_test.php
+          php server/slice/scripts/setup_map12_db.php
+          php server/slice/tests/season_rules_test.php
+          php server/slice/tests/adjacency_test.php
+          php server/slice/tests/city_buff_test.php
+          php server/slice/tests/region_bonus_test.php
+          php server/slice/tests/season28_test.php
+          php server/slice/tests/season100_test.php
+          php server/slice/tests/season_history_test.php
