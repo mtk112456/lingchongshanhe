@@ -1,0 +1,68 @@
+【S01 城池抽屉：接“战前军议”预估】
+
+S02/S04 我看了截图，过了；客户端 5 套测试全过，已合并。下一步接战前预估。
+
+后端：
+
+```text
+POST /api/slice/battle/forecast
+{"turn_id": 1, "node": "hanzhong"}
+```
+
+返回：
+
+```json
+{
+  "node_name": "汉中",
+  "role": "attack",
+  "ready": true,
+  "intel_known": true,
+  "attacker": {"troops":1305,"teams":[...],"supporters":1,"camp_bonus":true,"region_bonus":false},
+  "defender": {"known":true,"troops":803,"teams":[...],"real_garrison":false,"pass_bonus":false},
+  "forecast": {"wall":448.3,"score":1,"ticks":60,"morale_before":0,"morale_after":1,
+               "morale_cap":2,"capture_estimate":false,"verdict":"优势"},
+  "counters": {"cav>shield":3},
+  "counter_damage": {"cav>shield":120.5},
+  "advice": ["敌盾 ×2，建议带骑。","带火攻可让器械攻墙 +50%。"]
+}
+```
+
+建议放在城池抽屉“出令”按钮上方，作为一张折叠卡：
+
+```text
+⚔ 战前军议        [优势]
+攻 1305 · 守 803
+破墙 448 / 1500（30%）
+民心 0 → 1 / 2，本回合不会易主
+骑克盾 ×3
+· 敌盾 ×2，建议带骑
+· 带火攻可让器械攻墙 +50%
+预估不消耗令
+```
+
+状态：
+
+```text
+ready=false + NO_ORDERS：先出一张队伍令
+ready=false + DEFEND_CITY：这是己方城，出令=驻守
+intel_known=false：守军未知，显示兵力区间，不显示队伍
+```
+
+交互：
+
+```text
+抽屉打开时请求一次
+出令/撤令后 300ms 防抖重算
+预估失败不弹错，只显示“暂时无法预估”
+```
+
+验收：
+
+```text
+720×514 抽屉不溢出
+平板抽屉同布局
+优势/均势/劣势三色
+未侦察城不泄露守军队伍
+己方城不显示进攻预估
+ClientSmoke / Replay / Phase1 / Phase15 / S02 全过
+```
