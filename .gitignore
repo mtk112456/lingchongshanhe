@@ -65,3 +65,8 @@ trial_results/
 scratch/
 server/slice/config.sim.php
 server/slice/config.api.php
+tools/ACE-Step-1.5/
+tools/audiogen/
+server/slice/config.load.php
+art_src/audio/generated/raw/
+art_src/audio/generated/*.wav

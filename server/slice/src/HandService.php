@@ -52,10 +52,29 @@ final class HandService
         $seed = $this->seed($gameId, $turnId, $playerId);
         $cards = HandDeck::draw($seed);
         $stmt = $this->pdo->prepare(
-            'INSERT INTO slice_hands (game_id, turn_id, player_id, cards_json, redraw_used, hand_seed)
+            'INSERT IGNORE INTO slice_hands (game_id, turn_id, player_id, cards_json, redraw_used, hand_seed)
              VALUES (?, ?, ?, ?, 0, ?)'
         );
         $stmt->execute([$gameId, $turnId, $playerId, $this->encode($cards), $seed]);
+
+        // 并发首次抽牌：另一个请求可能已经插入，读回同一份手牌。
+        if ($stmt->rowCount() === 0) {
+            $stmt = $this->pdo->prepare(
+                'SELECT cards_json, redraw_used, hand_seed FROM slice_hands WHERE turn_id = ? AND player_id = ?'
+            );
+            $stmt->execute([$turnId, $playerId]);
+            $row = $stmt->fetch();
+            if ($row !== false) {
+                $storedCards = json_decode((string)$row['cards_json'], true);
+                $storedSeed = (string)$row['hand_seed'];
+                return [
+                    'cards' => is_array($storedCards) ? array_values($storedCards) : [],
+                    'redraw_used' => (bool)$row['redraw_used'],
+                    'seed' => $storedSeed,
+                    'preview' => $this->previewCards($storedSeed, $gameId, $playerId),
+                ];
+            }
+        }
 
         return [
             'cards' => $cards,

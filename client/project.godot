@@ -22,12 +22,11 @@ boot_splash/fullsize=false
 
 Api="*res://Api.gd"
 AudioManager="*res://AudioManager.gd"
-AudioManager="*res://AudioManager.gd"
 
 [display]
 
-window/size/viewport_width=1280
-window/size/viewport_height=720
+window/size/viewport_width=720
+window/size/viewport_height=514
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 window/handheld/orientation=0

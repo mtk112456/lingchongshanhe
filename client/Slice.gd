@@ -488,7 +488,7 @@ func _button(text: String, color: Color, height: int = 42) -> Button:
 	b.custom_minimum_size = Vector2(0, height)
 	b.add_theme_font_size_override("font_size", 15)
 	b.add_theme_color_override("font_color", Color("#ffffff"))
-	b.add_theme_color_override("font_disabled_color", Color("#9e9282"))
+	b.add_theme_color_override("font_disabled_color", Color("#d6c4ad"))
 
 	var tex_key := ""
 	if color == C_ZHUSHA or color == CORAL:
@@ -507,11 +507,19 @@ func _button(text: String, color: Color, height: int = 42) -> Button:
 		s.texture_margin_right = 12
 		s.texture_margin_bottom = 12
 		b.add_theme_stylebox_override("normal", s)
+		var sd := StyleBoxTexture.new()
+		sd.texture = tex
+		sd.texture_margin_left = 12
+		sd.texture_margin_top = 12
+		sd.texture_margin_right = 12
+		sd.texture_margin_bottom = 12
+		sd.modulate_color = Color(0.55, 0.5, 0.44, 0.95)
+		b.add_theme_stylebox_override("disabled", sd)
 	else:
 		b.add_theme_stylebox_override("normal", _style(color, color.darkened(0.2), 1, 8, 8))
 		b.add_theme_stylebox_override("hover", _style(color.lightened(0.12), color.darkened(0.2), 1, 8, 8))
 		b.add_theme_stylebox_override("pressed", _style(color.darkened(0.15), color.darkened(0.3), 1, 8, 8))
-		b.add_theme_stylebox_override("disabled", _style(Color("#8a8074"), Color("#6d6458"), 1, 8, 8))
+		b.add_theme_stylebox_override("disabled", _style(Color("#3a3027"), Color("#6d6458"), 1, 8, 8))
 	return b
 
 func _pill_btn(text: String, color: Color = Color("#2a2018"), border: Color = GOLD, height: int = 36) -> Button:
@@ -4891,7 +4899,7 @@ func _create_single_hand_card(idx: int, cdata: Dictionary) -> PanelContainer:
 		if is_played:
 			nine_sb.modulate_color = Color("#756858") # 已出：暗金古铜
 		elif is_discarded:
-			nine_sb.modulate_color = Color("#7d6653") # 弃用：幽暗纯黑
+			nine_sb.modulate_color = Color("#5f4e40") # 弃用：幽暗纯黑
 		else:
 			nine_sb.modulate_color = Color("#fffef6") # 可出：明亮温润宣纸
 		card.add_theme_stylebox_override("panel", nine_sb)
@@ -4941,10 +4949,10 @@ func _create_single_hand_card(idx: int, cdata: Dictionary) -> PanelContainer:
 	var state_badge := Label.new()
 	if is_played:
 		state_badge.text = "[已出]"
-		state_badge.add_theme_color_override("font_color", Color("#73c991"))
+		state_badge.add_theme_color_override("font_color", Color("#b7f0ce"))
 	elif is_discarded:
 		state_badge.text = "[弃用]"
-		state_badge.add_theme_color_override("font_color", Color("#b84c3d"))
+		state_badge.add_theme_color_override("font_color", Color("#f2d2b8"))
 	else:
 		state_badge.text = "[可出]"
 		state_badge.add_theme_color_override("font_color", Color("#276f57"))

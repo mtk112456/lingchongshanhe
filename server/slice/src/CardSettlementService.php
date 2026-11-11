@@ -78,6 +78,13 @@ final class CardSettlementService
         }
 
         try {
+        // 拿到锁后复查，避免两个结算进程都通过锁前检查。
+        $stmt = $this->pdo->prepare('SELECT status FROM slice_turns WHERE id = ? AND game_id = ?');
+        $stmt->execute([$turnId, $gameId]);
+        if ((string)$stmt->fetchColumn() === 'settled') {
+            return ['turn_id' => $turnId, 'already_settled' => true, 'battles' => []];
+        }
+
         $stmt = $this->pdo->prepare(
             'SELECT o.id, o.player_id, o.slot, o.card_code, o.target_node_code, o.lane, o.row_pos,
                     p.faction_id, p.student_id,

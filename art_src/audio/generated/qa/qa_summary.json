@@ -1,0 +1,90 @@
+{
+  "map": {
+    "file": "map_theme.wav",
+    "ogg": "map_theme.ogg",
+    "bars": 24,
+    "bpm": 72,
+    "duration_s": 80.0,
+    "lufs": -16.0,
+    "true_peak_dbtp": -2.0,
+    "lra": 6.2,
+    "loop": true,
+    "seam": {
+      "seam_jump": 0.001099,
+      "seam_vs_p999_delta": 0.012,
+      "click_db": 0.02,
+      "head_rms": 0.10141,
+      "tail_rms": 0.03936
+    },
+    "bands_db": {
+      "20-80": -16.5,
+      "80-200": -12.6,
+      "200-500": -6.4,
+      "500-1200": -2.8,
+      "1200-3000": -8.5,
+      "3000-8000": -14.8,
+      "8000-16000": -30.2
+    },
+    "audition": "D:\\DeskBox\\游戏\\art_src\\audio\\generated\\qa\\map_theme_loop3x.ogg",
+    "loop_samples": 3840000,
+    "spectrogram": "D:\\DeskBox\\游戏\\art_src\\audio\\generated\\qa\\map_theme_spectrogram.png"
+  },
+  "battle": {
+    "file": "battle_theme.wav",
+    "ogg": "battle_theme.ogg",
+    "bars": 28,
+    "bpm": 112,
+    "duration_s": 60.0,
+    "lufs": -16.0,
+    "true_peak_dbtp": -2.0,
+    "lra": 3.6,
+    "loop": true,
+    "seam": {
+      "seam_jump": 0.000214,
+      "seam_vs_p999_delta": 0.001,
+      "click_db": 4.72,
+      "head_rms": 0.09088,
+      "tail_rms": 0.01209
+    },
+    "bands_db": {
+      "20-80": -7.1,
+      "80-200": -10.8,
+      "200-500": -10.9,
+      "500-1200": -5.2,
+      "1200-3000": -6.1,
+      "3000-8000": -10.3,
+      "8000-16000": -27.8
+    },
+    "audition": "D:\\DeskBox\\游戏\\art_src\\audio\\generated\\qa\\battle_theme_loop3x.ogg",
+    "loop_samples": 2880000,
+    "spectrogram": "D:\\DeskBox\\游戏\\art_src\\audio\\generated\\qa\\battle_theme_spectrogram.png"
+  },
+  "sting": {
+    "file": "season_theme.wav",
+    "ogg": "season_theme.ogg",
+    "bars": 10,
+    "bpm": 80,
+    "duration_s": 30.0,
+    "lufs": -16.0,
+    "true_peak_dbtp": -2.2,
+    "lra": 8.4,
+    "loop": false,
+    "seam": {
+      "seam_jump": 0.003708,
+      "seam_vs_p999_delta": 0.023,
+      "click_db": 2.34,
+      "head_rms": 0.06716,
+      "tail_rms": 0.00025
+    },
+    "bands_db": {
+      "20-80": -18.3,
+      "80-200": -12.1,
+      "200-500": -13.7,
+      "500-1200": -0.9,
+      "1200-3000": -12.3,
+      "3000-8000": -18.7,
+      "8000-16000": -29.2
+    },
+    "spectrogram": "D:\\DeskBox\\游戏\\art_src\\audio\\generated\\qa\\season_theme_spectrogram.png"
+  }
+}
