@@ -561,7 +561,7 @@ final class SliceService
         $nodes = [];
         $advanceFrom = [];
         $defendTargets = [];
-        $governors = (new EstateService($this->pdo))->governorsForWeek(
+        $governors = (new EstateService($this->pdo))->currentGovernors(
             (int)$game['id'],
             Clock::weekOfTurn((int)$turn['turn_no'])
         );
@@ -1487,7 +1487,7 @@ final class SliceService
             );
             $stmt->execute([$now, (int)$snapshot['id'], $turnId]);
 
-            if ((int)$turn['turn_no'] >= 3) {
+            if ((int)$turn['turn_no'] >= $this->maxTurnsForGame((int)$game['id'])) {
                 $stmt = $this->pdo->prepare('UPDATE slice_games SET status = "finished" WHERE id = ?');
                 $stmt->execute([(int)$game['id']]);
             }
@@ -1771,7 +1771,7 @@ final class SliceService
         }
 
         $standings = null;
-        $isFinal = (int)$turn['turn_no'] >= 3;
+        $isFinal = (int)$turn['turn_no'] >= $this->maxTurnsForGame((int)$game['id']);
         if ($isFinal) {
             $points = [];
             $owned = [];
@@ -2044,6 +2044,16 @@ final class SliceService
             if ($resultJson !== false) {
                 $decoded = $this->decode((string)$resultJson);
                 $item['headline'] = (string)($decoded['headline'] ?? '');
+                if ($item['headline'] === '' && isset($decoded['battles'])) {
+                    $battles = is_array($decoded['battles']) ? $decoded['battles'] : [];
+                    $captures = count(array_filter($battles, static fn($b) => !empty($b['captured'])));
+                    $item['headline'] = sprintf(
+                        '第 %d 回合：%d 场战斗，%d 城易主',
+                        (int)$turn['turn_no'],
+                        count($battles),
+                        $captures
+                    );
+                }
             }
             $stmt2 = $this->pdo->prepare(
                 'SELECT readable_text FROM slice_player_reports WHERE turn_id = ? AND player_id = ?'
@@ -2066,16 +2076,32 @@ final class SliceService
         $stmt->execute([(int)$game['id']]);
         $turns = [];
         foreach ($stmt->fetchAll() as $turn) {
-            $stmt2 = $this->pdo->prepare(
-                'SELECT COUNT(*) FROM slice_orders WHERE turn_id = ? AND status = "active"'
-            );
-            $stmt2->execute([(int)$turn['id']]);
-            $activeOrders = (int)$stmt2->fetchColumn();
-            $stmt2 = $this->pdo->prepare(
-                'SELECT COUNT(*) FROM slice_orders WHERE turn_id = ? AND status = "withdrawn"'
-            );
-            $stmt2->execute([(int)$turn['id']]);
-            $withdrawn = (int)$stmt2->fetchColumn();
+            $isCard = $this->usesCardRules((int)$game['id'], (int)$turn['id']);
+            if ($isCard) {
+                $stmt2 = $this->pdo->prepare(
+                    'SELECT COUNT(*), COUNT(DISTINCT player_id) FROM slice_order_slots
+                     WHERE turn_id = ? AND status = "active"'
+                );
+                $stmt2->execute([(int)$turn['id']]);
+                [$activeOrders, $activePlayers] = array_map('intval', $stmt2->fetch(PDO::FETCH_NUM));
+                $stmt2 = $this->pdo->prepare(
+                    'SELECT COUNT(*) FROM slice_order_slots WHERE turn_id = ? AND status = "withdrawn"'
+                );
+                $stmt2->execute([(int)$turn['id']]);
+                $withdrawn = (int)$stmt2->fetchColumn();
+            } else {
+                $stmt2 = $this->pdo->prepare(
+                    'SELECT COUNT(*) FROM slice_orders WHERE turn_id = ? AND status = "active"'
+                );
+                $stmt2->execute([(int)$turn['id']]);
+                $activeOrders = (int)$stmt2->fetchColumn();
+                $activePlayers = $activeOrders;
+                $stmt2 = $this->pdo->prepare(
+                    'SELECT COUNT(*) FROM slice_orders WHERE turn_id = ? AND status = "withdrawn"'
+                );
+                $stmt2->execute([(int)$turn['id']]);
+                $withdrawn = (int)$stmt2->fetchColumn();
+            }
             $stmt2 = $this->pdo->prepare('SELECT * FROM slice_settlement_jobs WHERE turn_id = ?');
             $stmt2->execute([(int)$turn['id']]);
             $job = $stmt2->fetch();
@@ -2086,10 +2112,21 @@ final class SliceService
             if ($resultJson !== false) {
                 $decoded = $this->decode((string)$resultJson);
                 $headline = (string)($decoded['headline'] ?? '');
+                if ($headline === '' && isset($decoded['battles'])) {
+                    $battles = is_array($decoded['battles']) ? $decoded['battles'] : [];
+                    $captures = count(array_filter($battles, static fn($b) => !empty($b['captured'])));
+                    $headline = sprintf(
+                        '第 %d 回合：%d 场战斗，%d 城易主',
+                        (int)$turn['turn_no'],
+                        count($battles),
+                        $captures
+                    );
+                }
             }
             $turns[] = [
                 'turn' => $this->turnPublic($turn),
                 'active_orders' => $activeOrders,
+                'active_players' => $activePlayers,
                 'withdrawn_orders' => $withdrawn,
                 'job' => $job === false ? null : [
                     'status' => (string)$job['status'],
@@ -2325,8 +2362,10 @@ final class SliceService
         $stmt->execute([(int)$game['id']]);
         $nodes = [];
         $owners = [];
+        $nodeNames = [];
         foreach ($stmt->fetchAll() as $n) {
             $code = (string)$n['node_code'];
+            $nodeNames[$code] = (string)$n['name'];
             $nodes[] = [
                 'code' => $code,
                 'name' => (string)$n['name'],

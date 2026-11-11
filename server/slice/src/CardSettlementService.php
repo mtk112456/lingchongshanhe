@@ -202,7 +202,7 @@ final class CardSettlementService
             $factionOrders,
             fn($o) => self::isTeamCard((string)$o['card_code'])
         ));
-        usort($teamOrders, fn($a, $b) => BattleService::petPower($b) <=> BattleService::petPower($a));
+        $this->sortByPower($teamOrders);
 
         $vanguard = [];
         $seen = [];
@@ -293,7 +293,7 @@ final class CardSettlementService
                 fn($o) => (int)($o['faction_id'] ?? 0) === $ownerFactionId
                     && self::isTeamCard((string)$o['card_code'])
             ));
-            usort($defenderOrders, fn($a, $b) => BattleService::petPower($b) <=> BattleService::petPower($a));
+            $this->sortByPower($defenderOrders);
             $defVanguard = [];
             $seenDef = [];
             foreach ($defenderOrders as $order) {
@@ -516,9 +516,7 @@ final class CardSettlementService
             $factionOrders,
             fn($o) => self::isTeamCard((string)$o['card_code'])
         ));
-        usort($teamOrders, function ($a, $b) {
-            return BattleService::petPower($b) <=> BattleService::petPower($a);
-        });
+        $this->sortByPower($teamOrders);
 
         $vanguard = [];
         $seen = [];
@@ -614,7 +612,7 @@ final class CardSettlementService
                     $defenderOrders[] = $order;
                 }
             }
-            usort($defenderOrders, fn($a, $b) => BattleService::petPower($b) <=> BattleService::petPower($a));
+            $this->sortByPower($defenderOrders);
 
             $defVanguard = [];
             $seenDef = [];
@@ -787,6 +785,17 @@ final class CardSettlementService
             'counters' => $result['counters'] ?? [],
             'counter_damage' => $result['counter_damage'] ?? [],
         ];
+    }
+
+    private function sortByPower(array &$orders): void
+    {
+        usort($orders, function ($a, $b) {
+            $cmp = BattleService::petPower($b) <=> BattleService::petPower($a);
+            if ($cmp !== 0) {
+                return $cmp;
+            }
+            return (int)($a['player_id'] ?? 0) <=> (int)($b['player_id'] ?? 0);
+        });
     }
 
     private function factionOwnsRegion(int $gameId, int $factionId): bool

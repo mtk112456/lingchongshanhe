@@ -303,7 +303,7 @@
       state.deadline = turn.deadline_at;
 
       const total = admin.participants || 0;
-      const orders = current.active_orders || 0;
+      const orders = current.active_players ?? current.active_orders ?? 0;
       $('turnNo').textContent = `第 ${turn.turn_no} 天`;
       $('turnStatus').innerHTML = `${statusTag(turn.status)} · 截止 ${turn.deadline_at || '—'}`;
       $('orderBar').style.width = total > 0 ? Math.min(100, Math.round(orders / total * 100)) + '%' : '0%';

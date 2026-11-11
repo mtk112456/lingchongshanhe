@@ -114,7 +114,11 @@ final class EstateService
             'next_level_at' => $overall >= self::MAX_LEVEL ? null : $overall * 150,
             'rooms' => $rooms,
             'influence' => $this->influence($gameId, $playerId),
-            'governorships' => $this->governorships($gameId, $playerId, $week),
+            'governorships' => $this->governorships(
+                $gameId,
+                $playerId,
+                $this->effectiveGovernorWeek($gameId, $week)
+            ),
         ];
     }
 
@@ -267,7 +271,7 @@ final class EstateService
                AND t.turn_no BETWEEN ? AND ?
                AND p.faction_id = n.owner_faction_id
              GROUP BY n.node_code, n.owner_faction_id, m.player_id
-             ORDER BY n.node_code, merit DESC"
+             ORDER BY n.node_code, merit DESC, m.player_id ASC"
         );
         $stmt->execute([$gameId, $from, $to]);
 
@@ -294,6 +298,26 @@ final class EstateService
             $upsert->execute([$gameId, $node, $week, $info['player_id'], $info['merit']]);
         }
         return count($picked);
+    }
+
+    /**
+     * 当前在任的太守：取本周之前最近一期（周一刷新后整周沿用）。
+     *
+     * @return array<string,array{player_id:int,nickname:string,faction:?string,color:?string,merit:int}>
+     */
+    public function currentGovernors(int $gameId, int $currentWeek): array
+    {
+        $week = $this->effectiveGovernorWeek($gameId, $currentWeek);
+        return $week > 0 ? $this->governorsForWeek($gameId, $week) : [];
+    }
+
+    private function effectiveGovernorWeek(int $gameId, int $currentWeek): int
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT MAX(week_no) FROM slice_city_governors WHERE game_id = ? AND week_no < ?'
+        );
+        $stmt->execute([$gameId, $currentWeek]);
+        return (int)$stmt->fetchColumn();
     }
 
     /**

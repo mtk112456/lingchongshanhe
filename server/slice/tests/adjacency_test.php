@@ -55,6 +55,7 @@ check('5 节点：己方 A_START 可驻守', tryPlay($handService, $pdo, $gameId
 
 // 12 城：bi 从凉州可打汉中/襄阳/太原（跨区），不能打成都
 $gameId = (int)$pdo->query("SELECT id FROM slice_games WHERE code = 'MAP12_TEST'")->fetchColumn();
+$pdo->prepare('UPDATE slice_games SET status = "running" WHERE id = ?')->execute([$gameId]);
 if ($gameId > 0) {
     $turnId = (int)$pdo->query("SELECT id FROM slice_turns WHERE game_id = {$gameId} ORDER BY turn_no LIMIT 1")->fetchColumn();
     $playerId = (int)$pdo->query(

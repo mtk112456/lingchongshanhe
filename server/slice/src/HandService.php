@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/HandDeck.php';
 require_once __DIR__ . '/BattleEngine.php';
+require_once __DIR__ . '/ApiException.php';
 
 /**
  * 每日手牌 / 每周编成 / 3 个出牌位的持久化服务。
@@ -94,6 +95,7 @@ final class HandService
      */
     public function redraw(int $gameId, int $turnId, int $playerId): array
     {
+        $this->assertTurnEditable($turnId, $playerId, $gameId);
         $hand = $this->getOrCreateHand($gameId, $turnId, $playerId);
         if ($hand['redraw_used']) {
             throw new RuntimeException('REDRAW_USED');
@@ -160,6 +162,7 @@ final class HandService
             throw new InvalidArgumentException('BAD_REQUEST_KEY');
         }
 
+        $this->assertTurnEditable($turnId, $playerId, $gameId);
         $this->assertSeasonTarget($gameId, $turnId, $targetNodeCode);
         $this->assertAdjacentTarget($gameId, $playerId, $targetNodeCode);
 
@@ -212,6 +215,7 @@ final class HandService
 
     public function withdraw(int $turnId, int $playerId, int $slot): bool
     {
+        $this->assertTurnEditable($turnId, $playerId);
         $stmt = $this->pdo->prepare(
             "UPDATE slice_order_slots SET status = 'withdrawn'
              WHERE turn_id = ? AND player_id = ? AND slot = ? AND status = 'active'"
@@ -305,6 +309,44 @@ final class HandService
             'changes_used' => $row === false ? 0 : (int)($row['changes_used'] ?? 0) + 1,
             'changes_allowed' => $allowed,
         ];
+    }
+
+    /**
+     * 出令/撤令/重抽前校验：回合属于本局、游戏运行中、回合开放、未过截止。
+     */
+    private function assertTurnEditable(int $turnId, int $playerId, ?int $gameId = null): void
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT t.id, t.game_id, t.status, t.deadline_at, g.status AS game_status
+             FROM slice_turns t JOIN slice_games g ON g.id = t.game_id
+             WHERE t.id = ?'
+        );
+        $stmt->execute([$turnId]);
+        $turn = $stmt->fetch();
+        if (!$turn) {
+            throw new ApiException('TURN_NOT_FOUND', '回合不存在', 404);
+        }
+        if ($gameId !== null && (int)$turn['game_id'] !== $gameId) {
+            throw new ApiException('WRONG_GAME', '这个回合不属于当前游戏', 403);
+        }
+        $stmt = $this->pdo->prepare('SELECT 1 FROM slice_players WHERE id = ? AND game_id = ?');
+        $stmt->execute([$playerId, (int)$turn['game_id']]);
+        if ($stmt->fetchColumn() === false) {
+            throw new ApiException('NOT_IN_GAME', '你不在这个游戏里', 403);
+        }
+        if ((string)$turn['game_status'] !== 'running') {
+            throw new ApiException('GAME_PAUSED', '游戏已暂停，暂时不能出令', 409);
+        }
+        if ((string)$turn['status'] !== 'open') {
+            throw new ApiException('TURN_NOT_OPEN', '本回合已锁定或结算，不能再改令', 409, [
+                'turn_status' => (string)$turn['status'],
+            ]);
+        }
+        if (strtotime((string)$turn['deadline_at']) <= time()) {
+            throw new ApiException('TURN_DEADLINE_PASSED', '本回合已过截止时间', 409, [
+                'deadline_at' => (string)$turn['deadline_at'],
+            ]);
+        }
     }
 
     /**

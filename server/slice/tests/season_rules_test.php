@@ -24,6 +24,7 @@ function check(string $name, bool $ok, string $detail = ''): void
 
 [$config, $pdo] = slice_bootstrap();
 SqlRunner::runFile($pdo, dirname(__DIR__) . '/seed_map12.sql');
+$pdo->exec("UPDATE slice_games SET status = 'running' WHERE code = 'MAP12_TEST'");
 
 $gameId = (int)$pdo->query("SELECT id FROM slice_games WHERE code = 'MAP12_TEST'")->fetchColumn();
 if ($gameId <= 0) {
