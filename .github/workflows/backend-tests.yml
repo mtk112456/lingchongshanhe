@@ -77,6 +77,7 @@ jobs:
           php server/slice/tests/cron_card_test.php
           php server/slice/tests/auto_open_test.php
           php server/slice/tests/replay_card_test.php
+          php server/slice/tests/rate_limiter_test.php
           php server/slice/tests/hand_service_test.php
           php server/slice/tests/merit_test.php
           php server/slice/tests/estate_test.php

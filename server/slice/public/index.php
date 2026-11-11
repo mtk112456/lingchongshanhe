@@ -12,6 +12,10 @@ require_once dirname(__DIR__) . '/src/BulletinService.php';
 require_once dirname(__DIR__) . '/src/MeritService.php';
 require_once dirname(__DIR__) . '/src/EstateService.php';
 require_once dirname(__DIR__) . '/src/PlayerReportService.php';
+require_once dirname(__DIR__) . '/src/CorsPolicy.php';
+require_once dirname(__DIR__) . '/src/RateLimiter.php';
+
+[$config, $pdo, $service] = slice_bootstrap();
 
 $started = microtime(true);
 $requestId = $_SERVER['HTTP_X_REQUEST_ID'] ?? bin2hex(random_bytes(6));
@@ -49,9 +53,13 @@ if ($method === 'GET' && $path === '/') {
 }
 
 header('Content-Type: application/json; charset=utf-8');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Auth-Token, X-Request-Id');
-header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
+
+$cors = CorsPolicy::fromConfig($config);
+if ($cors->handlePreflight()) {
+    exit;
+}
+$cors->apply();
+$rateLimiter = RateLimiter::fromConfig($config);
 
 if ($method === 'OPTIONS') {
     http_response_code(204);
@@ -130,22 +138,12 @@ function requireAuth(SliceService $service): array
 }
 
 try {
-    [, $pdo, $service] = slice_bootstrap();
-} catch (Throwable $e) {
-    slice_log('bootstrap.failed', ['error' => $e->getMessage()]);
-    respond(500, [
-        'ok' => false,
-        'error' => ['code' => 'BOOTSTRAP_FAILED', 'message' => '服务启动失败', 'details' => []],
-        'server_time' => date('Y-m-d H:i:s'),
-    ]);
-}
-
-try {
     if ($method === 'GET' && $path === '/api/health') {
         success($service->health());
     }
 
     if ($method === 'POST' && $path === '/api/auth/login') {
+        $rateLimiter->enforce('login', $rateLimiter->clientIp());
         $body = jsonBody();
         success($service->loginStudent(
             (string)($body['name'] ?? $body['nickname'] ?? ''),
@@ -155,6 +153,7 @@ try {
     }
 
     if ($method === 'POST' && $path === '/api/auth/admin-login') {
+        $rateLimiter->enforce('login', 'admin:' . $rateLimiter->clientIp());
         $body = jsonBody();
         success($service->loginAdmin(
             (string)($body['username'] ?? ''),
@@ -437,6 +436,7 @@ try {
 
     if ($method === 'POST' && $path === '/api/slice/order/play') {
         $player = requireAuth($service);
+        $rateLimiter->enforce('order', (string)$player['id']);
         $body = jsonBody();
         $turnId = isset($body['turn_id']) ? (int)$body['turn_id'] : (int)($player['game_current_turn_id'] ?? 0);
         if ($turnId <= 0) {
@@ -457,6 +457,7 @@ try {
 
     if ($method === 'POST' && $path === '/api/slice/order/withdraw') {
         $player = requireAuth($service);
+        $rateLimiter->enforce('order', (string)$player['id']);
         $body = jsonBody();
         $turnId = isset($body['turn_id']) ? (int)$body['turn_id'] : (int)($player['game_current_turn_id'] ?? 0);
         if ($turnId <= 0) {
@@ -467,6 +468,7 @@ try {
 
     if ($method === 'POST' && $path === '/api/slice/battle/forecast') {
         $player = requireAuth($service);
+        $rateLimiter->enforce('forecast', (string)$player['id']);
         $body = jsonBody();
         $turnId = isset($body['turn_id']) ? (int)$body['turn_id'] : (int)($player['game_current_turn_id'] ?? 0);
         $node = (string)($body['node'] ?? $body['node_code'] ?? '');

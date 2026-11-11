@@ -64,3 +64,4 @@ desktop.ini
 trial_results/
 scratch/
 server/slice/config.sim.php
+server/slice/config.api.php
