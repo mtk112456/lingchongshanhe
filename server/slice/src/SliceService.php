@@ -2458,8 +2458,32 @@ final class SliceService
         $turns = [];
         foreach ($stmt->fetchAll() as $row) {
             $result = $this->decode((string)$row['result_json']);
+            $changeRows = $result['node_changes'] ?? [];
+            if ($changeRows === [] && isset($result['battles'])) {
+                foreach ((array)$result['battles'] as $battle) {
+                    if (empty($battle['battle_id'])) {
+                        continue;
+                    }
+                    $code = (string)($battle['node_code'] ?? '');
+                    if ($code === '') {
+                        continue;
+                    }
+                    $before = $battle['owner_before'] ?? null;
+                    $after = $battle['owner_after'] ?? null;
+                    $changeRows[] = [
+                        'node_code' => $code,
+                        'node_name' => $nodeNames[$code] ?? $code,
+                        'owner_before' => $before === null ? null : $this->factionPublic((int)$before, $factionsById),
+                        'owner_after' => $after === null ? null : $this->factionPublic((int)$after, $factionsById),
+                        'scores' => ['score' => (int)($battle['score'] ?? 0)],
+                        'reason' => (string)($battle['reason'] ?? (!empty($battle['captured']) ? 'captured' : 'hold')),
+                        'reason_text' => (string)($battle['reason'] ?? ''),
+                        'changed' => $before !== $after,
+                    ];
+                }
+            }
             $changes = [];
-            foreach ($result['node_changes'] ?? [] as $change) {
+            foreach ($changeRows as $change) {
                 $code = (string)$change['node_code'];
                 $owners[$code] = $change['owner_after'];
                 $changes[] = [
@@ -2473,11 +2497,22 @@ final class SliceService
                     'changed' => (bool)$change['changed'],
                 ];
             }
+            $headline = (string)($result['headline'] ?? '');
+            if ($headline === '' && isset($result['battles'])) {
+                $battles = (array)$result['battles'];
+                $captures = count(array_filter($battles, static fn($b) => !empty($b['captured'])));
+                $headline = sprintf(
+                    '第 %d 回合：%d 场战斗，%d 城易主',
+                    (int)$row['turn_no'],
+                    count($battles),
+                    $captures
+                );
+            }
             $turns[] = [
                 'turn_id' => (int)$row['turn_id'],
                 'turn_no' => (int)$row['turn_no'],
                 'settled_at' => (string)$row['settled_at'],
-                'headline' => (string)($result['headline'] ?? ''),
+                'headline' => $headline,
                 'changes' => $changes,
                 'owners' => $owners,
                 'standings' => $result['standings'] ?? null,
