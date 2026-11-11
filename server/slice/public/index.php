@@ -9,6 +9,7 @@ require_once dirname(__DIR__) . '/src/CardSettlementService.php';
 require_once dirname(__DIR__) . '/src/SeasonService.php';
 require_once dirname(__DIR__) . '/src/SeasonHistoryService.php';
 require_once dirname(__DIR__) . '/src/BulletinService.php';
+require_once dirname(__DIR__) . '/src/MeritService.php';
 
 $started = microtime(true);
 $requestId = $_SERVER['HTTP_X_REQUEST_ID'] ?? bin2hex(random_bytes(6));
@@ -356,6 +357,21 @@ try {
             (int)$player['id'],
             $choice
         ));
+    }
+
+    if ($method === 'GET' && $path === '/api/slice/merit') {
+        $player = requireAuth($service);
+        $turnId = isset($_GET['turn_id']) ? (int)$_GET['turn_id'] : (int)($player['game_current_turn_id'] ?? 0);
+        $week = isset($_GET['week'])
+            ? max(1, min(4, (int)$_GET['week']))
+            : weekNoForTurn($pdo, $turnId);
+        $merit = new MeritService($pdo);
+        success([
+            'week_no' => $week,
+            'me' => $merit->summary((int)$player['game_id'], (int)$player['id'], $week),
+            'top' => $merit->top((int)$player['game_id'], 10),
+            'week_top' => $merit->weekTop((int)$player['game_id'], $week, 10),
+        ]);
     }
 
     if ($method === 'GET' && $path === '/api/slice/composition') {

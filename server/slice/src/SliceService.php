@@ -7,6 +7,7 @@ require_once __DIR__ . '/PointsService.php';
 require_once __DIR__ . '/HandService.php';
 require_once __DIR__ . '/BattleSettlementService.php';
 require_once __DIR__ . '/BulletinService.php';
+require_once __DIR__ . '/MeritService.php';
 
 final class SliceService
 {
@@ -487,6 +488,11 @@ final class SliceService
                 (int)$turn['id'],
                 (int)$player['id']
             );
+            $merit = (new MeritService($this->pdo))->summary(
+                (int)$game['id'],
+                (int)$player['id'],
+                Clock::weekOfTurn((int)$turn['turn_no'])
+            );
             if (($bulletin['choice'] ?? null) === 'scout') {
                 $stmt = $this->pdo->prepare(
                     'SELECT node_code FROM slice_nodes
@@ -501,6 +507,7 @@ final class SliceService
             }
         } else {
             $bulletin = null;
+            $merit = null;
         }
 
         $canEdit = (string)$turn['status'] === 'open'
@@ -672,6 +679,7 @@ final class SliceService
             'card_orders' => $cardOrders,
             'scouted_nodes' => $scoutedNodes,
             'bulletin' => $bulletin,
+            'merit' => $merit,
             'reachable_targets' => $reachableTargets,
             'options' => [
                 'advance_from' => $advanceFrom,
@@ -1957,6 +1965,8 @@ final class SliceService
                 'readable_text' => (string)$row['readable_text'],
             ];
         }
+        $me = $me ?? [];
+        $me['merit'] = (new MeritService($this->pdo))->turnSummary($turnId, (int)$player['id']);
         return [
             'turn' => $this->turnPublic($turn),
             'report' => $result,

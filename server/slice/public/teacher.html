@@ -5,115 +5,421 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>灵宠山河 · 教师控制台</title>
 <style>
-  :root { color-scheme: dark; }
+  :root {
+    color-scheme: dark;
+    --ink: #14100d;
+    --panel: #1f1a15;
+    --panel-2: #272019;
+    --line: #46382c;
+    --paper: #f3ead8;
+    --muted: #b9a893;
+    --vermilion: #b83b32;
+    --gold: #c9a227;
+    --green: #276f57;
+    --blue: #334454;
+  }
   * { box-sizing: border-box; }
-  body { margin: 0; padding: 24px; background: #151b21; color: #f3ead8; font-family: "Microsoft YaHei", sans-serif; }
-  h1 { font-size: 26px; margin: 0 0 6px; font-family: "Songti SC", serif; }
-  p { color: #b9ad99; margin: 0 0 20px; font-size: 14px; }
-  .grid { display: grid; grid-template-columns: 360px 1fr; gap: 18px; }
-  .card { background: #1f262e; border: 1px solid #3a4550; border-radius: 12px; padding: 16px; }
-  label { display: block; color: #c9bda9; font-size: 13px; margin: 10px 0 4px; }
-  input { width: 100%; padding: 10px; border-radius: 7px; border: 1px solid #4b5865; background: #12181e; color: #fff; }
-  button { margin: 10px 6px 0 0; padding: 10px 14px; border: 0; border-radius: 7px; background: #b83b32; color: #fff; cursor: pointer; }
-  button.secondary { background: #334454; }
-  button.green { background: #276f57; }
-  button:disabled { background: #555; color: #aaa; cursor: wait; }
-  pre { white-space: pre-wrap; word-break: break-word; font-size: 12px; color: #cfe3d6; background: #12181e; border-radius: 8px; padding: 12px; min-height: 260px; }
-  .status { color: #cf8325; font-size: 13px; margin-top: 8px; }
-  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  body {
+    margin: 0; padding: 22px 24px 40px;
+    background: radial-gradient(circle at 20% 0%, #2a2118 0%, var(--ink) 55%);
+    color: var(--paper);
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+  }
+  h1 { font-size: 24px; margin: 0; font-family: "Songti SC", "SimSun", serif; letter-spacing: 2px; }
+  h2 { font-size: 15px; margin: 0 0 12px; color: var(--gold); font-weight: 600; letter-spacing: 1px; }
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+  .sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  .pill { display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); font-size: 13px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #7a7066; }
+  .dot.ok { background: #3fa27a; box-shadow: 0 0 10px #3fa27a88; }
+  .dot.bad { background: var(--vermilion); }
+  .layout { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 18px; align-items: start; }
+  .col { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+  .card { background: linear-gradient(180deg, var(--panel-2), var(--panel)); border: 1px solid var(--line); border-radius: 14px; padding: 16px; box-shadow: 0 12px 30px #00000033; }
+  label { display: block; color: var(--muted); font-size: 12px; margin: 10px 0 5px; }
+  input { width: 100%; padding: 10px 11px; border-radius: 8px; border: 1px solid #554537; background: #130f0c; color: var(--paper); font-size: 14px; }
+  input:focus { outline: none; border-color: var(--gold); }
+  button { padding: 10px 13px; border: 0; border-radius: 8px; background: var(--vermilion); color: #fff; cursor: pointer; font-size: 13px; font-weight: 600; }
+  button:hover { filter: brightness(1.12); }
+  button.secondary { background: var(--blue); }
+  button.green { background: var(--green); }
+  button.ghost { background: #2d251e; border: 1px solid var(--line); }
+  button:disabled { background: #4a423a; color: #a99b8a; cursor: wait; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .msg { min-height: 20px; color: var(--gold); font-size: 13px; margin-top: 10px; }
+  .msg.error { color: #e08a80; }
+  .kv { display: grid; grid-template-columns: 1fr auto; gap: 8px 12px; font-size: 14px; }
+  .kv span:nth-child(odd) { color: var(--muted); }
+  .kv span:nth-child(even) { font-weight: 600; text-align: right; }
+  .big { font-size: 30px; font-weight: 700; font-family: "Songti SC", serif; letter-spacing: 1px; }
+  .bar { height: 9px; border-radius: 99px; background: #130f0c; overflow: hidden; border: 1px solid #3b2f25; margin-top: 8px; }
+  .bar > i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--gold), #e3c15c); transition: width .35s ease; }
+  .factions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .faction { border: 1px solid var(--line); border-radius: 10px; padding: 10px 11px; background: #17130f; }
+  .faction .name { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; }
+  .faction .swatch { width: 10px; height: 10px; border-radius: 50%; }
+  .faction .stats { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .faction.leader { border-color: var(--gold); box-shadow: 0 0 0 1px #c9a22755 inset; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #332a22; }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; }
+  td.right, th.right { text-align: right; }
+  .tag { display: inline-block; padding: 2px 7px; border-radius: 999px; font-size: 11px; background: #332a22; color: var(--muted); }
+  .tag.open { background: #26453a; color: #9fd9bd; }
+  .tag.settled { background: #3d3320; color: #e3c15c; }
+  .tag.locked { background: #462a26; color: #e0a49c; }
+  .log { max-height: 280px; overflow: auto; font-size: 13px; line-height: 1.7; }
+  .log .item { padding: 8px 0; border-bottom: 1px dashed #332a22; }
+  .log .item:last-child { border-bottom: 0; }
+  .muted { color: var(--muted); }
+  .empty { color: var(--muted); font-size: 13px; padding: 8px 0; }
+  @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } .factions { grid-template-columns: 1fr 1fr; } }
 </style>
 </head>
 <body>
-  <h1>灵宠山河 · 教师控制台</h1>
-  <p>独立 Web 控制台。学生 App 不提供教师登录；这里用于锁令、结算、下一回合。</p>
-  <div class="grid">
-    <div class="card">
-      <label>API 地址</label>
-      <input id="base" placeholder="http://127.0.0.1:8080">
-      <label>管理员账号</label>
-      <input id="username" value="teacher">
-      <label>密码</label>
-      <input id="password" type="password" placeholder="teacher2026">
-      <label>回合 ID</label>
-      <input id="turn" type="number" value="1">
-      <div>
-        <button id="login">登录</button>
-        <button id="lock" class="secondary">锁定本回合</button>
-        <button id="settle" class="green">结算</button>
-        <button id="next" class="secondary">下一回合</button>
-        <button id="status" class="secondary">查看状态</button>
-      </div>
-      <div id="msg" class="status"></div>
+  <div class="top">
+    <div>
+      <h1>灵宠山河 · 教师控制台</h1>
+      <div class="sub">学生 App 不提供教师登录。这里用于锁令、结算、下一回合与查看战局。</div>
     </div>
-    <div class="card">
-      <pre id="out">等待登录…</pre>
+    <div class="pill"><span id="conn" class="dot"></span><span id="connText">未连接</span></div>
+  </div>
+
+  <div class="layout">
+    <div class="col">
+      <div class="card" id="loginCard">
+        <h2>连接</h2>
+        <label>API 地址</label>
+        <input id="base" placeholder="http://127.0.0.1:8080">
+        <label>管理员账号</label>
+        <input id="username" value="teacher">
+        <label>密码</label>
+        <input id="password" type="password" placeholder="teacher2026">
+        <div class="row">
+          <button id="login">登录</button>
+          <button id="logout" class="ghost">退出</button>
+        </div>
+        <div id="msg" class="msg"></div>
+      </div>
+
+      <div class="card" id="turnCard" hidden>
+        <h2>当前回合</h2>
+        <div class="big" id="turnNo">第 1 天</div>
+        <div class="sub" id="turnStatus">—</div>
+        <div class="bar"><i id="orderBar"></i></div>
+        <div class="sub" id="orderText">出令 0 / 0</div>
+        <div class="kv" style="margin-top:12px">
+          <span>剩余时间</span><span id="countdown">--:--</span>
+          <span>游戏</span><span id="gameName">—</span>
+        </div>
+        <div class="row">
+          <button id="lock" class="secondary">锁定</button>
+          <button id="settle" class="green">结算</button>
+          <button id="next" class="ghost">下一回合</button>
+        </div>
+      </div>
+
+      <div class="card" id="seasonCard" hidden>
+        <h2>赛季</h2>
+        <div class="kv">
+          <span>周次</span><span id="week">—</span>
+          <span>中立城</span><span id="neutral">—</span>
+          <span>长安</span><span id="changan">—</span>
+        </div>
+        <div class="factions" id="factions" style="margin-top:14px"></div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="card" id="citiesCard" hidden>
+        <h2>13 城</h2>
+        <div style="max-height:340px;overflow:auto">
+          <table>
+            <thead><tr><th>城</th><th>类型</th><th>归属</th><th class="right">民心</th></tr></thead>
+            <tbody id="cities"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card" id="resultCard" hidden>
+        <h2>最近结算</h2>
+        <div id="result" class="log"><div class="empty">还没有结算记录。</div></div>
+      </div>
+
+      <div class="card" id="meritCard" hidden>
+        <h2>本周军功榜</h2>
+        <div id="meritTop" class="log"><div class="empty">还没有军功记录。</div></div>
+      </div>
+
+      <div class="card" id="historyCard" hidden>
+        <h2>赛季史书</h2>
+        <div id="history" class="log"><div class="empty">还没有周记录。</div></div>
+      </div>
     </div>
   </div>
+
 <script>
 (() => {
   const $ = id => document.getElementById(id);
-  const base = $('base');
-  base.value = location.origin.startsWith('http') ? location.origin : 'http://127.0.0.1:8080';
-  let token = '';
+  const state = { token: '', timer: null, currentTurnId: 0, seconds: null, deadline: null, busy: false, nodeNames: {} };
+
+  $('base').value = location.origin.startsWith('http') ? location.origin : 'http://127.0.0.1:8080';
+
+  function setMsg(text, isError = false) {
+    const el = $('msg');
+    el.textContent = text || '';
+    el.classList.toggle('error', !!isError);
+  }
+
+  function setConn(ok, text) {
+    $('conn').className = 'dot ' + (ok ? 'ok' : 'bad');
+    $('connText').textContent = text;
+  }
 
   async function api(path, method = 'GET', body = null) {
     const headers = { 'Content-Type': 'application/json' };
-    if (token) headers.Authorization = 'Bearer ' + token;
-    const res = await fetch(base.value.replace(/\/$/, '') + path, {
+    if (state.token) headers.Authorization = 'Bearer ' + state.token;
+    const res = await fetch($('base').value.replace(/\/$/, '') + path, {
       method, headers, body: body ? JSON.stringify(body) : undefined
     });
-    const data = await res.json();
+    let data = null;
+    try { data = await res.json(); } catch (e) { throw new Error('HTTP ' + res.status); }
     if (!data.ok) throw new Error((data.error && data.error.message) || ('HTTP ' + res.status));
     return data.data;
   }
 
-  function setMsg(text) { $('msg').textContent = text; }
-  function show(data) { $('out').textContent = JSON.stringify(data, null, 2); }
+  function fmtSeconds(sec) {
+    if (sec === null || sec === undefined || sec < 0) return '--:--';
+    const m = Math.floor(sec / 60), s = sec % 60;
+    return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+  }
+
+  function statusTag(status) {
+    const map = { open: '进行中', locked: '已锁定', settled: '已结算', draft: '未开始' };
+    return `<span class="tag ${status}">${map[status] || status}</span>`;
+  }
+
+  function renderFactions(factions) {
+    const box = $('factions');
+    box.innerHTML = '';
+    const best = Math.max(...factions.filter(f => f.code !== 'neutral').map(f => f.cities), 0);
+    factions.forEach(f => {
+      const el = document.createElement('div');
+      el.className = 'faction' + (f.code !== 'neutral' && f.cities === best && best > 0 ? ' leader' : '');
+      const swatch = f.code === 'neutral' ? '#7a7066' : (f.color || '#c9a227');
+      el.innerHTML = `
+        <div class="name"><span class="swatch" style="background:${swatch}"></span>${f.name}</div>
+        <div class="stats">${f.cities} 城${f.morale !== undefined ? ' · 民心 ' + f.morale : ''}</div>`;
+      box.appendChild(el);
+    });
+  }
+
+  function renderCities(nodes) {
+    const tbody = $('cities');
+    tbody.innerHTML = '';
+    const typeMap = { camp: '大营', pass: '关隘', culture: '文城', ferry: '渡口', water: '水城', king: '长安' };
+    nodes.forEach(n => {
+      const owner = n.owner ? (n.owner.name || n.owner.code) : '中立';
+      const color = n.owner && n.owner.color ? n.owner.color : '#7a7066';
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><strong>${n.name || n.code}</strong></td>
+        <td>${typeMap[n.node_type] || n.node_type || '—'}</td>
+        <td><span class="swatch" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};margin-right:6px"></span>${owner}</td>
+        <td class="right">${n.morale ?? 0} / ${n.morale_cap ?? 2}</td>`;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function renderBattles(battles) {
+    const box = $('result');
+    if (!battles || !battles.length) {
+      box.innerHTML = '<div class="empty">本回合没有发生战斗。</div>';
+      return;
+    }
+    const nameOf = code => state.nodeNames[code] || code;
+    box.innerHTML = battles.map(b => {
+      if (!b.battle_id) {
+        const reason = { already_owned: '己方城，无需进攻', standoff: '双方令数相同，对峙', no_vanguard: '没有队伍牌' }[b.reason] || b.reason;
+        return `<div class="item"><strong>${nameOf(b.node_code)}</strong> · <span class="muted">${reason}</span></div>`;
+      }
+      const tag = b.captured ? '<span class="tag locked">易主</span>' : '<span class="tag open">未破城</span>';
+      return `<div class="item">
+        <strong>${nameOf(b.node_code)}</strong> ${tag}
+        <span class="muted">战果 ${b.score} · 城墙 ${Math.round(b.wall)} · 民心 ${b.morale_before}→${b.morale_after}</span>
+      </div>`;
+    }).join('');
+  }
+
+  function renderHistory(weeks) {
+    const box = $('history');
+    if (!weeks || !weeks.length) {
+      box.innerHTML = '<div class="empty">还没有周记录。</div>';
+      return;
+    }
+    box.innerHTML = weeks.map(w => `
+      <div class="item">
+        <strong>${w.headline}</strong>
+        <div class="muted">${w.battles} 场战斗 · ${w.captures.length} 城易主${w.complete ? '' : ' · 进行中'}</div>
+        ${w.key_battle ? `<div class="muted">关键战：${w.key_battle.node_name} · ${w.key_battle.headline || ''}</div>` : ''}
+      </div>`).join('');
+  }
+
+  function renderMerit(data) {
+    const box = $('meritTop');
+    const list = (data.week_top && data.week_top.length ? data.week_top : data.top) || [];
+    if (!list.length) {
+      box.innerHTML = '<div class="empty">还没有军功记录。</div>';
+      return;
+    }
+    box.innerHTML = list.map((p, i) => `
+      <div class="item" style="display:flex;align-items:center;gap:8px">
+        <span class="muted" style="width:20px">${i + 1}</span>
+        <span class="swatch" style="width:8px;height:8px;border-radius:50%;background:${p.color || '#7a7066'}"></span>
+        <strong>${p.nickname}</strong>
+        <span class="muted">${p.faction_name || ''}</span>
+        <span style="margin-left:auto;font-weight:700;color:${i === 0 ? '#e3c15c' : '#f3ead8'}">${p.total}</span>
+      </div>`).join('');
+  }
+
+  function startCountdown() {
+    if (state.timer) clearInterval(state.timer);
+    state.timer = setInterval(() => {
+      if (state.seconds === null) return;
+      state.seconds = Math.max(0, state.seconds - 1);
+      $('countdown').textContent = fmtSeconds(state.seconds);
+    }, 1000);
+  }
+
+  async function refresh({ silent = false } = {}) {
+    if (!state.token || state.busy) return;
+    try {
+      const admin = await api('/api/slice/admin/status');
+      if (!admin.turns || !admin.turns.length) throw new Error('没有回合数据');
+      const current = admin.turns[admin.turns.length - 1];
+      const turn = current.turn;
+      state.currentTurnId = turn.id;
+      state.seconds = turn.seconds_remaining;
+      state.deadline = turn.deadline_at;
+
+      const total = admin.participants || 0;
+      const orders = current.active_orders || 0;
+      $('turnNo').textContent = `第 ${turn.turn_no} 天`;
+      $('turnStatus').innerHTML = `${statusTag(turn.status)} · 截止 ${turn.deadline_at || '—'}`;
+      $('orderBar').style.width = total > 0 ? Math.min(100, Math.round(orders / total * 100)) + '%' : '0%';
+      $('orderText').textContent = `出令 ${orders} / ${total}`;
+      $('countdown').textContent = fmtSeconds(state.seconds);
+      $('gameName').textContent = `${admin.game.name}（${admin.game.code}）`;
+
+      const disabled = turn.status !== 'open' || state.busy;
+      $('lock').disabled = disabled;
+      $('settle').disabled = turn.status === 'settled' || state.busy;
+      $('next').disabled = turn.status !== 'settled' || state.busy;
+
+      const [season, history, stateData] = await Promise.all([
+        api('/api/slice/season'),
+        api('/api/slice/season/history'),
+        api('/api/slice/state')
+      ]);
+      $('week').textContent = `第 ${season.week} / 4 周`;
+      $('neutral').textContent = `${season.neutral_cities} 城`;
+      $('changan').textContent = season.changan
+        ? (season.changan.owner ? `${season.changan.owner_name} · 民心 ${season.changan.morale}/${season.changan.morale_cap}` : `中立 · 民心 ${season.changan.morale}/${season.changan.morale_cap}`)
+        : '—';
+      renderFactions(season.factions || []);
+      renderCities((stateData.map && stateData.map.nodes) || []);
+      renderHistory(history.weeks || []);
+
+      setConn(true, '已连接 · ' + admin.server_time);
+      if (!silent) setMsg('已刷新');
+    } catch (e) {
+      setConn(false, '连接失败');
+      setMsg(e.message, true);
+    }
+  }
+
+  async function runAction(button, work, busyText, okText) {
+    if (state.busy) return;
+    state.busy = true;
+    button.disabled = true;
+    setMsg(busyText);
+    try {
+      const result = await work();
+      setMsg(okText);
+      return result;
+    } catch (e) {
+      setMsg(e.message, true);
+    } finally {
+      state.busy = false;
+      await refresh({ silent: true });
+    }
+  }
 
   $('login').onclick = async () => {
+    setMsg('登录中…');
     try {
-      setMsg('登录中…');
       const data = await api('/api/auth/admin-login', 'POST', {
         username: $('username').value.trim(),
         password: $('password').value
       });
-      token = data.token;
+      state.token = data.token;
+      $('loginCard').querySelectorAll('input').forEach(i => i.disabled = true);
+      $('login').disabled = true;
+      $('turnCard').hidden = false;
+      $('seasonCard').hidden = false;
+      $('citiesCard').hidden = false;
+      $('resultCard').hidden = false;
+      $('historyCard').hidden = false;
       setMsg('登录成功：' + data.player.nickname);
-      show(data.player);
-    } catch (e) { setMsg(e.message); }
+      await refresh({ silent: true });
+      startCountdown();
+      if (state.timer2) clearInterval(state.timer2);
+      state.timer2 = setInterval(() => refresh({ silent: true }), 10000);
+    } catch (e) {
+      setMsg(e.message, true);
+      setConn(false, '未连接');
+    }
   };
 
-  $('lock').onclick = async () => {
-    try {
-      setMsg('锁定中…');
-      show(await api('/api/slice/admin/lock', 'POST', { turn_id: Number($('turn').value), force: true }));
-      setMsg('已锁定并生成快照');
-    } catch (e) { setMsg(e.message); }
+  $('logout').onclick = () => {
+    state.token = '';
+    state.currentTurnId = 0;
+    state.seconds = null;
+    if (state.timer) clearInterval(state.timer);
+    if (state.timer2) clearInterval(state.timer2);
+    $('loginCard').querySelectorAll('input').forEach(i => i.disabled = false);
+    $('login').disabled = false;
+    ['turnCard', 'seasonCard', 'citiesCard', 'resultCard', 'historyCard'].forEach(id => $(id).hidden = true);
+    setMsg('已退出');
+    setConn(false, '未连接');
   };
 
-  $('settle').onclick = async () => {
-    try {
-      setMsg('结算中…');
-      show(await api('/api/slice/admin/settle', 'POST', { turn_id: Number($('turn').value) }));
-      setMsg('结算完成');
-    } catch (e) { setMsg(e.message); }
+  $('lock').onclick = () => {
+    if (!state.currentTurnId) return;
+    if (!confirm('锁定后学生不能再改令，确定锁定本回合？')) return;
+    runAction($('lock'), () => api('/api/slice/admin/lock', 'POST', { turn_id: state.currentTurnId, force: true }), '锁定中…', '已锁定本回合');
   };
 
-  $('next').onclick = async () => {
-    try {
-      setMsg('创建下一回合…');
-      show(await api('/api/slice/admin/next-turn', 'POST', { from_turn_id: Number($('turn').value) }));
-      setMsg('下一回合已开启');
-    } catch (e) { setMsg(e.message); }
+  $('settle').onclick = () => {
+    if (!state.currentTurnId) return;
+    if (!confirm('确定结算本回合？结算后不能再撤回。')) return;
+    runAction($('settle'), async () => {
+      const result = await api('/api/slice/admin/card-settle', 'POST', { turn_id: state.currentTurnId });
+      renderBattles(result.battles || []);
+      return result;
+    }, '结算中…', '结算完成');
   };
 
-  $('status').onclick = async () => {
-    try {
-      setMsg('读取状态…');
-      show(await api('/api/slice/admin/status'));
-      setMsg('状态已更新');
-    } catch (e) { setMsg(e.message); }
+  $('next').onclick = () => {
+    if (!state.currentTurnId) return;
+    if (!confirm('开启下一回合？')) return;
+    runAction($('next'), () => api('/api/slice/admin/next-turn', 'POST', { from_turn_id: state.currentTurnId }), '创建下一回合…', '下一回合已开启');
   };
+
+  window.addEventListener('beforeunload', () => {
+    if (state.timer) clearInterval(state.timer);
+    if (state.timer2) clearInterval(state.timer2);
+  });
 })();
 </script>
 </body>

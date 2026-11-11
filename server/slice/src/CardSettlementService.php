@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/BattleService.php';
 require_once __DIR__ . '/BattleSettlementService.php';
 require_once __DIR__ . '/BulletinService.php';
+require_once __DIR__ . '/MeritService.php';
 
 /**
  * 21:00 卡牌结算：把 slice_order_slots 按城聚合，打一场，推民心。
@@ -43,12 +44,14 @@ final class CardSettlementService
     private PDO $pdo;
     private BattleService $battleService;
     private BattleSettlementService $settlement;
+    private MeritService $meritService;
 
     public function __construct(PDO $pdo)
     {
         $this->pdo = $pdo;
         $this->battleService = new BattleService(null, $pdo);
         $this->settlement = new BattleSettlementService($pdo);
+        $this->meritService = new MeritService($pdo);
     }
 
     /**
@@ -81,6 +84,22 @@ final class CardSettlementService
         $stmt->execute([$turnId]);
         $orders = $stmt->fetchAll();
 
+        // 出令本身就有军功：让“今天来了、下了令”被看见
+        $participantsThisTurn = array_values(array_unique(array_map(
+            'intval',
+            array_column($orders, 'player_id')
+        )));
+        foreach ($participantsThisTurn as $participantId) {
+            $this->meritService->award(
+                $gameId,
+                $turnId,
+                $participantId,
+                'participation',
+                5,
+                ['turn_no' => (int)$turn['turn_no']]
+            );
+        }
+
         $byCity = [];
         foreach ($orders as $order) {
             $byCity[(string)$order['target_node_code']][] = $order;
@@ -102,7 +121,48 @@ final class CardSettlementService
         );
         $stmt->execute([$turnId, $gameId]);
 
+        $this->saveTurnResult($gameId, $turnId, $battles);
+
         return ['turn_id' => $turnId, 'already_settled' => false, 'battles' => $battles];
+    }
+
+    /**
+     * 卡牌结算也写一份 turn_result，保证 /api/slice/report 和战报页可用。
+     */
+    private function saveTurnResult(int $gameId, int $turnId, array $battles): void
+    {
+        $resultJson = json_encode([
+            'mode' => 'cards',
+            'battles' => $battles,
+        ], JSON_UNESCAPED_UNICODE);
+
+        $stmt = $this->pdo->prepare(
+            'SELECT f.code, f.name, COUNT(n.id) AS cities, COALESCE(SUM(n.morale), 0) AS morale
+             FROM slice_factions f
+             LEFT JOIN slice_nodes n ON n.game_id = f.game_id AND n.owner_faction_id = f.id
+             WHERE f.game_id = ?
+             GROUP BY f.id, f.code, f.name, f.sort_order
+             ORDER BY f.sort_order'
+        );
+        $stmt->execute([$gameId]);
+        $standings = array_map(static fn($row) => [
+            'code' => (string)$row['code'],
+            'name' => (string)$row['name'],
+            'cities' => (int)$row['cities'],
+            'morale' => (int)$row['morale'],
+        ], $stmt->fetchAll());
+        $standingsJson = json_encode($standings, JSON_UNESCAPED_UNICODE);
+        $hash = hash('sha256', (string)$resultJson . (string)$standingsJson);
+
+        $stmt = $this->pdo->prepare(
+            'INSERT INTO slice_turn_results (game_id, turn_id, result_json, standings_json, content_hash)
+             VALUES (?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE
+                result_json = VALUES(result_json),
+                standings_json = VALUES(standings_json),
+                content_hash = VALUES(content_hash)'
+        );
+        $stmt->execute([$gameId, $turnId, $resultJson, $standingsJson, $hash]);
     }
 
     private function settleCity(int $gameId, int $turnId, string $nodeCode, array $orders, int $weekNo, array $bulletins = []): ?array
@@ -337,6 +397,70 @@ final class CardSettlementService
             (int)$result['score']
         );
 
+        // 个人军功：按本场角色发放，只影响荣誉榜，不影响战力
+        $meritAwarded = [];
+        $grant = function (int $pid, string $kind, int $amount, string $role) use (
+            &$meritAwarded,
+            $gameId,
+            $turnId,
+            $nodeCode
+        ): void {
+            $this->meritService->award(
+                $gameId,
+                $turnId,
+                $pid,
+                $kind,
+                $amount,
+                ['node_code' => $nodeCode, 'role' => $role]
+            );
+            $meritAwarded[$pid]['total'] = ($meritAwarded[$pid]['total'] ?? 0) + $amount;
+            $meritAwarded[$pid]['items'][] = [
+                'kind' => $kind,
+                'label' => MeritService::LABELS[$kind] ?? $kind,
+                'amount' => $amount,
+            ];
+        };
+
+        $vanguardIds = array_values(array_unique(array_map('intval', array_column($vanguard, 'player_id'))));
+        $attackerIds = array_values(array_unique(array_map('intval', array_column($factionOrders, 'player_id'))));
+        $supportIds = array_values(array_diff($attackerIds, $vanguardIds));
+
+        foreach ($vanguardIds as $pid) {
+            $grant($pid, 'vanguard', 20, 'vanguard');
+            if ($change['captured']) {
+                $grant($pid, 'capture', 40, 'vanguard');
+            } elseif ((int)$result['score'] > 0) {
+                $grant($pid, 'assault', 10, 'vanguard');
+            }
+        }
+        foreach ($supportIds as $pid) {
+            $grant($pid, 'support', 10, 'support');
+            if ($change['captured']) {
+                $grant($pid, 'capture_support', 15, 'support');
+            }
+        }
+        foreach ($factionOrders as $order) {
+            $pid = (int)$order['player_id'];
+            $card = (string)$order['card_code'];
+            if ($card === 'scout') {
+                $grant($pid, 'scout', 8, 'scout');
+            } elseif ($card === 'fire_attack') {
+                $grant($pid, 'fire', 10, 'fire');
+            }
+        }
+        if ($realGarrison) {
+            $defIds = array_values(array_unique(array_map(
+                'intval',
+                array_column($defVanguard, 'player_id')
+            )));
+            foreach ($defIds as $pid) {
+                $grant($pid, 'garrison', 15, 'defender');
+                if (!$change['captured']) {
+                    $grant($pid, 'defend', 30, 'defender');
+                }
+            }
+        }
+
         return [
             'node_code' => $nodeCode,
             'battle_id' => $battleId,
@@ -354,6 +478,7 @@ final class CardSettlementService
             'teams' => $teams,
             'defender_teams' => $defTeams,
             'real_garrison' => $realGarrison,
+            'merit' => $meritAwarded,
         ];
     }
 
