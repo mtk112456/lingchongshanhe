@@ -30,9 +30,9 @@ declare(strict_types=1);
 final class BattleEngine
 {
     public const TICK_MAX = 60;
-    public const WALL_BASE = 1500;
+    public const WALL_BASE = 1650;
     public const SIEGE_INTERVAL = 6;
-    public const SIEGE_MULT = 1.2;
+    public const SIEGE_MULT = 0.95;
 
     public const TYPES = [
         'cav'    => ['name' => '骑', 'atk' => 1.10, 'def' => 0.85, 'interval' => 4, 'row' => 'front'],
@@ -208,7 +208,7 @@ final class BattleEngine
         $siegeAtk = ($totalTroops / 3 * 0.05 + 10) * self::SIEGE_MULT * (float)($attacker['siege_mult'] ?? 1.0);
         $fire = !empty($attacker['fire']) || in_array('fire_attack', array_column($attTeams, 'card'), true);
         if ($fire) {
-            $siegeAtk *= 1.5;
+            $siegeAtk *= 1.6;
         }
 
         $tick = 0;

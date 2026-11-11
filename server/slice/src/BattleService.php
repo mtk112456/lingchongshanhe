@@ -39,7 +39,7 @@ final class BattleService
      */
     public static function supportMultiplier(int $supporters): float
     {
-        return 1 + min(0.30, max(0, $supporters) * 0.02);
+        return 1 + min(0.15, max(0, $supporters) * 0.02);
     }
 
     /**
