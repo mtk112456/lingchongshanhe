@@ -39,6 +39,7 @@ var scroll: ScrollContainer
 var content_vbox: VBoxContainer
 
 var award_card: PanelContainer
+var award_art: TextureRect
 var award_banner_lbl: Label
 var award_reason_lbl: Label
 var award_me_lbl: Label
@@ -168,6 +169,16 @@ func _build_ui() -> void:
 	av.add_theme_constant_override("separation", 6)
 	award_card.add_child(av)
 
+	var art_path := "res://assets/art/ui/season_keyart.png"
+	if ResourceLoader.exists(art_path):
+		award_art = TextureRect.new()
+		award_art.texture = load(art_path)
+		award_art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		award_art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		award_art.custom_minimum_size = Vector2(0, 120)
+		award_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		av.add_child(award_art)
+
 	award_banner_lbl = _label("👑 赛季终局颁奖 · 九州问鼎", 18, C_GOLD_LIGHT, true)
 	av.add_child(award_banner_lbl)
 	award_reason_lbl = _label("", 14, C_CREAM, true)
@@ -239,6 +250,8 @@ func layout_responsive(viewport_size: Vector2, dock_h: float) -> void:
 		var pad_x := 10.0 if is_compact else 16.0
 		body_margin.position = Vector2(pad_x, hdr_h + 6.0)
 		body_margin.size = Vector2(w - pad_x * 2.0, maxf(160.0, h - hdr_h - dock_h - 12.0))
+	if award_art != null:
+		award_art.custom_minimum_size = Vector2(0, 96.0 if is_compact else 150.0)
 
 func render_loading() -> void:
 	if header_sub_lbl != null:

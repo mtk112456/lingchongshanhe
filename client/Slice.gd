@@ -506,13 +506,45 @@ func _button(text: String, color: Color, height: int = 42) -> Button:
 		s.texture_margin_top = 16
 		s.texture_margin_right = 16
 		s.texture_margin_bottom = 16
+		s.content_margin_left = 0
+		s.content_margin_top = 0
+		s.content_margin_right = 0
+		s.content_margin_bottom = 0
 		b.add_theme_stylebox_override("normal", s)
+		var sh := StyleBoxTexture.new()
+		sh.texture = tex
+		sh.texture_margin_left = 16
+		sh.texture_margin_top = 16
+		sh.texture_margin_right = 16
+		sh.texture_margin_bottom = 16
+		sh.content_margin_left = 0
+		sh.content_margin_top = 0
+		sh.content_margin_right = 0
+		sh.content_margin_bottom = 0
+		sh.modulate_color = Color(1.0, 0.94, 0.86)
+		b.add_theme_stylebox_override("hover", sh)
+		var sp := StyleBoxTexture.new()
+		sp.texture = tex
+		sp.texture_margin_left = 16
+		sp.texture_margin_top = 16
+		sp.texture_margin_right = 16
+		sp.texture_margin_bottom = 16
+		sp.content_margin_left = 0
+		sp.content_margin_top = 0
+		sp.content_margin_right = 0
+		sp.content_margin_bottom = 0
+		sp.modulate_color = Color(0.86, 0.8, 0.74)
+		b.add_theme_stylebox_override("pressed", sp)
 		var sd := StyleBoxTexture.new()
 		sd.texture = tex
 		sd.texture_margin_left = 16
 		sd.texture_margin_top = 16
 		sd.texture_margin_right = 16
 		sd.texture_margin_bottom = 16
+		sd.content_margin_left = 0
+		sd.content_margin_top = 0
+		sd.content_margin_right = 0
+		sd.content_margin_bottom = 0
 		sd.modulate_color = Color(0.55, 0.5, 0.44, 0.95)
 		b.add_theme_stylebox_override("disabled", sd)
 	else:
