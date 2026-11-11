@@ -650,10 +650,21 @@ final class SliceService
         $lastReport = null;
         if ($lastResult) {
             $decoded = $this->decode((string)$lastResult['result_json']);
+            $headline = (string)($decoded['headline'] ?? '');
+            if ($headline === '' && isset($decoded['battles'])) {
+                $battles = is_array($decoded['battles']) ? $decoded['battles'] : [];
+                $captures = count(array_filter($battles, static fn($b) => !empty($b['captured'])));
+                $headline = sprintf(
+                    '第 %d 回合：%d 场战斗，%d 城易主',
+                    (int)$lastResult['turn_no'],
+                    count($battles),
+                    $captures
+                );
+            }
             $lastReport = [
                 'turn_id' => (int)$lastResult['turn_id'],
                 'turn_no' => (int)$lastResult['turn_no'],
-                'headline' => (string)($decoded['headline'] ?? ''),
+                'headline' => $headline,
             ];
         }
 
@@ -2341,6 +2352,56 @@ final class SliceService
             'due_turns' => count($turns),
             'results' => $results,
         ];
+    }
+
+    /**
+     * 正式版 24 小时周期：每天 06:00–09:00 自动开下一回合。
+     * 试跑 600 秒短周期不走这里，避免十分钟一回合。
+     *
+     * @return array{checked_at:string,opened:int,results:array}
+     */
+    public function autoOpenDailyTurns(?int $hourOverride = null): array
+    {
+        $hour = $hourOverride ?? (int)$this->clock->now()->format('G');
+        if ($hour < 6 || $hour >= 9) {
+            return ['checked_at' => $this->nowSql(), 'opened' => 0, 'results' => [], 'skipped' => 'OUTSIDE_WINDOW'];
+        }
+
+        $stmt = $this->pdo->prepare(
+            'SELECT g.id AS game_id, t.id AS turn_id, t.turn_no, t.status
+             FROM slice_games g
+             JOIN slice_turns t ON t.id = g.current_turn_id
+             WHERE g.status = "running" AND g.turn_seconds >= 3600
+               AND t.status = "settled"
+             ORDER BY g.id'
+        );
+        $stmt->execute();
+        $results = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $gameId = (int)$row['game_id'];
+            $stmt = $this->pdo->prepare(
+                'SELECT id FROM slice_players WHERE game_id = ? AND role = "teacher" AND is_active = 1 ORDER BY id LIMIT 1'
+            );
+            $stmt->execute([$gameId]);
+            $teacherId = (int)$stmt->fetchColumn();
+            if ($teacherId <= 0) {
+                $results[] = ['game_id' => $gameId, 'ok' => false, 'error' => 'NO_TEACHER_ACTOR'];
+                continue;
+            }
+            try {
+                $teacher = $this->loadPlayerById($teacherId);
+                $created = $this->nextTurn($teacher, (int)$row['turn_id']);
+                $results[] = [
+                    'game_id' => $gameId,
+                    'ok' => true,
+                    'created' => (bool)($created['created'] ?? false),
+                    'turn_no' => (int)($created['turn']['turn_no'] ?? 0),
+                ];
+            } catch (Throwable $e) {
+                $results[] = ['game_id' => $gameId, 'ok' => false, 'error' => $e->getMessage()];
+            }
+        }
+        return ['checked_at' => $this->nowSql(), 'opened' => count($results), 'results' => $results];
     }
 
     /**

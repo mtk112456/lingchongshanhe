@@ -123,8 +123,31 @@ final class CardSettlementService
         $stmt->execute([$turnId, $gameId]);
 
         $this->saveTurnResult($gameId, $turnId, $battles);
+        $this->finishSeasonIfNeeded($gameId, (int)$turn['turn_no']);
 
         return ['turn_id' => $turnId, 'already_settled' => false, 'battles' => $battles];
+    }
+
+    /**
+     * 占长安直接获胜；第 28 回合（5 节点为第 3 回合）结算后也结束。
+     */
+    private function finishSeasonIfNeeded(int $gameId, int $turnNo): void
+    {
+        $stmt = $this->pdo->prepare(
+            "SELECT COUNT(*) FROM slice_nodes
+             WHERE game_id = ? AND node_type = 'king' AND owner_faction_id IS NOT NULL"
+        );
+        $stmt->execute([$gameId]);
+        $kingOwned = (int)$stmt->fetchColumn() > 0;
+
+        $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM slice_nodes WHERE game_id = ?');
+        $stmt->execute([$gameId]);
+        $maxTurns = (int)$stmt->fetchColumn() >= 13 ? 28 : 3;
+
+        if ($kingOwned || $turnNo >= $maxTurns) {
+            $stmt = $this->pdo->prepare('UPDATE slice_games SET status = "finished" WHERE id = ?');
+            $stmt->execute([$gameId]);
+        }
     }
 
     /**

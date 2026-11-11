@@ -1,0 +1,101 @@
+【最终决策：按 GAME_FLOW_DECISION.md 做 P0】
+
+你的 review 我全部采纳，GPT 的也看完了。决策文档在 `GAME_FLOW_DECISION.md`。请按下面顺序做 S01–S05，不要动 server。
+
+## 1. 删除旧出令入口（最高优先）
+
+```text
+城池抽屉里的 ⚔️ 进军 / /api/slice/orders / “每日 1 道” 全部移除
+抽屉只保留：看城、看预估、[去手牌出令]
+所有出令统一走手牌：牌 + 城 + 路 + 前后排
+抽屉打开时手牌栏不再隐藏，或改成抽屉不遮手牌的双区布局
+```
+
+统一文案：
+
+```text
+每天最多出 3 令
+```
+
+## 2. 晨报 + 邸报
+
+`state.last_report` 现在有 `turn_id/turn_no/headline`（卡牌局也会生成“第 N 回合：X 场战斗，Y 城易主”）。
+
+```text
+每天第一次登录，last_report.turn_id > 本地已读 → 自动轻弹一次
+内容：昨日头条 / 我的 me_report 一行 / 军功 / 太守
+下半屏：邸报 2 选 1（GET/POST /api/slice/bulletin）
+底部：[去小院] [回沙盘出令]
+关掉即已读；顶部保留红点回看
+第一天无战报不弹，让位 3 步教学
+```
+
+## 3. 底部 5 Tab
+
+```text
+1 沙盘地图
+2 军团编成（头部放今日邸报）
+3 战争日报（个人战报 + 四榜 + 回放子页）
+4 文房小院
+5 赛季史书
+```
+
+删除独立“战局复盘”tab，回放并入日报。
+
+## 4. 赛季页
+
+接：
+
+```text
+GET /api/slice/season
+GET /api/slice/season/history
+```
+
+平时：周次、长安开放倒计时、四阵营城数/民心、上周史书。
+`season_over=true` 或 game.status=finished：进颁奖/史书大页。
+
+## 5. 修 3 个客户端接口错误
+
+```text
+next-turn: 传 {from_turn_id: 当前回合id}，不是 {game_id}
+composition: 用后端返回的 changes_allowed，不要写死 1
+recharge: 传 {points: N}，读 wallet.jade_balance
+```
+
+## 6. 编成页
+
+```text
+标题“周中可改 1 次”改成动态 changes_allowed
+CompositionPanel 接收 changes_used / changes_allowed
+练兵场升级后能看到多出来的次数
+```
+
+## 7. 隐藏未实装入口
+
+```text
+S07 将军 / S08 图鉴 / S09 榷场 / S12 谕告
+暂时收起，或明确“敬请期待”
+S13 的《短歌行》默写假任务删掉
+```
+
+## 8. 预估卡
+
+首层 3 项，详情展开：
+
+```text
+本令做什么
+最大风险
+结果方向
+```
+
+后端 `POST /api/slice/battle/forecast` 已就绪。
+
+验收：
+
+```text
+ClientSmoke / Replay / Phase1 / Phase15 / S02 全过
+720×514 抽屉不遮手牌
+晨报只弹一次，红点可回看
+5 个 tab 都能到真实页面
+赛季页不再显示“第 1 周”假文案
+```
