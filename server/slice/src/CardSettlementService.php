@@ -74,7 +74,7 @@ final class CardSettlementService
         $stmt = $this->pdo->prepare('SELECT GET_LOCK(?, 0)');
         $stmt->execute([$lockName]);
         if ((int)$stmt->fetchColumn() !== 1) {
-            throw new ApiException('SETTLE_BUSY', '??????????????', 409);
+            throw new ApiException('SETTLE_BUSY', '这一回合正在结算，请稍后刷新', 409);
         }
 
         try {
@@ -85,7 +85,7 @@ final class CardSettlementService
             return ['turn_id' => $turnId, 'already_settled' => true, 'battles' => []];
         }
 
-        // ???????????? settling??????????
+        // 原子抢占：结算一开始就置 settling，之后出令会被拒绝。
         $previousStatus = (string)$turn['status'];
         $stmt = $this->pdo->prepare(
             'UPDATE slice_turns SET status = "settling"
@@ -98,7 +98,7 @@ final class CardSettlementService
             if ((string)$stmt->fetchColumn() === 'settled') {
                 return ['turn_id' => $turnId, 'already_settled' => true, 'battles' => []];
             }
-            throw new ApiException('SETTLE_BUSY', '??????????????', 409);
+            throw new ApiException('SETTLE_BUSY', '这一回合正在结算，请稍后刷新', 409);
         }
 
         $stmt = $this->pdo->prepare(
