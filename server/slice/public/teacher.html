@@ -321,6 +321,15 @@
         api('/api/slice/season/history'),
         api('/api/slice/state')
       ]);
+
+      const lastSettled = [...admin.turns].reverse().find(t => t.turn.status === 'settled');
+      if (lastSettled) {
+        try {
+          const report = await api('/api/slice/report?turn_id=' + lastSettled.turn.id);
+          renderBattles((report.report && report.report.battles) || []);
+        } catch (e) { /* 战报未生成时不阻断仪表盘 */ }
+      }
+
       $('week').textContent = `第 ${season.week} / 4 周`;
       $('neutral').textContent = `${season.neutral_cities} 城`;
       $('changan').textContent = season.changan

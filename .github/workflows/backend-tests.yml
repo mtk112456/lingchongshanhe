@@ -73,6 +73,7 @@ jobs:
           php server/slice/tests/formation_test.php
           php server/slice/tests/card_settlement_test.php
           php server/slice/tests/scout_state_test.php
+          php server/slice/tests/cron_card_test.php
           php server/slice/tests/hand_service_test.php
           php server/slice/tests/merit_test.php
           php server/slice/tests/estate_test.php

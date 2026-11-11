@@ -10,6 +10,7 @@ require_once __DIR__ . '/BulletinService.php';
 require_once __DIR__ . '/MeritService.php';
 require_once __DIR__ . '/EstateService.php';
 require_once __DIR__ . '/PlayerReportService.php';
+require_once __DIR__ . '/CardSettlementService.php';
 
 final class SliceService
 {
@@ -731,13 +732,21 @@ final class SliceService
             'edit_block_reason' => $editBlockReason,
             'last_report' => $lastReport,
             'next_turn' => $nextTurn,
-            'rules' => [
-                '进军：从己方城派宠到相邻城，计 1 点。',
-                '驻守：在己方城驻守，计 1 点；原归属方另有 1 点基础守备。',
-                '最高分且大于 0 的阵营取得；平局或无人行动，保留原归属。',
-                '敌方起点不可作为进军目标；对向行军各计目标城。',
-                '第三回合后，每座非起点城为归属方计 1 分，同分并列。',
-            ],
+            'rules' => ((string)$game['rules_version'] === 'cards_v1' || count($nodeRows) >= 13)
+                ? [
+                    '出令：每天 4 张手牌，最多出 3 令；可重抽 1 次。',
+                    '队伍牌：同阵营打同一座城，战力前 3 名成为先锋。',
+                    '支援：其余出令的同阵营玩家每人 +2%，上限 +30%。',
+                    '克制：骑 > 盾 > 弓 > 枪 > 骑；克制 ×1.2，被克 ×0.85。',
+                    '攻城：先破墙，再推民心；民心满则易主。长安 5 格，其余 2–3 格。',
+                ]
+                : [
+                    '进军：从己方城派宠到相邻城，计 1 点。',
+                    '驻守：在己方城驻守，计 1 点；原归属方另有 1 点基础守备。',
+                    '最高分且大于 0 的阵营取得；平局或无人行动，保留原归属。',
+                    '敌方起点不可作为进军目标；对向行军各计目标城。',
+                    '第三回合后，每座非起点城为归属方计 1 分，同分并列。',
+                ],
         ];
     }
 
@@ -2117,6 +2126,30 @@ final class SliceService
         return (int)$stmt->fetchColumn() >= 13 ? 28 : 3;
     }
 
+    private function usesCardRules(int $gameId, int $turnId = 0): bool
+    {
+        $stmt = $this->pdo->prepare('SELECT rules_version FROM slice_games WHERE id = ?');
+        $stmt->execute([$gameId]);
+        if ((string)$stmt->fetchColumn() === 'cards_v1') {
+            return true;
+        }
+        $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM slice_nodes WHERE game_id = ?');
+        $stmt->execute([$gameId]);
+        if ((int)$stmt->fetchColumn() >= 13) {
+            return true;
+        }
+        if ($turnId > 0) {
+            $stmt = $this->pdo->prepare(
+                'SELECT COUNT(*) FROM slice_order_slots WHERE turn_id = ? AND status = "active"'
+            );
+            $stmt->execute([$turnId]);
+            if ((int)$stmt->fetchColumn() > 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public function nextTurn(array $teacher, int $fromTurnId): array
     {        $this->requireTeacher($teacher);
         $this->pdo->beginTransaction();
@@ -2236,7 +2269,17 @@ final class SliceService
                 }
                 $result = null;
                 if ($settle) {
-                    $result = $this->settleTurn($teacher, (int)$turn['id']);
+                    if ($this->usesCardRules($gameId, (int)$turn['id'])) {
+                        $result = (new CardSettlementService($this->pdo))->settle($gameId, (int)$turn['id']);
+                        if ((int)$turn['turn_no'] % 7 === 0) {
+                            (new EstateService($this->pdo))->refreshGovernors(
+                                $gameId,
+                                Clock::weekOfTurn((int)$turn['turn_no'])
+                            );
+                        }
+                    } else {
+                        $result = $this->settleTurn($teacher, (int)$turn['id']);
+                    }
                 }
                 $results[] = [
                     'turn_id' => (int)$turn['id'],
