@@ -1,5 +1,10 @@
 # 100 人并发出令 / 教师双击结算 · 并发安全报告
 
+> **2026-11-11 14:45 复测：P0 两项已修复，`races=0`。**
+> 300 并发出令 300/300；手牌并发创建无 500；结算中出令被 `TURN_NOT_OPEN` 拒绝；
+> 50 轮并发结算 `double_real=0 / battle_dup=0 / merit_dup=0`。
+> 仍保留的 P1：同一 request_key 换 slot 会落 2 条；`slice_order_requests` 尚未接入卡牌出令。
+
 - 日期：2026-11-11
 - 被测入口：`server/slice/public/index.php`
 - 隔离库：`test_load` @ `127.0.0.1:3307`，用户 `qingzhu_test`
