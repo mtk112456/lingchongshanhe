@@ -15,7 +15,21 @@ require_once dirname(__DIR__) . '/src/PlayerReportService.php';
 require_once dirname(__DIR__) . '/src/CorsPolicy.php';
 require_once dirname(__DIR__) . '/src/RateLimiter.php';
 
-[$config, $pdo, $service] = slice_bootstrap();
+try {
+    [$config, $pdo, $service] = slice_bootstrap();
+} catch (Throwable $e) {
+    if (function_exists('slice_log')) {
+        slice_log('bootstrap.failed', ['error' => $e->getMessage()]);
+    }
+    http_response_code(500);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode([
+        'ok' => false,
+        'error' => ['code' => 'BOOTSTRAP_FAILED', 'message' => '服务启动失败', 'details' => []],
+        'server_time' => date('Y-m-d H:i:s'),
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
 
 $started = microtime(true);
 $requestId = $_SERVER['HTTP_X_REQUEST_ID'] ?? bin2hex(random_bytes(6));
@@ -47,7 +61,7 @@ if ($method === 'GET' && $path === '/') {
         . '<li><a href="/api/health">/api/health</a> — 健康检查</li>'
         . '<li><a href="/teacher">/teacher</a> — 教师控制台</li>'
         . '</ul>'
-        . '<p>学生账号：青竹一~六、墨点一~六 / <code>slice2026</code></p>'
+        . '<p>学生账号由教师统一发放，请勿在公开页面传播密码。</p>'
         . '</html>';
     exit;
 }
@@ -60,11 +74,6 @@ if ($cors->handlePreflight()) {
 }
 $cors->apply();
 $rateLimiter = RateLimiter::fromConfig($config);
-
-if ($method === 'OPTIONS') {
-    http_response_code(204);
-    exit;
-}
 
 function respond(int $status, array $payload): never
 {
@@ -185,6 +194,7 @@ try {
 
     if ($method === 'POST' && $path === '/api/slice/orders') {
         $player = requireAuth($service);
+        $rateLimiter->enforce('order', (string)$player['id']);
         success($service->submitOrder($player, jsonBody()), 200);
     }
 
